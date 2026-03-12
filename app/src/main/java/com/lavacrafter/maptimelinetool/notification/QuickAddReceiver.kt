@@ -16,6 +16,7 @@ import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.PointRepository
+import com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,7 @@ class QuickAddReceiver : BroadcastReceiver() {
 
                 val timestamp = System.currentTimeMillis()
                 val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+                val sensorSnapshot = captureSensorSnapshot(context)
 
                 val repo = PointRepository(AppDatabase.get(context).pointDao())
                 val pointId = repo.insert(
@@ -46,7 +48,18 @@ class QuickAddReceiver : BroadcastReceiver() {
                         latitude = location.latitude,
                         longitude = location.longitude,
                         title = title,
-                        note = ""
+                        note = "",
+                        pressureHpa = sensorSnapshot.pressureHpa,
+                        ambientLightLux = sensorSnapshot.ambientLightLux,
+                        accelerometerX = sensorSnapshot.accelerometerX,
+                        accelerometerY = sensorSnapshot.accelerometerY,
+                        accelerometerZ = sensorSnapshot.accelerometerZ,
+                        gyroscopeX = sensorSnapshot.gyroscopeX,
+                        gyroscopeY = sensorSnapshot.gyroscopeY,
+                        gyroscopeZ = sensorSnapshot.gyroscopeZ,
+                        magnetometerX = sensorSnapshot.magnetometerX,
+                        magnetometerY = sensorSnapshot.magnetometerY,
+                        magnetometerZ = sensorSnapshot.magnetometerZ
                     )
                 )
                 SettingsStore.getDefaultTagIds(context).forEach { tagId ->

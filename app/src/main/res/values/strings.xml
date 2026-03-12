@@ -42,6 +42,13 @@
     <string name="label_auto_save_countdown">Auto save in %1$d s</string>
     <string name="label_auto_save_paused">Auto save paused (%1$d s)</string>
     <string name="label_tag_name">Tag name</string>
+    <string name="label_sensor_data">Sensor data</string>
+    <string name="label_sensor_none">No sensor data recorded</string>
+    <string name="label_sensor_pressure">Barometer: %1$.2f hPa</string>
+    <string name="label_sensor_light">Ambient light: %1$.2f lx</string>
+    <string name="label_sensor_accelerometer">Accelerometer: X %1$.3f, Y %2$.3f, Z %3$.3f m/s²</string>
+    <string name="label_sensor_gyroscope">Gyroscope: X %1$.3f, Y %2$.3f, Z %3$.3f rad/s</string>
+    <string name="label_sensor_magnetometer">Magnetometer: X %1$.3f, Y %2$.3f, Z %3$.3f μT</string>
     <string name="settings_title">Settings</string>
     <string name="settings_help_title">Help</string>
     <string name="settings_help_overview">Tap the cards below to reach the panels for themes, map controls, cache, downloads, and default tags. Each screen has a ? button for quick tips.</string>

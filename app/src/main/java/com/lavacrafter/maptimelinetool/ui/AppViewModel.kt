@@ -11,6 +11,7 @@ import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,12 +44,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (location == null) return
         viewModelScope.launch {
             val id = repo.insert(
-                PointEntity(
-                    timestamp = timestamp,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
+                buildPointEntity(
                     title = title,
-                    note = note
+                    note = note,
+                    location = location,
+                    timestamp = timestamp
                 )
             )
             tagIds.forEach { tagId ->
@@ -121,17 +121,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val location = getFreshLocation(5000L)
             if (location != null) {
                 repo.insert(
-                    PointEntity(
-                        timestamp = timestamp,
-                        latitude = location.latitude,
-                        longitude = location.longitude,
+                    buildPointEntity(
                         title = title,
-                        note = ""
+                        note = "",
+                        location = location,
+                        timestamp = timestamp
                     )
                 )
                 _autoAdded.tryEmit(Unit)
             }
         }
+    }
+
+    private suspend fun buildPointEntity(
+        title: String,
+        note: String,
+        location: Location,
+        timestamp: Long
+    ): PointEntity {
+        val sensorSnapshot = captureSensorSnapshot(getApplication())
+        return PointEntity(
+            timestamp = timestamp,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            title = title,
+            note = note,
+            pressureHpa = sensorSnapshot.pressureHpa,
+            ambientLightLux = sensorSnapshot.ambientLightLux,
+            accelerometerX = sensorSnapshot.accelerometerX,
+            accelerometerY = sensorSnapshot.accelerometerY,
+            accelerometerZ = sensorSnapshot.accelerometerZ,
+            gyroscopeX = sensorSnapshot.gyroscopeX,
+            gyroscopeY = sensorSnapshot.gyroscopeY,
+            gyroscopeZ = sensorSnapshot.gyroscopeZ,
+            magnetometerX = sensorSnapshot.magnetometerX,
+            magnetometerY = sensorSnapshot.magnetometerY,
+            magnetometerZ = sensorSnapshot.magnetometerZ
+        )
     }
 
     private fun readCachedLocation(): Location? {

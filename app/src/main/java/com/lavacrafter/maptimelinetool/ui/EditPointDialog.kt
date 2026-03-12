@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
@@ -58,7 +59,11 @@ fun EditPointDialog(
         },
         title = { Text(stringResource(R.string.dialog_title_edit_point)) },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -98,8 +103,62 @@ fun EditPointDialog(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(stringResource(R.string.label_lat_lon, point.latitude, point.longitude))
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.label_sensor_data),
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SensorReadingText(
+                    value = point.pressureHpa,
+                    formatRes = R.string.label_sensor_pressure
+                )
+                SensorReadingText(
+                    value = point.ambientLightLux,
+                    formatRes = R.string.label_sensor_light
+                )
+                SensorVectorText(
+                    x = point.accelerometerX,
+                    y = point.accelerometerY,
+                    z = point.accelerometerZ,
+                    formatRes = R.string.label_sensor_accelerometer
+                )
+                SensorVectorText(
+                    x = point.gyroscopeX,
+                    y = point.gyroscopeY,
+                    z = point.gyroscopeZ,
+                    formatRes = R.string.label_sensor_gyroscope
+                )
+                SensorVectorText(
+                    x = point.magnetometerX,
+                    y = point.magnetometerY,
+                    z = point.magnetometerZ,
+                    formatRes = R.string.label_sensor_magnetometer
+                )
+                if (!point.hasSensorData()) {
+                    Text(stringResource(R.string.label_sensor_none))
+                }
                 TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete)) }
             }
         }
     )
 }
+
+@Composable
+private fun SensorReadingText(value: Float?, formatRes: Int) {
+    if (value == null) return
+    Text(stringResource(formatRes, value))
+}
+
+@Composable
+private fun SensorVectorText(x: Float?, y: Float?, z: Float?, formatRes: Int) {
+    if (x == null || y == null || z == null) return
+    Text(stringResource(formatRes, x, y, z))
+}
+
+private fun PointEntity.hasSensorData(): Boolean =
+    pressureHpa != null ||
+        ambientLightLux != null ||
+        (accelerometerX != null && accelerometerY != null && accelerometerZ != null) ||
+        (gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null) ||
+        (magnetometerX != null && magnetometerY != null && magnetometerZ != null)
