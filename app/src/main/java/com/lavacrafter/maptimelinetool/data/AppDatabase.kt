@@ -36,7 +36,8 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "map_timeline.db"
-                ).addMigrations(MIGRATION_3_4)
+                )
+                    .addMigrations(MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

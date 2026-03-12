@@ -22,20 +22,7 @@ data class SensorSnapshot(
     val magnetometerX: Float? = null,
     val magnetometerY: Float? = null,
     val magnetometerZ: Float? = null
-) {
-    fun hasAnyValue(): Boolean =
-        pressureHpa != null ||
-            ambientLightLux != null ||
-            accelerometerX != null ||
-            accelerometerY != null ||
-            accelerometerZ != null ||
-            gyroscopeX != null ||
-            gyroscopeY != null ||
-            gyroscopeZ != null ||
-            magnetometerX != null ||
-            magnetometerY != null ||
-            magnetometerZ != null
-}
+)
 
 suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 500L): SensorSnapshot =
     suspendCancellableCoroutine { continuation ->
@@ -61,8 +48,9 @@ suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 500L): Sen
         val callbackHandler = Handler(Looper.getMainLooper())
         val registeredTypes = mutableSetOf<Int>()
         var snapshot = SensorSnapshot()
+        lateinit var timeoutRunnable: Runnable
 
-        fun finish(listener: SensorEventListener, timeoutRunnable: Runnable) {
+        fun finish(listener: SensorEventListener) {
             if (!continuation.isActive) return
             sensorManager.unregisterListener(listener)
             callbackHandler.removeCallbacks(timeoutRunnable)
@@ -101,14 +89,11 @@ suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 500L): Sen
                 else -> this
             }
 
-        lateinit var listener: SensorEventListener
-        lateinit var timeoutRunnable: Runnable
-
-        listener = object : SensorEventListener {
+        val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 snapshot = snapshot.updateFrom(event)
                 if (registeredTypes.isNotEmpty() && registeredTypes.all(snapshot::hasReadingFor)) {
-                    finish(listener, timeoutRunnable)
+                    finish(this)
                 }
             }
 
@@ -116,7 +101,7 @@ suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 500L): Sen
         }
 
         timeoutRunnable = Runnable {
-            finish(listener, timeoutRunnable)
+            finish(listener)
         }
 
         sensors.forEach { (sensorType, sensor) ->
