@@ -250,29 +250,33 @@ class MainActivity : ComponentActivity() {
                     if (isSuccess) {
                         editingPointPhotoPath = capturedPath
                     } else {
-                        scope.launch(Dispatchers.IO) {
-                            deletePointPhotoFile(context, capturedPath)
-                        }
+                        scope.launch(Dispatchers.IO) { deletePointPhotoFile(context, capturedPath) }
                     }
                     editingCaptureCandidatePhotoPath = null
                     pendingEditPhotoUri = null
+                }
+                fun deletePhotoOnIo(path: String?) {
+                    scope.launch(Dispatchers.IO) { deletePointPhotoFile(context, path) }
                 }
                 val clearPendingAddPhoto = {
                     val pathToDelete = pendingAddPhotoPath
                     pendingAddPhotoPath = null
                     pendingAddPhotoUri = null
-                    scope.launch(Dispatchers.IO) {
-                        deletePointPhotoFile(context, pathToDelete)
-                    }
+                    deletePhotoOnIo(pathToDelete)
                 }
                 val clearUnsavedEditingPhoto = {
                     val basePhotoPath = editingPoint?.photoPath
                     val pathToDelete = editingPointPhotoPath
                     if (!pathToDelete.isNullOrBlank() && pathToDelete != basePhotoPath) {
-                        scope.launch(Dispatchers.IO) {
-                            deletePointPhotoFile(context, pathToDelete)
-                        }
+                        deletePhotoOnIo(pathToDelete)
                     }
+                }
+                val resetEditingPointState = {
+                    editingPoint = null
+                    editingPointTagIds = emptySet()
+                    editingPointPhotoPath = null
+                    editingCaptureCandidatePhotoPath = null
+                    pendingEditPhotoUri = null
                 }
                 val toggleEditingPointTag: (Long) -> Unit = { tagId ->
                     editingPoint?.let { point ->
@@ -290,11 +294,7 @@ class MainActivity : ComponentActivity() {
                 BackHandler(showTagPickerForAdd) { showTagPickerForAdd = false }
                 BackHandler(editingPoint != null) {
                     clearUnsavedEditingPhoto()
-                    editingPoint = null
-                    editingPointTagIds = emptySet()
-                    editingPointPhotoPath = null
-                    editingCaptureCandidatePhotoPath = null
-                    pendingEditPhotoUri = null
+                    resetEditingPointState()
                 }
                 BackHandler(editingTag != null) { editingTag = null }
                 BackHandler(showDialog && !showTagPickerForAdd && !showTagPickerForEdit) {
@@ -619,6 +619,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showDialog && pendingTimestamp != null) {
+                    val launchAddPhotoCapture = {
+                        val oldPath = pendingAddPhotoPath
+                        val file = createPendingPointPhotoFile(context)
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                        pendingAddPhotoPath = toStoredPhotoPath(file)
+                        pendingAddPhotoUri = uri
+                        deletePhotoOnIo(oldPath)
+                        addPhotoLauncher.launch(uri)
+                    }
                     AddPointDialog(
                         createdAt = pendingTimestamp!!,
                         quickTags = quickTags,
@@ -634,38 +643,13 @@ class MainActivity : ComponentActivity() {
                         onToggleTag = toggleNewPointTag,
                         onOpenTagPicker = { showTagPickerForAdd = true },
                         hasPhoto = !pendingAddPhotoPath.isNullOrBlank(),
-                        onTakePhoto = {
-                            val file = createPendingPointPhotoFile(context)
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            pendingAddPhotoPath?.let { oldPath ->
-                                scope.launch(Dispatchers.IO) {
-                                    deletePointPhotoFile(context, oldPath)
-                                }
-                            }
-                            pendingAddPhotoPath = toStoredPhotoPath(file)
-                            pendingAddPhotoUri = uri
-                            addPhotoLauncher.launch(uri)
-                        },
-                        onRetakePhoto = {
-                            val oldPath = pendingAddPhotoPath
-                            val file = createPendingPointPhotoFile(context)
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            pendingAddPhotoPath = toStoredPhotoPath(file)
-                            pendingAddPhotoUri = uri
-                            oldPath?.let {
-                                scope.launch(Dispatchers.IO) {
-                                    deletePointPhotoFile(context, it)
-                                }
-                            }
-                            addPhotoLauncher.launch(uri)
-                        },
+                        onTakePhoto = launchAddPhotoCapture,
+                        onRetakePhoto = launchAddPhotoCapture,
                         onRemovePhoto = {
                             val oldPath = pendingAddPhotoPath
                             pendingAddPhotoPath = null
                             pendingAddPhotoUri = null
-                            scope.launch(Dispatchers.IO) {
-                                deletePointPhotoFile(context, oldPath)
-                            }
+                            deletePhotoOnIo(oldPath)
                         },
                         onDismiss = {
                             clearPendingAddPhoto()
@@ -748,6 +732,21 @@ class MainActivity : ComponentActivity() {
 
                 if (editingPoint != null) {
                     val point = editingPoint!!
+                    val clearReplacedEditingPhoto = {
+                        val previousUnsavedPath = editingPointPhotoPath
+                        if (!previousUnsavedPath.isNullOrBlank() && previousUnsavedPath != point.photoPath) {
+                            deletePhotoOnIo(previousUnsavedPath)
+                        }
+                    }
+                    val launchEditPhotoCapture = {
+                        clearReplacedEditingPhoto()
+                        val file = createPendingPointPhotoFile(context)
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                        val newPath = toStoredPhotoPath(file)
+                        editingCaptureCandidatePhotoPath = newPath
+                        pendingEditPhotoUri = uri
+                        editPhotoLauncher.launch(uri)
+                    }
                     EditPointDialog(
                         point = point,
                         quickTags = quickTags,
@@ -756,67 +755,24 @@ class MainActivity : ComponentActivity() {
                         onToggleTag = toggleEditingPointTag,
                         onOpenTagPicker = { showTagPickerForEdit = true },
                         currentPhotoPath = editingPointPhotoPath,
-                        onTakePhoto = {
-                            val previousUnsavedPath = editingPointPhotoPath
-                            if (!previousUnsavedPath.isNullOrBlank() && previousUnsavedPath != point.photoPath) {
-                                scope.launch(Dispatchers.IO) {
-                                    deletePointPhotoFile(context, previousUnsavedPath)
-                                }
-                            }
-                            val file = createPendingPointPhotoFile(context)
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            val newPath = toStoredPhotoPath(file)
-                            editingCaptureCandidatePhotoPath = newPath
-                            pendingEditPhotoUri = uri
-                            editPhotoLauncher.launch(uri)
-                        },
-                        onRetakePhoto = {
-                            val previousUnsavedPath = editingPointPhotoPath
-                            if (!previousUnsavedPath.isNullOrBlank() && previousUnsavedPath != point.photoPath) {
-                                scope.launch(Dispatchers.IO) {
-                                    deletePointPhotoFile(context, previousUnsavedPath)
-                                }
-                            }
-                            val file = createPendingPointPhotoFile(context)
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            val newPath = toStoredPhotoPath(file)
-                            editingCaptureCandidatePhotoPath = newPath
-                            pendingEditPhotoUri = uri
-                            editPhotoLauncher.launch(uri)
-                        },
+                        onTakePhoto = launchEditPhotoCapture,
+                        onRetakePhoto = launchEditPhotoCapture,
                         onRemovePhoto = {
-                            val previousUnsavedPath = editingPointPhotoPath
-                            if (!previousUnsavedPath.isNullOrBlank() && previousUnsavedPath != point.photoPath) {
-                                scope.launch(Dispatchers.IO) {
-                                    deletePointPhotoFile(context, previousUnsavedPath)
-                                }
-                            }
+                            clearReplacedEditingPhoto()
                             editingPointPhotoPath = null
                         },
                         onSave = { title, note, photoPath ->
                             viewModel.updatePoint(point, title, note, photoPath)
-                            editingPoint = null
-                            editingPointTagIds = emptySet()
-                            editingPointPhotoPath = null
-                            editingCaptureCandidatePhotoPath = null
-                            pendingEditPhotoUri = null
+                            resetEditingPointState()
                         },
                         onDelete = {
                             clearUnsavedEditingPhoto()
                             viewModel.deletePoint(point)
-                            editingPoint = null
-                            editingPointTagIds = emptySet()
-                            editingPointPhotoPath = null
-                            editingCaptureCandidatePhotoPath = null
-                            pendingEditPhotoUri = null
+                            resetEditingPointState()
                         },
                         onDismiss = {
                             clearUnsavedEditingPhoto()
-                            editingPoint = null
-                            editingPointTagIds = emptySet()
-                            editingPointPhotoPath = null
-                            editingCaptureCandidatePhotoPath = null
-                            pendingEditPhotoUri = null
+                            resetEditingPointState()
                         }
                     )
                 }

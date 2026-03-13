@@ -15,7 +15,7 @@ fun getPointPhotoDir(context: Context): File {
 }
 
 fun createPendingPointPhotoFile(context: Context): File {
-    val fileName = "point_photo_${System.currentTimeMillis()}_${UUID.randomUUID()}.jpg"
+    val fileName = "point_photo_${UUID.randomUUID()}.jpg"
     return File(getPointPhotoDir(context), fileName)
 }
 
