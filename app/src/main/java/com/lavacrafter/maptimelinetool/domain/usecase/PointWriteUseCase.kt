@@ -86,7 +86,7 @@ class PointWriteUseCase(
             magnetometerX = sensorSnapshot.magnetometerX,
             magnetometerY = sensorSnapshot.magnetometerY,
             magnetometerZ = sensorSnapshot.magnetometerZ,
-            noiseDb = sensorSnapshot.noiseDb,
+            noiseDb = null,
             photoPath = photoPath
         )
     }

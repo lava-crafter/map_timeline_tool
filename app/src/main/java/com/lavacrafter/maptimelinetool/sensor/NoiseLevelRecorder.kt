@@ -68,7 +68,7 @@ suspend fun captureNoiseDb(context: Context): Float? {
         if (rms <= 0.0) {
             return@runCatching null
         }
-        val dbfs = 20.0 * log10(rms / Short.MAX_VALUE.toDouble())
-        if (dbfs.isFinite()) dbfs.toFloat() else null
+        val noiseDbfs = 20.0 * log10(rms / Short.MAX_VALUE.toDouble())
+        if (noiseDbfs.isFinite()) noiseDbfs.toFloat() else null
     }.getOrNull()
 }
