@@ -51,7 +51,6 @@ import org.osmdroid.views.overlay.infowindow.InfoWindow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -65,11 +64,7 @@ fun MapScreen(
     downloadedOnly: Boolean
 ) {
     val context = LocalContext.current
-    val sdf = remember {
-        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-    }
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapView: MapView? by remember { mutableStateOf(null) }
     val locationProvider = remember { GpsMyLocationProvider(context) }
@@ -196,14 +191,12 @@ fun MapScreen(
                         position = GeoPoint(p.latitude, p.longitude)
                         title = p.title
                         snippet = p.note
-                        subDescription = context.getString(
-                            R.string.label_utc_time,
-                            sdf.format(Date(p.timestamp))
-                        )
+                        subDescription = sdf.format(Date(p.timestamp))
                         icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
                         infoWindow = object : org.osmdroid.views.overlay.infowindow.MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
                             override fun onOpen(item: Any?) {
                                 super.onOpen(item)
+                                mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
                                 mView.setOnClickListener {
                                     onEditPoint(p)
                                 }
@@ -338,6 +331,7 @@ private val SPECTRUM_COLORS = listOf(
 )
 
 private val DEFAULT_MARKER_COLOR = Color.parseColor("#2E7D32")
+private val INFO_WINDOW_BACKGROUND_COLOR = Color.parseColor("#FCFCFC")
 
 private fun spectrumColor(order: Int): Int {
     val index = (order - 1).coerceAtLeast(0) % SPECTRUM_COLORS.size
@@ -375,4 +369,3 @@ private fun findNearestPoint(map: MapView, points: List<PointEntity>, target: Ge
     }
     return nearest
 }
-

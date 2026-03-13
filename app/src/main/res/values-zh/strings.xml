@@ -20,6 +20,10 @@
     <string name="action_cancel">取消</string>
     <string name="action_ok">确定</string>
     <string name="action_delete">删除</string>
+    <string name="action_take_photo">拍照</string>
+    <string name="action_retake_photo">重拍</string>
+    <string name="action_remove_photo">移除照片</string>
+    <string name="action_view_photo">查看照片</string>
     <string name="action_add">新增</string>
     <string name="action_done">完成</string>
     <string name="action_add_point_to_tag">添加打点</string>
@@ -38,6 +42,8 @@
     <string name="label_quick_tags">常用标签</string>
     <string name="label_more_tags">更多标签</string>
     <string name="label_selected_tags">已选标签</string>
+    <string name="label_photo_added">已添加照片</string>
+    <string name="label_photo_not_added">未添加照片</string>
     <string name="label_auto_save_countdown">%1$d 秒后自动保存</string>
     <string name="label_auto_save_paused">自动保存已暂停（%1$d 秒）</string>
     <string name="label_new_tag">新标签</string>

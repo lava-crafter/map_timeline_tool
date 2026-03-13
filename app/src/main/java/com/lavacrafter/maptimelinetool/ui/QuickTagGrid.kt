@@ -112,7 +112,7 @@ private fun QuickTagCell(
 
     Box(
         modifier = modifier
-            .aspectRatio(1f)
+            .aspectRatio(2f)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .clickable {

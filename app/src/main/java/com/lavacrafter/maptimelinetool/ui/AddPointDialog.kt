@@ -3,6 +3,8 @@ package com.lavacrafter.maptimelinetool.ui
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddPointDialog(
     createdAt: Long,
@@ -43,6 +46,11 @@ fun AddPointDialog(
     onUserTyping: () -> Unit,
     onToggleTag: (Long) -> Unit,
     onOpenTagPicker: () -> Unit,
+    hasPhoto: Boolean,
+    onTakePhoto: () -> Unit,
+    onRetakePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+    onViewPhoto: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, String, Long, Set<Long>) -> Unit
 ) {
@@ -96,6 +104,33 @@ fun AddPointDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (hasPhoto) stringResource(R.string.label_photo_added) else stringResource(R.string.label_photo_not_added),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (hasPhoto) {
+                        OutlinedButton(onClick = onRetakePhoto) {
+                            Text(stringResource(R.string.action_retake_photo))
+                        }
+                        OutlinedButton(onClick = onRemovePhoto) {
+                            Text(stringResource(R.string.action_remove_photo))
+                        }
+                        OutlinedButton(onClick = onViewPhoto) {
+                            Text(stringResource(R.string.action_view_photo))
+                        }
+                    } else {
+                        OutlinedButton(onClick = onTakePhoto) {
+                            Text(stringResource(R.string.action_take_photo))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 val safeSeconds = remainingSeconds.coerceAtLeast(0)
                 val countdownLabel = if (isCountdownPaused) {
                     stringResource(R.string.label_auto_save_paused, safeSeconds)
@@ -142,4 +177,3 @@ fun AddPointDialog(
         }
     )
 }
-

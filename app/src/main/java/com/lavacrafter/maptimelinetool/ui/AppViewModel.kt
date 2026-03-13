@@ -11,14 +11,17 @@ import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -39,7 +42,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         note: String,
         location: Location?,
         timestamp: Long,
-        tagIds: Set<Long>
+        tagIds: Set<Long>,
+        photoPath: String? = null
     ) {
         if (location == null) return
         viewModelScope.launch {
@@ -48,7 +52,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     title = title,
                     note = note,
                     location = location,
-                    timestamp = timestamp
+                    timestamp = timestamp,
+                    photoPath = photoPath
                 )
             )
             tagIds.forEach { tagId ->
@@ -57,15 +62,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun updatePoint(point: PointEntity, title: String, note: String) {
+    fun updatePoint(point: PointEntity, title: String, note: String, photoPath: String?) {
         viewModelScope.launch {
-            repo.update(point.copy(title = title, note = note))
+            repo.update(point.copy(title = title, note = note, photoPath = photoPath))
+            if (point.photoPath != photoPath) {
+                deletePointPhotoOnIo(point.photoPath)
+            }
         }
     }
 
     fun deletePoint(point: PointEntity) {
         viewModelScope.launch {
             repo.delete(point)
+            deletePointPhotoOnIo(point.photoPath)
         }
     }
 
@@ -137,7 +146,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         title: String,
         note: String,
         location: Location,
-        timestamp: Long
+        timestamp: Long,
+        photoPath: String? = null
     ): PointEntity {
         val sensorSnapshot = captureSensorSnapshot(getApplication())
         return PointEntity(
@@ -156,8 +166,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             gyroscopeZ = sensorSnapshot.gyroscopeZ,
             magnetometerX = sensorSnapshot.magnetometerX,
             magnetometerY = sensorSnapshot.magnetometerY,
-            magnetometerZ = sensorSnapshot.magnetometerZ
+            magnetometerZ = sensorSnapshot.magnetometerZ,
+            photoPath = photoPath
         )
+    }
+
+    private suspend fun deletePointPhotoOnIo(photoPath: String?) {
+        withContext(Dispatchers.IO) {
+            deletePointPhotoFile(getApplication(), photoPath)
+        }
     }
 
     private fun readCachedLocation(): Location? {
