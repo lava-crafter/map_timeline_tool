@@ -60,6 +60,8 @@ import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
 import com.lavacrafter.maptimelinetool.toStoredPhotoPath
+import com.lavacrafter.maptimelinetool.data.toDomain
+import com.lavacrafter.maptimelinetool.data.toUi
 import com.lavacrafter.maptimelinetool.export.CsvExporter
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
@@ -75,14 +77,13 @@ import com.lavacrafter.maptimelinetool.ui.EditTagDialog
 import com.lavacrafter.maptimelinetool.ui.ListScreen
 import com.lavacrafter.maptimelinetool.ui.MapScreen
 import com.lavacrafter.maptimelinetool.ui.MapCachePolicy
-import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import com.lavacrafter.maptimelinetool.ui.TagDetailScreen
 import com.lavacrafter.maptimelinetool.ui.TagListScreen
 import com.lavacrafter.maptimelinetool.ui.TagSelectionDialog
 import com.lavacrafter.maptimelinetool.ui.SettingsRoute
 import com.lavacrafter.maptimelinetool.ui.SettingsScreen
+import com.lavacrafter.maptimelinetool.ui.SettingsViewModel
 import com.lavacrafter.maptimelinetool.ui.downloadTileSourceById
-import com.lavacrafter.maptimelinetool.ui.mapTileSources
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
@@ -96,36 +97,30 @@ import org.osmdroid.config.Configuration
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
-    private val viewModel: AppViewModel by viewModels()
+    private val graph by lazy { applicationContext.appGraph() }
+    private val viewModel: AppViewModel by viewModels {
+        AppViewModel.factory(application, graph)
+    }
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        SettingsViewModel.factory(application, graph.settingsManagementUseCase)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val settingsUseCase = graph.settingsManagementUseCase
 
-        applyLanguagePreference(SettingsStore.getLanguagePreference(this))
+        applyLanguagePreference(settingsUseCase.getLanguagePreference().toUi())
 
         setContent {
-            var isDarkTheme by remember { mutableStateOf(false) }
-            var followSystemTheme by remember { mutableStateOf(SettingsStore.getFollowSystemTheme(this)) }
+            val settingsState by settingsViewModel.uiState.collectAsState()
             val isSystemDark = isSystemInDarkTheme()
-            MapTimelineToolTheme(darkTheme = if (followSystemTheme) isSystemDark else isDarkTheme) {
+            MapTimelineToolTheme(darkTheme = if (settingsState.followSystemTheme) isSystemDark else settingsState.isDarkTheme) {
                 val context = LocalContext.current
-                var timeoutSeconds by remember { mutableStateOf(SettingsStore.getTimeoutSeconds(context)) }
-                var cachePolicy by remember { mutableStateOf(SettingsStore.getCachePolicy(context)) }
-                var pinnedTagIds by remember { mutableStateOf(SettingsStore.getPinnedTagIds(context).toSet()) }
-                var recentTagIds by remember { mutableStateOf(SettingsStore.getRecentTagIds(context)) }
-                var zoomBehavior by remember { mutableStateOf(SettingsStore.getZoomButtonBehavior(context)) }
-                var markerScale by remember { mutableStateOf(SettingsStore.getMarkerScale(context)) }
                 var showTagPickerForAdd by remember { mutableStateOf(false) }
                 var showTagPickerForEdit by remember { mutableStateOf(false) }
                 var showMapDownload by remember { mutableStateOf(false) }
                 var showExportFlow by remember { mutableStateOf(false) }
                 var settingsRoute by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Main) }
-                var defaultTagIds by remember { mutableStateOf(SettingsStore.getDefaultTagIds(context).toSet()) }
-                var downloadedAreas by remember { mutableStateOf(SettingsStore.getDownloadedAreas(context)) }
-                var downloadTileSourceId by remember { mutableStateOf(SettingsStore.getDownloadTileSourceId(context)) }
-                var downloadMultiThreadEnabled by remember { mutableStateOf(SettingsStore.getDownloadMultiThreadEnabled(context)) }
-                var downloadThreadCount by remember { mutableStateOf(SettingsStore.getDownloadThreadCount(context)) }
-                var mapTileSourceId by remember { mutableStateOf(mapTileSources.first().id) }
                 var newPointSelectedTagIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
                 var showPinLimitDialog by remember { mutableStateOf(false) }
                 var showExitDialog by remember { mutableStateOf(false) }
@@ -134,22 +129,17 @@ class MainActivity : ComponentActivity() {
                 var pendingAddPhotoPath by remember { mutableStateOf<String?>(null) }
                 var pendingAddPhotoUri by remember { mutableStateOf<Uri?>(null) }
                 var previewPhotoPath by remember { mutableStateOf<String?>(null) }
-                var remainingSeconds by remember { mutableStateOf(timeoutSeconds) }
+                var remainingSeconds by remember { mutableStateOf(settingsState.timeoutSeconds) }
                 var isCountdownPaused by remember { mutableStateOf(false) }
                 var lastTypingTime by remember { mutableStateOf<Long?>(null) }
                 val scaffoldState = rememberBottomSheetScaffoldState()
                 val sheetState = scaffoldState.bottomSheetState
 
                 val recordRecentTag: (Long) -> Unit = { tagId ->
-                    recentTagIds = SettingsStore.addRecentTagId(context, tagId)
+                    settingsViewModel.addRecentTagId(tagId)
                 }
                 val toggleDefaultTag: (Long) -> Unit = { tagId ->
-                    defaultTagIds = if (defaultTagIds.contains(tagId)) {
-                        defaultTagIds - tagId
-                    } else {
-                        defaultTagIds + tagId
-                    }
-                    SettingsStore.setDefaultTagIds(context, defaultTagIds.toList())
+                    settingsViewModel.toggleDefaultTag(tagId)
                 }
                 val toggleNewPointTag: (Long) -> Unit = { tagId ->
                     newPointSelectedTagIds = if (newPointSelectedTagIds.contains(tagId)) {
@@ -235,8 +225,8 @@ class MainActivity : ComponentActivity() {
                     startService(Intent(context, QuickAddService::class.java))
                 }
 
-                LaunchedEffect(cachePolicy) {
-                    applyMapCachePolicy(context, cachePolicy)
+                LaunchedEffect(settingsState.cachePolicy) {
+                    applyMapCachePolicy(context, settingsState.cachePolicy)
                 }
 
 
@@ -324,9 +314,9 @@ class MainActivity : ComponentActivity() {
                 BackHandler(showExitDialog) {
                     finishAffinity()
                 }
-                LaunchedEffect(showDialog, pendingTimestamp, timeoutSeconds) {
+                LaunchedEffect(showDialog, pendingTimestamp, settingsState.timeoutSeconds) {
                     if (showDialog && pendingTimestamp != null) {
-                        remainingSeconds = timeoutSeconds
+                        remainingSeconds = settingsState.timeoutSeconds
                         isCountdownPaused = false
                         lastTypingTime = null
                         newPointTitle = ""
@@ -399,7 +389,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     val csv = withContext(Dispatchers.Default) {
-                        CsvExporter.buildCsv(pointsToExport)
+                        CsvExporter.buildCsv(pointsToExport.map { it.toDomain() })
                     }
                     val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                     val fileName = "map_timeline_${sdf.format(java.util.Date())}.csv"
@@ -411,12 +401,12 @@ class MainActivity : ComponentActivity() {
                     settingsRoute = SettingsRoute.Main
                 }
                 val tagsState = viewModel.tags.collectAsState().value
-                val quickTags = remember(tagsState, pinnedTagIds, recentTagIds) {
-                    val pinned = tagsState.filter { pinnedTagIds.contains(it.id) }
-                    val recent = recentTagIds.mapNotNull { id -> tagsState.firstOrNull { it.id == id } }
+                val quickTags = remember(tagsState, settingsState.pinnedTagIds, settingsState.recentTagIds) {
+                    val pinned = tagsState.filter { settingsState.pinnedTagIds.contains(it.id) }
+                    val recent = settingsState.recentTagIds.mapNotNull { id -> tagsState.firstOrNull { it.id == id } }
                     (pinned + recent).distinctBy { it.id }.take(3)
                 }
-                val downloadTileSource = remember(downloadTileSourceId) { downloadTileSourceById(downloadTileSourceId) }
+                val downloadTileSource = remember(settingsState.downloadTileSourceId) { downloadTileSourceById(settingsState.downloadTileSourceId) }
                 val exportCsv: () -> Unit = {
                     // Open export flow UI
                     showExportFlow = true
@@ -435,7 +425,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.height(64.dp),
                                 onClick = {
                                     pendingTimestamp = System.currentTimeMillis()
-                                    newPointSelectedTagIds = defaultTagIds
+                                    newPointSelectedTagIds = settingsState.defaultTagIds
                                     showDialog = true
                                 }
                             ) {
@@ -483,9 +473,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onEditPointFromMap = { point -> editingPoint = point },
                                 isActive = tab == 0,
-                                zoomBehavior = zoomBehavior,
-                                markerScale = markerScale,
-                                downloadedOnly = downloadedAreas.isNotEmpty(),
+                                zoomBehavior = settingsState.zoomBehavior,
+                                markerScale = settingsState.markerScale,
+                                downloadedOnly = settingsState.downloadedAreas.isNotEmpty(),
                                 scaffoldState = scaffoldState
                             )
                             1 -> {
@@ -507,16 +497,16 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     TagListScreen(
                                         tags = tagsState,
-                                        pinnedTagIds = pinnedTagIds,
+                                        pinnedTagIds = settingsState.pinnedTagIds,
                                         onAddTag = { name -> viewModel.addTag(name) },
                                         onOpenTag = { tag -> selectedTag = tag },
                                         onEditTag = { tag -> editingTag = tag },
                                         onTogglePin = { tag, shouldPin ->
-                                            if (shouldPin && pinnedTagIds.size >= 3) {
+                                            if (shouldPin && settingsState.pinnedTagIds.size >= 3) {
                                                 showPinLimitDialog = true
                                             } else {
-                                                pinnedTagIds = if (shouldPin) pinnedTagIds + tag.id else pinnedTagIds - tag.id
-                                                SettingsStore.setPinnedTagIds(context, pinnedTagIds.toList())
+                                                val updated = if (shouldPin) settingsState.pinnedTagIds + tag.id else settingsState.pinnedTagIds - tag.id
+                                                settingsViewModel.setPinnedTagIds(updated)
                                             }
                                         }
                                     )
@@ -528,71 +518,43 @@ class MainActivity : ComponentActivity() {
                                 com.lavacrafter.maptimelinetool.ui.MapDownloadScreen(
                                     onBack = { showMapDownload = false },
                                     onAreaDownloaded = { area ->
-                                        downloadedAreas = SettingsStore.addDownloadedArea(context, area)
+                                        settingsViewModel.addDownloadedArea(area)
                                     },
                                     tileSource = downloadTileSource,
-                                    useMultiThreadDownload = downloadMultiThreadEnabled,
-                                    downloadThreadCount = downloadThreadCount
+                                    useMultiThreadDownload = settingsState.downloadMultiThreadEnabled,
+                                    downloadThreadCount = settingsState.downloadThreadCount
                                 )
                             } else {
                                 SettingsScreen(
-                                    isDarkTheme = isDarkTheme,
-                                    onDarkThemeChange = { isDarkTheme = it },
-                                    followSystemTheme = followSystemTheme,
-                                    onFollowSystemThemeChange = {
-                                        followSystemTheme = it
-                                        SettingsStore.setFollowSystemTheme(context, it)
-                                    },
-                                    timeoutSeconds = timeoutSeconds,
-                                    onTimeoutSecondsChange = {
-                                        timeoutSeconds = it
-                                        SettingsStore.setTimeoutSeconds(context, it)
-                                    },
-                                    cachePolicy = cachePolicy,
-                                    onCachePolicyChange = {
-                                        cachePolicy = it
-                                        SettingsStore.setCachePolicy(context, it)
-                                    },
+                                    isDarkTheme = settingsState.isDarkTheme,
+                                    onDarkThemeChange = settingsViewModel::setDarkTheme,
+                                    followSystemTheme = settingsState.followSystemTheme,
+                                    onFollowSystemThemeChange = settingsViewModel::setFollowSystemTheme,
+                                    timeoutSeconds = settingsState.timeoutSeconds,
+                                    onTimeoutSecondsChange = settingsViewModel::setTimeoutSeconds,
+                                    cachePolicy = settingsState.cachePolicy,
+                                    onCachePolicyChange = settingsViewModel::setCachePolicy,
                                     networkStatus = networkStatus,
-                                    selectedDownloadTileSourceId = downloadTileSourceId,
-                                    onDownloadTileSourceChange = {
-                                        downloadTileSourceId = it
-                                        SettingsStore.setDownloadTileSourceId(context, it)
-                                    },
-                                    downloadMultiThreadEnabled = downloadMultiThreadEnabled,
-                                    onDownloadMultiThreadEnabledChange = {
-                                        downloadMultiThreadEnabled = it
-                                        SettingsStore.setDownloadMultiThreadEnabled(context, it)
-                                    },
-                                    downloadThreadCount = downloadThreadCount,
-                                    onDownloadThreadCountChange = {
-                                        downloadThreadCount = it
-                                        SettingsStore.setDownloadThreadCount(context, it)
-                                    },
-                                    mapTileSourceId = mapTileSourceId,
-                                    onMapTileSourceChange = { mapTileSourceId = it },
-                                    zoomBehavior = zoomBehavior,
-                                    onZoomBehaviorChange = {
-                                        zoomBehavior = it
-                                        SettingsStore.setZoomButtonBehavior(context, it)
-                                    },
-                                    markerScale = markerScale,
-                                    onMarkerScaleChange = {
-                                        markerScale = it
-                                        SettingsStore.setMarkerScale(context, it)
-                                    },
+                                    selectedDownloadTileSourceId = settingsState.downloadTileSourceId,
+                                    onDownloadTileSourceChange = settingsViewModel::setDownloadTileSourceId,
+                                    downloadMultiThreadEnabled = settingsState.downloadMultiThreadEnabled,
+                                    onDownloadMultiThreadEnabledChange = settingsViewModel::setDownloadMultiThreadEnabled,
+                                    downloadThreadCount = settingsState.downloadThreadCount,
+                                    onDownloadThreadCountChange = settingsViewModel::setDownloadThreadCount,
+                                    mapTileSourceId = settingsState.mapTileSourceId,
+                                    onMapTileSourceChange = settingsViewModel::setMapTileSourceId,
+                                    zoomBehavior = settingsState.zoomBehavior,
+                                    onZoomBehaviorChange = settingsViewModel::setZoomBehavior,
+                                    markerScale = settingsState.markerScale,
+                                    onMarkerScaleChange = settingsViewModel::setMarkerScale,
                                     onOpenMapDownload = { showMapDownload = true },
-                                    downloadedAreas = downloadedAreas,
-                                    onRemoveDownloadedArea = { area ->
-                                        downloadedAreas = SettingsStore.removeDownloadedArea(context, area)
-                                    },
-                                    onDeduplicateDownloadedAreas = {
-                                        downloadedAreas = SettingsStore.dedupeDownloadedAreas(context)
-                                    },
+                                    downloadedAreas = settingsState.downloadedAreas,
+                                    onRemoveDownloadedArea = settingsViewModel::removeDownloadedArea,
+                                    onDeduplicateDownloadedAreas = settingsViewModel::dedupeDownloadedAreas,
                                     onExportCsv = exportCsv,
                                     onImportCsv = { importLauncher.launch("text/*") },
                                     onClearCache = {
-                                        if (downloadedAreas.isNotEmpty()) {
+                                        if (settingsState.downloadedAreas.isNotEmpty()) {
                                             Toast.makeText(context, context.getString(R.string.toast_cache_skip_downloaded), Toast.LENGTH_SHORT).show()
                                         } else {
                                             val cacheDir = Configuration.getInstance().osmdroidTileCache
@@ -602,7 +564,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOpenAbout = { showAbout = true },
                                     defaultTags = tagsState,
-                                    selectedDefaultTagIds = defaultTagIds,
+                                    selectedDefaultTagIds = settingsState.defaultTagIds,
                                     onToggleDefaultTag = toggleDefaultTag,
                                     route = settingsRoute,
                                     onNavigateTo = { settingsRoute = it },
@@ -669,7 +631,7 @@ class MainActivity : ComponentActivity() {
                             pendingTimestamp = null
                             newPointSelectedTagIds = emptySet()
                             showTagPickerForAdd = false
-                            remainingSeconds = timeoutSeconds
+                            remainingSeconds = settingsState.timeoutSeconds
                             isCountdownPaused = false
                             lastTypingTime = null
                             newPointTitle = ""
@@ -695,7 +657,7 @@ class MainActivity : ComponentActivity() {
                                 pendingAddPhotoPath = null
                                 pendingAddPhotoUri = null
                                 showTagPickerForAdd = false
-                                remainingSeconds = timeoutSeconds
+                                remainingSeconds = settingsState.timeoutSeconds
                                 isCountdownPaused = false
                                 lastTypingTime = null
                                 newPointTitle = ""

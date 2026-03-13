@@ -1,13 +1,13 @@
 package com.lavacrafter.maptimelinetool.export
 
-import com.lavacrafter.maptimelinetool.data.PointEntity
+import com.lavacrafter.maptimelinetool.domain.model.Point
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
 object CsvImporter {
-    fun parseCsv(csv: String): List<PointEntity> {
+    fun parseCsv(csv: String): List<Point> {
         val lines = csv.lines()
         if (lines.isEmpty()) return emptyList()
         
@@ -19,7 +19,7 @@ object CsvImporter {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         
-        val points = mutableListOf<PointEntity>()
+        val points = mutableListOf<Point>()
         for (i in (headerIndex + 1) until lines.size) {
             val line = lines[i].trim()
             if (line.isEmpty()) continue
@@ -38,7 +38,7 @@ object CsvImporter {
                         System.currentTimeMillis()
                     }
                     
-                    points.add(PointEntity(
+                    points.add(Point(
                         timestamp = timestamp,
                         latitude = lat,
                         longitude = lon,
