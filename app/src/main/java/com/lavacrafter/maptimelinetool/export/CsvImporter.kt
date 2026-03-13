@@ -1,79 +1,160 @@
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import java.io.Reader
+import java.io.StringReader
+import java.io.PushbackReader
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
 object CsvImporter {
     fun parseCsv(csv: String): List<Point> {
-        val lines = csv.lines()
-        if (lines.isEmpty()) return emptyList()
-        
-        // Find header index
-        val headerLine = lines.firstOrNull { it.contains("name") && it.contains("latitude") } ?: return emptyList()
-        val headerIndex = lines.indexOf(headerLine)
-        
+        return parseCsv(StringReader(csv))
+    }
+
+    fun parseCsv(
+        reader: Reader,
+        resolvePhotoPath: (String) -> String? = { it }
+    ): List<Point> {
+        val pushbackReader = PushbackReader(reader, 2)
+        val records = sequence {
+            while (true) {
+                val record = readCsvRecord(pushbackReader) ?: break
+                if (record.isNotEmpty()) {
+                    yield(record)
+                }
+            }
+        }.iterator()
+        if (!records.hasNext()) return emptyList()
+
+        var header: List<String>? = null
+        while (records.hasNext()) {
+            val candidate = records.next().map { it.trim() }
+            val normalized = candidate.map { it.lowercase(Locale.US) }
+            if (normalized.contains("name") && normalized.contains("latitude") && normalized.contains("longitude")) {
+                header = normalized
+                break
+            }
+        }
+        val resolvedHeader = header ?: return emptyList()
+        val indexMap = resolvedHeader.withIndex().associate { it.value to it.index }
+
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
-        
+
         val points = mutableListOf<Point>()
-        for (i in (headerIndex + 1) until lines.size) {
-            val line = lines[i].trim()
-            if (line.isEmpty()) continue
-            
-            val parts = parseCsvLine(line)
-            if (parts.size >= 5) {
-                try {
-                    val title = parts[0]
-                    val note = parts[1]
-                    val lat = parts[2].toDouble()
-                    val lon = parts[3].toDouble()
-                    val timeStr = parts[4]
-                    val timestamp = try {
-                        sdf.parse(timeStr)?.time ?: System.currentTimeMillis()
-                    } catch (_: Exception) {
-                        System.currentTimeMillis()
-                    }
-                    
-                    points.add(Point(
-                        timestamp = timestamp,
-                        latitude = lat,
-                        longitude = lon,
-                        title = title,
-                        note = note
-                    ))
-                } catch (_: Exception) {}
-            }
+        while (records.hasNext()) {
+            val row = records.next()
+            if (row.all { it.isBlank() }) continue
+            val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull() ?: continue
+            val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull() ?: continue
+            val title = row.valueOf(indexMap, "name").orEmpty()
+            val note = row.valueOf(indexMap, "description").orEmpty()
+            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), sdf)
+            val photoRelPath = row.valueOf(indexMap, "photo_rel_path").orEmpty().trim()
+            val resolvedPhotoPath = photoRelPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
+
+            points.add(
+                Point(
+                    timestamp = timestamp,
+                    latitude = lat,
+                    longitude = lon,
+                    title = title,
+                    note = note,
+                    pressureHpa = row.valueOf(indexMap, "pressure_hpa").toFiniteFloatOrNull(),
+                    ambientLightLux = row.valueOf(indexMap, "ambient_light_lux").toFiniteFloatOrNull(),
+                    accelerometerX = row.valueOf(indexMap, "accelerometer_x").toFiniteFloatOrNull(),
+                    accelerometerY = row.valueOf(indexMap, "accelerometer_y").toFiniteFloatOrNull(),
+                    accelerometerZ = row.valueOf(indexMap, "accelerometer_z").toFiniteFloatOrNull(),
+                    gyroscopeX = row.valueOf(indexMap, "gyroscope_x").toFiniteFloatOrNull(),
+                    gyroscopeY = row.valueOf(indexMap, "gyroscope_y").toFiniteFloatOrNull(),
+                    gyroscopeZ = row.valueOf(indexMap, "gyroscope_z").toFiniteFloatOrNull(),
+                    magnetometerX = row.valueOf(indexMap, "magnetometer_x").toFiniteFloatOrNull(),
+                    magnetometerY = row.valueOf(indexMap, "magnetometer_y").toFiniteFloatOrNull(),
+                    magnetometerZ = row.valueOf(indexMap, "magnetometer_z").toFiniteFloatOrNull(),
+                    noiseDb = row.valueOf(indexMap, "noise_db").toFiniteFloatOrNull(),
+                    photoPath = resolvedPhotoPath
+                )
+            )
         }
         return points
     }
 
-    private fun parseCsvLine(line: String): List<String> {
-        val result = mutableListOf<String>()
-        var current = StringBuilder()
+    private fun parseTimestamp(time: String?, sdf: SimpleDateFormat): Long {
+        val value = time?.trim().orEmpty()
+        if (value.isEmpty()) return System.currentTimeMillis()
+        val parsedDate = runCatching { sdf.parse(value) }.getOrNull()
+        if (parsedDate != null) return parsedDate.time
+        return value.toLongOrNull() ?: System.currentTimeMillis()
+    }
+
+    private fun List<String>.valueOf(indexMap: Map<String, Int>, key: String): String? {
+        val index = indexMap[key] ?: return null
+        if (index !in indices) return null
+        return this[index]
+    }
+
+    private fun String?.toFiniteFloatOrNull(): Float? {
+        val parsed = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull() ?: return null
+        return parsed.takeIf { it.isFinite() }
+    }
+
+    private fun readCsvRecord(reader: PushbackReader): List<String>? {
+        val record = mutableListOf<String>()
+        val field = StringBuilder()
         var inQuotes = false
-        var i = 0
-        while (i < line.length) {
-            val c = line[i]
-            if (c == '\"') {
-                if (inQuotes && i + 1 < line.length && line[i + 1] == '\"') {
-                    current.append('\"')
-                    i++
-                } else {
-                    inQuotes = !inQuotes
+        var anyContent = false
+
+        while (true) {
+            val intChar = reader.read()
+            if (intChar == -1) {
+                if (!anyContent && field.isEmpty() && record.isEmpty()) {
+                    return null
                 }
-            } else if (c == ',' && !inQuotes) {
-                result.add(current.toString().trim())
-                current = StringBuilder()
-            } else {
-                current.append(c)
+                record.add(field.toString())
+                return record
             }
-            i++
+
+            var c = intChar.toChar()
+            if (!anyContent && c == '\uFEFF') {
+                continue
+            }
+
+            anyContent = true
+            when {
+                c == '"' -> {
+                    if (inQuotes) {
+                        val next = reader.read()
+                        if (next == '"'.code) {
+                            field.append('"')
+                        } else {
+                            inQuotes = false
+                            if (next != -1) reader.unread(next)
+                        }
+                    } else {
+                        inQuotes = true
+                    }
+                }
+                c == ',' && !inQuotes -> {
+                    record.add(field.toString())
+                    field.clear()
+                }
+                c == '\n' && !inQuotes -> {
+                    record.add(field.toString())
+                    return record
+                }
+                c == '\r' && !inQuotes -> {
+                    val next = reader.read()
+                    if (next != '\n'.code && next != -1) {
+                        reader.unread(next)
+                    }
+                    record.add(field.toString())
+                    return record
+                }
+                else -> field.append(c)
+            }
         }
-        result.add(current.toString().trim())
-        return result
     }
 }

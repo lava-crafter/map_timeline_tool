@@ -2,9 +2,12 @@
     <string name="app_name">Map Timeline Tool</string>
     <string name="action_add_point">Add</string>
     <string name="action_export_csv">Export CSV</string>
+    <string name="action_export_zip">Export ZIP (points+photos)</string>
     <string name="action_import_csv">Import CSV</string>
+    <string name="action_import_zip">Import ZIP (points+photos)</string>
     <string name="toast_import_success">Imported %1$d points</string>
     <string name="toast_import_failed">Import failed</string>
+    <string name="toast_export_success">Exported %1$d points</string>
     <string name="action_clear_cache">Clear map cache</string>
     <string name="action_back">Back</string>
     <string name="action_center">Center</string>

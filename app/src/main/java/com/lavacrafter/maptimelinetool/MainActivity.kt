@@ -64,6 +64,9 @@ import com.lavacrafter.maptimelinetool.toStoredPhotoPath
 import com.lavacrafter.maptimelinetool.data.toDomain
 import com.lavacrafter.maptimelinetool.data.toUi
 import com.lavacrafter.maptimelinetool.export.CsvExporter
+import com.lavacrafter.maptimelinetool.export.CsvImporter
+import com.lavacrafter.maptimelinetool.export.ZipExporter
+import com.lavacrafter.maptimelinetool.export.ZipImporter
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
 import com.lavacrafter.maptimelinetool.ui.ExportScreens
@@ -94,6 +97,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
+import java.io.IOException
 import org.osmdroid.config.Configuration
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -156,8 +161,13 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val scope = rememberCoroutineScope()
-                var pendingCsv by remember { mutableStateOf<String?>(null) }
+                data class PendingExportPayload(
+                    val points: List<com.lavacrafter.maptimelinetool.domain.model.Point>,
+                    val zip: Boolean
+                )
+                var pendingExportPayload by remember { mutableStateOf<PendingExportPayload?>(null) }
                 var pendingExportSelection by remember { mutableStateOf<ExportSelection?>(null) }
+                var exportAsZip by remember { mutableStateOf(false) }
                 val networkStatus by observeNetworkStatus(context)
                 val addPhotoLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.TakePicture()
@@ -171,32 +181,89 @@ class MainActivity : ComponentActivity() {
                     }
                     pendingAddPhotoUri = null
                 }
-                val exportLauncher = rememberLauncherForActivityResult(
+                val exportCsvLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.CreateDocument("text/csv")
                 ) { uri ->
-                    val csv = pendingCsv
-                    if (uri == null || csv == null) return@rememberLauncherForActivityResult
-                    runCatching {
-                        context.contentResolver.openOutputStream(uri)?.use { output ->
-                            output.write(csv.toByteArray(Charsets.UTF_8))
-                        }
-                    }.onFailure {
-                        Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
                     }
-                    pendingCsv = null
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    CsvExporter.writeCsv(pending.points, output)
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
                 }
-                val importLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.GetContent()
+                val exportZipLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/zip")
                 ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    ZipExporter.export(pending.points, output) { photoPath ->
+                                        resolvePointPhotoFile(context, photoPath)
+                                    }
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
+                val importCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
                         runCatching {
-                            val csv = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                            if (csv != null) {
-                                val importedPoints = com.lavacrafter.maptimelinetool.export.CsvImporter.parseCsv(csv)
-                                viewModel.importPoints(importedPoints)
-                                Toast.makeText(context, context.getString(R.string.toast_import_success, importedPoints.size), Toast.LENGTH_SHORT).show()
+                            val importedPoints = withContext(Dispatchers.IO) {
+                                context.contentResolver.openInputStream(uri)?.use { input ->
+                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8))
+                                } ?: emptyList()
                             }
+                            viewModel.importPoints(importedPoints)
+                            Toast.makeText(context, context.getString(R.string.toast_import_success, importedPoints.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                val importZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                    if (uri == null) return@rememberLauncherForActivityResult
+                    scope.launch {
+                        runCatching {
+                            val imported = withContext(Dispatchers.IO) {
+                                context.contentResolver.openInputStream(uri)?.use { input ->
+                                    ZipImporter.importZip(input) { entryName, photoInput ->
+                                        runCatching {
+                                            val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
+                                            val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
+                                            val target = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
+                                            target.outputStream().buffered().use { output -> photoInput.copyTo(output) }
+                                            toStoredPhotoPath(target)
+                                        }.getOrNull()
+                                    }
+                                } ?: ZipImporter.ImportStats(emptyList(), 0, 0)
+                            }
+                            viewModel.importPoints(imported.points)
+                            Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
                         }.onFailure {
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
@@ -411,13 +478,21 @@ class MainActivity : ComponentActivity() {
                             pointsState.filter { ids.contains(it.id) }
                         }
                     }
-                    val csv = withContext(Dispatchers.Default) {
-                        CsvExporter.buildCsv(pointsToExport.map { it.toDomain() })
-                    }
+                    val pointsToExportDomain = pointsToExport.map { it.toDomain() }
                     val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                    val fileName = "map_timeline_${sdf.format(java.util.Date())}.csv"
-                    pendingCsv = csv
-                    exportLauncher.launch(fileName)
+                    val pending = pendingExportPayload
+                    if (pending != null) {
+                        pendingExportSelection = null
+                        return@LaunchedEffect
+                    }
+                    val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                    val payload = PendingExportPayload(points = pointsToExportDomain, zip = exportAsZip)
+                    pendingExportPayload = payload
+                    if (payload.zip) {
+                        exportZipLauncher.launch("$baseName.zip")
+                    } else {
+                        exportCsvLauncher.launch("$baseName.csv")
+                    }
                     pendingExportSelection = null
                     showExportFlow = false
                     tab = 2
@@ -432,6 +507,11 @@ class MainActivity : ComponentActivity() {
                 val downloadTileSource = remember(settingsState.downloadTileSourceId) { downloadTileSourceById(settingsState.downloadTileSourceId) }
                 val exportCsv: () -> Unit = {
                     // Open export flow UI
+                    exportAsZip = false
+                    showExportFlow = true
+                }
+                val exportZip: () -> Unit = {
+                    exportAsZip = true
                     showExportFlow = true
                 }
 
@@ -606,7 +686,9 @@ class MainActivity : ComponentActivity() {
                                     onRemoveDownloadedArea = settingsViewModel::removeDownloadedArea,
                                     onDeduplicateDownloadedAreas = settingsViewModel::dedupeDownloadedAreas,
                                     onExportCsv = exportCsv,
-                                    onImportCsv = { importLauncher.launch("text/*") },
+                                    onExportZip = exportZip,
+                                    onImportCsv = { importCsvLauncher.launch("text/*") },
+                                    onImportZip = { importZipLauncher.launch("application/zip") },
                                     onClearCache = {
                                         if (settingsState.downloadedAreas.isNotEmpty()) {
                                             Toast.makeText(context, context.getString(R.string.toast_cache_skip_downloaded), Toast.LENGTH_SHORT).show()

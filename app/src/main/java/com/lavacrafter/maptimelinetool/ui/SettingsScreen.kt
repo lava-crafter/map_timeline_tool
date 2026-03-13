@@ -96,7 +96,9 @@ fun SettingsScreen(
     onDeduplicateDownloadedAreas: () -> Unit,
     onOpenMapDownload: () -> Unit,
     onExportCsv: () -> Unit,
+    onExportZip: () -> Unit,
     onImportCsv: () -> Unit,
+    onImportZip: () -> Unit,
     onClearCache: () -> Unit,
     onOpenAbout: () -> Unit,
     defaultTags: List<TagEntity>,
@@ -117,7 +119,9 @@ fun SettingsScreen(
             onFollowSystemThemeChange = onFollowSystemThemeChange,
             onNavigateTo = onNavigateTo,
             onExportCsv = onExportCsv,
+            onExportZip = onExportZip,
             onImportCsv = onImportCsv,
+            onImportZip = onImportZip,
             onClearCache = onClearCache,
             onOpenAbout = onOpenAbout
         )
@@ -193,7 +197,9 @@ private fun SettingsOverviewScreen(
     onFollowSystemThemeChange: (Boolean) -> Unit,
     onNavigateTo: (SettingsRoute) -> Unit,
     onExportCsv: () -> Unit,
+    onExportZip: () -> Unit,
     onImportCsv: () -> Unit,
+    onImportZip: () -> Unit,
     onClearCache: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
@@ -259,8 +265,14 @@ private fun SettingsOverviewScreen(
             Button(onClick = onExportCsv, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_export_csv))
             }
+            Button(onClick = onExportZip, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_zip))
+            }
             Button(onClick = onImportCsv, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_import_csv))
+            }
+            Button(onClick = onImportZip, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_import_zip))
             }
             OutlinedButton(onClick = onClearCache, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_clear_cache))
