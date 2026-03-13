@@ -170,6 +170,13 @@ fun EditPointDialog(
                     z = point.magnetometerZ,
                     formatRes = R.string.label_sensor_magnetometer
                 )
+                Text(
+                    if (point.noiseDb != null) {
+                        stringResource(R.string.label_sensor_noise, point.noiseDb)
+                    } else {
+                        stringResource(R.string.label_sensor_noise_unavailable)
+                    }
+                )
                 if (!point.hasSensorData()) {
                     Text(stringResource(R.string.label_sensor_none))
                 }
@@ -196,4 +203,5 @@ private fun PointEntity.hasSensorData(): Boolean =
         ambientLightLux != null ||
         (accelerometerX != null && accelerometerY != null && accelerometerZ != null) ||
         (gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null) ||
-        (magnetometerX != null && magnetometerY != null && magnetometerZ != null)
+        (magnetometerX != null && magnetometerY != null && magnetometerZ != null) ||
+        noiseDb != null

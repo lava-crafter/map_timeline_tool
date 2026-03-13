@@ -17,6 +17,12 @@ object SettingsStore {
     private const val KEY_DOWNLOAD_TILE_SOURCE = "download_tile_source"
     private const val KEY_DOWNLOAD_MULTI_THREAD = "download_multi_thread"
     private const val KEY_DOWNLOAD_THREAD_COUNT = "download_thread_count"
+    private const val KEY_PRESSURE_ENABLED = "pressure_enabled"
+    private const val KEY_AMBIENT_LIGHT_ENABLED = "ambient_light_enabled"
+    private const val KEY_ACCELEROMETER_ENABLED = "accelerometer_enabled"
+    private const val KEY_GYROSCOPE_ENABLED = "gyroscope_enabled"
+    private const val KEY_MAGNETOMETER_ENABLED = "magnetometer_enabled"
+    private const val KEY_NOISE_ENABLED = "noise_enabled"
 
     fun getTimeoutSeconds(context: Context): Int {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -160,6 +166,73 @@ object SettingsStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putInt(KEY_DOWNLOAD_THREAD_COUNT, count.coerceIn(2, 32))
+            .apply()
+    }
+
+    fun getPressureEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_PRESSURE_ENABLED, true)
+
+    fun setPressureEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PRESSURE_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getAmbientLightEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_AMBIENT_LIGHT_ENABLED, true)
+
+    fun setAmbientLightEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AMBIENT_LIGHT_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getAccelerometerEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ACCELEROMETER_ENABLED, true)
+
+    fun setAccelerometerEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ACCELEROMETER_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getGyroscopeEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_GYROSCOPE_ENABLED, true)
+
+    fun setGyroscopeEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_GYROSCOPE_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getMagnetometerEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_MAGNETOMETER_ENABLED, true)
+
+    fun setMagnetometerEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_MAGNETOMETER_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getNoiseEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOISE_ENABLED, false)
+    }
+
+    fun setNoiseEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOISE_ENABLED, enabled)
             .apply()
     }
 

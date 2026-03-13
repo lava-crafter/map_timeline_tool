@@ -10,6 +10,7 @@ class PointRepository(private val dao: PointDao) : PointRepositoryGateway {
 
     override suspend fun insert(point: com.lavacrafter.maptimelinetool.domain.model.Point): Long = dao.insert(point.toEntity())
     override suspend fun update(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.update(point.toEntity())
+    override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = dao.updateNoiseDb(pointId, noiseDb)
     override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.delete(point.toEntity())
     override suspend fun getAll() = dao.getAll().map { it.toDomain() }
 

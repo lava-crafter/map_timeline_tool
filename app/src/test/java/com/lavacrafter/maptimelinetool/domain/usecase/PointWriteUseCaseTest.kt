@@ -24,7 +24,10 @@ class PointWriteUseCaseTest {
                     accelerometerX = 1f
                 )
             },
-            deletePhoto = {}
+            deletePhoto = {},
+            shouldCollectNoise = { true },
+            collectNoiseDb = { -20f },
+            asyncScope = this
         )
 
         useCase.addPointWithTags(
@@ -42,12 +45,14 @@ class PointWriteUseCaseTest {
         assertEquals(1000f, inserted.pressureHpa)
         assertEquals(1f, inserted.accelerometerX)
         assertEquals(setOf(2L, 3L), fakeRepository.insertedTags.map { it.second }.toSet())
+        assertEquals(listOf(10L to -20f), fakeRepository.updatedNoiseDb)
     }
 }
 
 private class FakePointRepository : PointRepositoryGateway {
     val inserted = mutableListOf<Point>()
     val insertedTags = mutableListOf<Pair<Long, Long>>()
+    val updatedNoiseDb = mutableListOf<Pair<Long, Float?>>()
 
     override fun observeAll(): Flow<List<Point>> = flowOf(emptyList())
     override suspend fun insert(point: Point): Long {
@@ -55,6 +60,9 @@ private class FakePointRepository : PointRepositoryGateway {
         return 10L
     }
     override suspend fun update(point: Point) = Unit
+    override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) {
+        updatedNoiseDb += pointId to noiseDb
+    }
     override suspend fun delete(point: Point) = Unit
     override suspend fun getAll(): List<Point> = emptyList()
     override fun observeTags(): Flow<List<Tag>> = flowOf(emptyList())

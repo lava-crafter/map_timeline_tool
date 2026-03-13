@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import android.os.Bundle
+import android.content.pm.PackageManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.Build
@@ -55,6 +56,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import androidx.exifinterface.media.ExifInterface
 import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
@@ -208,6 +210,16 @@ class MainActivity : ComponentActivity() {
                     val granted = result.values.all { it }
                     if (!granted) {
                         Toast.makeText(context, context.getString(R.string.toast_permission_denied), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                val audioPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        settingsViewModel.setNoiseEnabled(true)
+                    } else {
+                        settingsViewModel.setNoiseEnabled(false)
+                        Toast.makeText(context, context.getString(R.string.toast_noise_permission_denied), Toast.LENGTH_SHORT).show()
                     }
                 }
 
@@ -541,6 +553,31 @@ class MainActivity : ComponentActivity() {
                                     onDownloadMultiThreadEnabledChange = settingsViewModel::setDownloadMultiThreadEnabled,
                                     downloadThreadCount = settingsState.downloadThreadCount,
                                     onDownloadThreadCountChange = settingsViewModel::setDownloadThreadCount,
+                                    pressureEnabled = settingsState.pressureEnabled,
+                                    onPressureEnabledChange = settingsViewModel::setPressureEnabled,
+                                    ambientLightEnabled = settingsState.ambientLightEnabled,
+                                    onAmbientLightEnabledChange = settingsViewModel::setAmbientLightEnabled,
+                                    accelerometerEnabled = settingsState.accelerometerEnabled,
+                                    onAccelerometerEnabledChange = settingsViewModel::setAccelerometerEnabled,
+                                    gyroscopeEnabled = settingsState.gyroscopeEnabled,
+                                    onGyroscopeEnabledChange = settingsViewModel::setGyroscopeEnabled,
+                                    magnetometerEnabled = settingsState.magnetometerEnabled,
+                                    onMagnetometerEnabledChange = settingsViewModel::setMagnetometerEnabled,
+                                    noiseEnabled = settingsState.noiseEnabled,
+                                    onNoiseEnabledChange = { enabled ->
+                                        if (!enabled) {
+                                            settingsViewModel.setNoiseEnabled(false)
+                                        } else if (
+                                            ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.RECORD_AUDIO
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                        ) {
+                                            settingsViewModel.setNoiseEnabled(true)
+                                        } else {
+                                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
                                     mapTileSourceId = settingsState.mapTileSourceId,
                                     onMapTileSourceChange = settingsViewModel::setMapTileSourceId,
                                     zoomBehavior = settingsState.zoomBehavior,

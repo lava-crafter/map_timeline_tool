@@ -54,6 +54,7 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     override fun observeAll(): Flow<List<Point>> = flowOf(emptyList())
     override suspend fun insert(point: Point): Long = 1L
     override suspend fun update(point: Point) = Unit
+    override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = Unit
     override suspend fun delete(point: Point) = Unit
     override suspend fun getAll(): List<Point> = emptyList()
 

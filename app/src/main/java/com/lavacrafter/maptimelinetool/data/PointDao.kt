@@ -25,6 +25,9 @@ interface PointDao {
     @Query("SELECT * FROM points ORDER BY timestamp ASC")
     suspend fun getAll(): List<PointEntity>
 
+    @Query("UPDATE points SET noiseDb = :noiseDb WHERE id = :pointId")
+    suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?)
+
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun observeTags(): Flow<List<TagEntity>>
 

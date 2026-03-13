@@ -21,6 +21,7 @@ fun PointEntity.toDomain(): Point = Point(
     magnetometerX = magnetometerX,
     magnetometerY = magnetometerY,
     magnetometerZ = magnetometerZ,
+    noiseDb = noiseDb,
     photoPath = photoPath
 )
 
@@ -42,6 +43,7 @@ fun Point.toEntity(): PointEntity = PointEntity(
     magnetometerX = magnetometerX,
     magnetometerY = magnetometerY,
     magnetometerZ = magnetometerZ,
+    noiseDb = noiseDb,
     photoPath = photoPath
 )
 

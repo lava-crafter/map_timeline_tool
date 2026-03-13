@@ -67,6 +67,18 @@ fun SettingsScreen(
     onDownloadMultiThreadEnabledChange: (Boolean) -> Unit,
     downloadThreadCount: Int,
     onDownloadThreadCountChange: (Int) -> Unit,
+    pressureEnabled: Boolean,
+    onPressureEnabledChange: (Boolean) -> Unit,
+    ambientLightEnabled: Boolean,
+    onAmbientLightEnabledChange: (Boolean) -> Unit,
+    accelerometerEnabled: Boolean,
+    onAccelerometerEnabledChange: (Boolean) -> Unit,
+    gyroscopeEnabled: Boolean,
+    onGyroscopeEnabledChange: (Boolean) -> Unit,
+    magnetometerEnabled: Boolean,
+    onMagnetometerEnabledChange: (Boolean) -> Unit,
+    noiseEnabled: Boolean,
+    onNoiseEnabledChange: (Boolean) -> Unit,
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
     zoomBehavior: ZoomButtonBehavior,
@@ -102,6 +114,21 @@ fun SettingsScreen(
             onImportCsv = onImportCsv,
             onClearCache = onClearCache,
             onOpenAbout = onOpenAbout
+        )
+        SettingsRoute.Sensors -> SensorSettings(
+            pressureEnabled = pressureEnabled,
+            onPressureEnabledChange = onPressureEnabledChange,
+            ambientLightEnabled = ambientLightEnabled,
+            onAmbientLightEnabledChange = onAmbientLightEnabledChange,
+            accelerometerEnabled = accelerometerEnabled,
+            onAccelerometerEnabledChange = onAccelerometerEnabledChange,
+            gyroscopeEnabled = gyroscopeEnabled,
+            onGyroscopeEnabledChange = onGyroscopeEnabledChange,
+            magnetometerEnabled = magnetometerEnabled,
+            onMagnetometerEnabledChange = onMagnetometerEnabledChange,
+            noiseEnabled = noiseEnabled,
+            onNoiseEnabledChange = onNoiseEnabledChange,
+            onBack = onNavigateBack
         )
         SettingsRoute.MapOperations -> MapOperationsSettings(
             timeoutSeconds = timeoutSeconds,
@@ -183,6 +210,11 @@ private fun SettingsOverviewScreen(
                 onFollowSystemThemeChange = onFollowSystemThemeChange
             )
 
+            SettingsOverviewItem(
+                title = stringResource(R.string.settings_sensors_title),
+                description = stringResource(R.string.settings_sensors_desc),
+                onClick = { onNavigateTo(SettingsRoute.Sensors) }
+            )
             SettingsOverviewItem(
                 title = stringResource(R.string.settings_map_operations_title),
                 description = stringResource(R.string.settings_map_operations_desc),
@@ -335,6 +367,81 @@ private fun MapOperationsSettings(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SensorSettings(
+    pressureEnabled: Boolean,
+    onPressureEnabledChange: (Boolean) -> Unit,
+    ambientLightEnabled: Boolean,
+    onAmbientLightEnabledChange: (Boolean) -> Unit,
+    accelerometerEnabled: Boolean,
+    onAccelerometerEnabledChange: (Boolean) -> Unit,
+    gyroscopeEnabled: Boolean,
+    onGyroscopeEnabledChange: (Boolean) -> Unit,
+    magnetometerEnabled: Boolean,
+    onMagnetometerEnabledChange: (Boolean) -> Unit,
+    noiseEnabled: Boolean,
+    onNoiseEnabledChange: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsSubpageScaffold(
+        title = stringResource(R.string.settings_sensors_title),
+        tutorialText = stringResource(R.string.settings_help_sensors),
+        onBack = onBack
+    ) { modifier ->
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SensorToggleRow(
+                label = stringResource(R.string.settings_sensor_pressure),
+                checked = pressureEnabled,
+                onCheckedChange = onPressureEnabledChange
+            )
+            SensorToggleRow(
+                label = stringResource(R.string.settings_sensor_ambient_light),
+                checked = ambientLightEnabled,
+                onCheckedChange = onAmbientLightEnabledChange
+            )
+            SensorToggleRow(
+                label = stringResource(R.string.settings_sensor_accelerometer),
+                checked = accelerometerEnabled,
+                onCheckedChange = onAccelerometerEnabledChange
+            )
+            SensorToggleRow(
+                label = stringResource(R.string.settings_sensor_gyroscope),
+                checked = gyroscopeEnabled,
+                onCheckedChange = onGyroscopeEnabledChange
+            )
+            SensorToggleRow(
+                label = stringResource(R.string.settings_sensor_magnetometer),
+                checked = magnetometerEnabled,
+                onCheckedChange = onMagnetometerEnabledChange
+            )
+            Column {
+                SensorToggleRow(
+                    label = stringResource(R.string.settings_sensor_noise),
+                    checked = noiseEnabled,
+                    onCheckedChange = onNoiseEnabledChange
+                )
+                Text(
+                    text = stringResource(R.string.settings_noise_collect_desc),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SensorToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = label)
     }
 }
 
@@ -566,4 +673,3 @@ private fun <T> SelectionGroup(
 }
 
 data class SelectionItem<T>(val label: String, val value: T)
-

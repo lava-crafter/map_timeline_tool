@@ -30,7 +30,13 @@ class SettingsViewModel(
             downloadedAreas = settingsUseCase.getDownloadedAreas().map { it.toUi() },
             downloadTileSourceId = settingsUseCase.getDownloadTileSourceId(),
             downloadMultiThreadEnabled = settingsUseCase.getDownloadMultiThreadEnabled(),
-            downloadThreadCount = settingsUseCase.getDownloadThreadCount()
+            downloadThreadCount = settingsUseCase.getDownloadThreadCount(),
+            pressureEnabled = settingsUseCase.getPressureEnabled(),
+            ambientLightEnabled = settingsUseCase.getAmbientLightEnabled(),
+            accelerometerEnabled = settingsUseCase.getAccelerometerEnabled(),
+            gyroscopeEnabled = settingsUseCase.getGyroscopeEnabled(),
+            magnetometerEnabled = settingsUseCase.getMagnetometerEnabled(),
+            noiseEnabled = settingsUseCase.getNoiseEnabled()
         )
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -67,6 +73,36 @@ class SettingsViewModel(
     fun setDownloadThreadCount(count: Int) {
         settingsUseCase.setDownloadThreadCount(count)
         _uiState.update { it.copy(downloadThreadCount = count) }
+    }
+
+    fun setNoiseEnabled(enabled: Boolean) {
+        settingsUseCase.setNoiseEnabled(enabled)
+        _uiState.update { it.copy(noiseEnabled = enabled) }
+    }
+
+    fun setPressureEnabled(enabled: Boolean) {
+        settingsUseCase.setPressureEnabled(enabled)
+        _uiState.update { it.copy(pressureEnabled = enabled) }
+    }
+
+    fun setAmbientLightEnabled(enabled: Boolean) {
+        settingsUseCase.setAmbientLightEnabled(enabled)
+        _uiState.update { it.copy(ambientLightEnabled = enabled) }
+    }
+
+    fun setAccelerometerEnabled(enabled: Boolean) {
+        settingsUseCase.setAccelerometerEnabled(enabled)
+        _uiState.update { it.copy(accelerometerEnabled = enabled) }
+    }
+
+    fun setGyroscopeEnabled(enabled: Boolean) {
+        settingsUseCase.setGyroscopeEnabled(enabled)
+        _uiState.update { it.copy(gyroscopeEnabled = enabled) }
+    }
+
+    fun setMagnetometerEnabled(enabled: Boolean) {
+        settingsUseCase.setMagnetometerEnabled(enabled)
+        _uiState.update { it.copy(magnetometerEnabled = enabled) }
     }
 
     fun setMapTileSourceId(sourceId: String) {

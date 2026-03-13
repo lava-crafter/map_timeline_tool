@@ -4,11 +4,18 @@ import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class PointWriteUseCase(
     private val repository: PointRepositoryGateway,
     private val sensorSnapshotPort: SensorSnapshotPort,
-    private val deletePhoto: suspend (String?) -> Unit
+    private val deletePhoto: suspend (String?) -> Unit,
+    private val shouldCollectNoise: () -> Boolean = { false },
+    private val collectNoiseDb: suspend () -> Float? = { null },
+    private val asyncScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     suspend fun addPointWithTags(
         title: String,
@@ -29,6 +36,12 @@ class PointWriteUseCase(
         )
         tagIds.forEach { tagId ->
             repository.insertPointTag(id, tagId)
+        }
+        if (shouldCollectNoise()) {
+            asyncScope.launch {
+                val noiseDb = runCatching { collectNoiseDb() }.getOrNull()
+                repository.updateNoiseDb(id, noiseDb)
+            }
         }
     }
 
@@ -73,6 +86,7 @@ class PointWriteUseCase(
             magnetometerX = sensorSnapshot.magnetometerX,
             magnetometerY = sensorSnapshot.magnetometerY,
             magnetometerZ = sensorSnapshot.magnetometerZ,
+            noiseDb = null,
             photoPath = photoPath
         )
     }

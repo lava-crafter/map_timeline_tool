@@ -22,5 +22,6 @@ data class PointEntity(
     val magnetometerX: Float? = null,
     val magnetometerY: Float? = null,
     val magnetometerZ: Float? = null,
+    val noiseDb: Float? = null,
     val photoPath: String? = null
 )

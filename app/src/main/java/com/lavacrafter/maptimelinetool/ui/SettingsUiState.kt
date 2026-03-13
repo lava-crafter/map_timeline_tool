@@ -14,5 +14,11 @@ data class SettingsUiState(
     val downloadTileSourceId: String = "",
     val downloadMultiThreadEnabled: Boolean = false,
     val downloadThreadCount: Int = 4,
+    val pressureEnabled: Boolean = true,
+    val ambientLightEnabled: Boolean = true,
+    val accelerometerEnabled: Boolean = true,
+    val gyroscopeEnabled: Boolean = true,
+    val magnetometerEnabled: Boolean = true,
+    val noiseEnabled: Boolean = false,
     val mapTileSourceId: String = mapTileSources.first().id
 )

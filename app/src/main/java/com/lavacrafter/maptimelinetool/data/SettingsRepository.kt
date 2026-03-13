@@ -48,6 +48,19 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
     override fun getDownloadThreadCount(): Int = SettingsStore.getDownloadThreadCount(appContext)
     override fun setDownloadThreadCount(count: Int) = SettingsStore.setDownloadThreadCount(appContext, count)
 
+    override fun getPressureEnabled(): Boolean = SettingsStore.getPressureEnabled(appContext)
+    override fun setPressureEnabled(enabled: Boolean) = SettingsStore.setPressureEnabled(appContext, enabled)
+    override fun getAmbientLightEnabled(): Boolean = SettingsStore.getAmbientLightEnabled(appContext)
+    override fun setAmbientLightEnabled(enabled: Boolean) = SettingsStore.setAmbientLightEnabled(appContext, enabled)
+    override fun getAccelerometerEnabled(): Boolean = SettingsStore.getAccelerometerEnabled(appContext)
+    override fun setAccelerometerEnabled(enabled: Boolean) = SettingsStore.setAccelerometerEnabled(appContext, enabled)
+    override fun getGyroscopeEnabled(): Boolean = SettingsStore.getGyroscopeEnabled(appContext)
+    override fun setGyroscopeEnabled(enabled: Boolean) = SettingsStore.setGyroscopeEnabled(appContext, enabled)
+    override fun getMagnetometerEnabled(): Boolean = SettingsStore.getMagnetometerEnabled(appContext)
+    override fun setMagnetometerEnabled(enabled: Boolean) = SettingsStore.setMagnetometerEnabled(appContext, enabled)
+    override fun getNoiseEnabled(): Boolean = SettingsStore.getNoiseEnabled(appContext)
+    override fun setNoiseEnabled(enabled: Boolean) = SettingsStore.setNoiseEnabled(appContext, enabled)
+
     override fun getDownloadedAreas(): List<SettingsDownloadedArea> = SettingsStore.getDownloadedAreas(appContext).map { it.toDomain() }
     override fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> =
         SettingsStore.addDownloadedArea(appContext, area.toUi()).map { it.toDomain() }

@@ -35,6 +35,7 @@
     <string name="toast_cache_cleared">Map cache cleared</string>
     <string name="toast_cache_skip_downloaded">Downloaded areas preserved. Remove them before clearing cache.</string>
     <string name="toast_point_added">Point added</string>
+    <string name="toast_noise_permission_denied">Microphone permission denied. Noise capture remains off.</string>
     <string name="toast_location_loading">Location is loading</string>
     <string name="label_utc_time">%1$s UTC</string>
     <string name="label_lat_lon">%1$.6f, %2$.6f</string>
@@ -55,6 +56,8 @@
     <string name="label_sensor_accelerometer">Accelerometer: X %1$.3f, Y %2$.3f, Z %3$.3f m/s²</string>
     <string name="label_sensor_gyroscope">Gyroscope: X %1$.3f, Y %2$.3f, Z %3$.3f rad/s</string>
     <string name="label_sensor_magnetometer">Magnetometer: X %1$.3f, Y %2$.3f, Z %3$.3f μT</string>
+    <string name="label_sensor_noise">Noise (dBFS): %1$.2f dB</string>
+    <string name="label_sensor_noise_unavailable">Noise (dBFS): not recorded</string>
     <string name="settings_title">Settings</string>
     <string name="settings_help_title">Help</string>
     <string name="settings_help_overview">Tap the cards below to reach the panels for themes, map controls, cache, downloads, and default tags. Each screen has a ? button for quick tips.</string>
@@ -64,6 +67,17 @@
     <string name="settings_theme_dark_mode">Dark mode</string>
     <string name="settings_timeout_label">Add timeout (seconds)</string>
     <string name="settings_timeout_hint">Timeout seconds</string>
+    <string name="settings_sensors_title">Sensors</string>
+    <string name="settings_sensors_desc">Configure each sensor capture switch.</string>
+    <string name="settings_help_sensors">Turn each sensor on or off independently for new points. Noise capture requires microphone permission.</string>
+    <string name="settings_sensor_pressure">Barometer</string>
+    <string name="settings_sensor_ambient_light">Ambient light</string>
+    <string name="settings_sensor_accelerometer">Accelerometer</string>
+    <string name="settings_sensor_gyroscope">Gyroscope</string>
+    <string name="settings_sensor_magnetometer">Magnetometer</string>
+    <string name="settings_sensor_noise">Noise (3s dBFS)</string>
+    <string name="settings_noise_collect_label">Collect 3-second noise</string>
+    <string name="settings_noise_collect_desc">Requires microphone permission. Captured asynchronously after point save.</string>
     <string name="settings_map_operations_title">Map operations</string>
     <string name="settings_map_operations_desc">Adjust the timeout, zoom controls, and marker size.</string>
     <string name="settings_help_map_operations">Set how long a queued point waits before auto-saved, when the zoom controls appear, and how large markers should be. Tap Done when you understand the behavior.</string>

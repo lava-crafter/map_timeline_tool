@@ -8,6 +8,7 @@ interface PointRepositoryGateway {
     fun observeAll(): Flow<List<Point>>
     suspend fun insert(point: Point): Long
     suspend fun update(point: Point)
+    suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?)
     suspend fun delete(point: Point)
     suspend fun getAll(): List<Point>
 

@@ -13,6 +13,9 @@ import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.osmdroid.config.Configuration
 
 class MapTimelineApp : Application() {
@@ -35,6 +38,8 @@ class MapTimelineApp : Application() {
 class AppGraph(
     private val app: Application
 ) {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
         PointRepository(AppDatabase.get(app).pointDao())
     }
@@ -52,17 +57,17 @@ class AppGraph(
             override suspend fun readSnapshot(): PointSensorSnapshot {
                 val raw = com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot(app)
                 return PointSensorSnapshot(
-                    pressureHpa = raw.pressureHpa,
-                    ambientLightLux = raw.ambientLightLux,
-                    accelerometerX = raw.accelerometerX,
-                    accelerometerY = raw.accelerometerY,
-                    accelerometerZ = raw.accelerometerZ,
-                    gyroscopeX = raw.gyroscopeX,
-                    gyroscopeY = raw.gyroscopeY,
-                    gyroscopeZ = raw.gyroscopeZ,
-                    magnetometerX = raw.magnetometerX,
-                    magnetometerY = raw.magnetometerY,
-                    magnetometerZ = raw.magnetometerZ
+                    pressureHpa = if (settingsManagementUseCase.getPressureEnabled()) raw.pressureHpa else null,
+                    ambientLightLux = if (settingsManagementUseCase.getAmbientLightEnabled()) raw.ambientLightLux else null,
+                    accelerometerX = if (settingsManagementUseCase.getAccelerometerEnabled()) raw.accelerometerX else null,
+                    accelerometerY = if (settingsManagementUseCase.getAccelerometerEnabled()) raw.accelerometerY else null,
+                    accelerometerZ = if (settingsManagementUseCase.getAccelerometerEnabled()) raw.accelerometerZ else null,
+                    gyroscopeX = if (settingsManagementUseCase.getGyroscopeEnabled()) raw.gyroscopeX else null,
+                    gyroscopeY = if (settingsManagementUseCase.getGyroscopeEnabled()) raw.gyroscopeY else null,
+                    gyroscopeZ = if (settingsManagementUseCase.getGyroscopeEnabled()) raw.gyroscopeZ else null,
+                    magnetometerX = if (settingsManagementUseCase.getMagnetometerEnabled()) raw.magnetometerX else null,
+                    magnetometerY = if (settingsManagementUseCase.getMagnetometerEnabled()) raw.magnetometerY else null,
+                    magnetometerZ = if (settingsManagementUseCase.getMagnetometerEnabled()) raw.magnetometerZ else null
                 )
             }
         }
@@ -76,7 +81,10 @@ class AppGraph(
         PointWriteUseCase(
             repository = pointRepositoryGateway,
             sensorSnapshotPort = sensorSnapshotPort,
-            deletePhoto = { photoPath -> deletePointPhotoFile(app, photoPath) }
+            deletePhoto = { photoPath -> deletePointPhotoFile(app, photoPath) },
+            shouldCollectNoise = { settingsManagementUseCase.getNoiseEnabled() },
+            collectNoiseDb = { com.lavacrafter.maptimelinetool.sensor.captureNoiseDb(app) },
+            asyncScope = appScope
         )
     }
 }

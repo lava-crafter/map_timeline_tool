@@ -11,5 +11,6 @@ data class PointSensorSnapshot(
     val gyroscopeZ: Float? = null,
     val magnetometerX: Float? = null,
     val magnetometerY: Float? = null,
-    val magnetometerZ: Float? = null
+    val magnetometerZ: Float? = null,
+    val noiseDb: Float? = null
 )
