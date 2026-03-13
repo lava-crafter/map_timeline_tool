@@ -60,8 +60,8 @@ import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
 import com.lavacrafter.maptimelinetool.toStoredPhotoPath
-import com.lavacrafter.maptimelinetool.data.SettingsRepository
-import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
+import com.lavacrafter.maptimelinetool.data.toDomain
+import com.lavacrafter.maptimelinetool.data.toUi
 import com.lavacrafter.maptimelinetool.export.CsvExporter
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
@@ -101,9 +101,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val settingsUseCase = SettingsManagementUseCase(SettingsRepository(this))
+        val settingsUseCase = (application as MapTimelineApp).settingsManagementUseCase
 
-        applyLanguagePreference(settingsUseCase.getLanguagePreference())
+        applyLanguagePreference(settingsUseCase.getLanguagePreference().toUi())
 
         setContent {
             var isDarkTheme by remember { mutableStateOf(false) }
@@ -112,10 +112,10 @@ class MainActivity : ComponentActivity() {
             MapTimelineToolTheme(darkTheme = if (followSystemTheme) isSystemDark else isDarkTheme) {
                 val context = LocalContext.current
                 var timeoutSeconds by remember { mutableStateOf(settingsUseCase.getTimeoutSeconds()) }
-                var cachePolicy by remember { mutableStateOf(settingsUseCase.getCachePolicy()) }
+                var cachePolicy by remember { mutableStateOf(settingsUseCase.getCachePolicy().toUi()) }
                 var pinnedTagIds by remember { mutableStateOf(settingsUseCase.getPinnedTagIds().toSet()) }
                 var recentTagIds by remember { mutableStateOf(settingsUseCase.getRecentTagIds()) }
-                var zoomBehavior by remember { mutableStateOf(settingsUseCase.getZoomButtonBehavior()) }
+                var zoomBehavior by remember { mutableStateOf(settingsUseCase.getZoomButtonBehavior().toUi()) }
                 var markerScale by remember { mutableStateOf(settingsUseCase.getMarkerScale()) }
                 var showTagPickerForAdd by remember { mutableStateOf(false) }
                 var showTagPickerForEdit by remember { mutableStateOf(false) }
@@ -123,7 +123,7 @@ class MainActivity : ComponentActivity() {
                 var showExportFlow by remember { mutableStateOf(false) }
                 var settingsRoute by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Main) }
                 var defaultTagIds by remember { mutableStateOf(settingsUseCase.getDefaultTagIds().toSet()) }
-                var downloadedAreas by remember { mutableStateOf(settingsUseCase.getDownloadedAreas()) }
+                var downloadedAreas by remember { mutableStateOf(settingsUseCase.getDownloadedAreas().map { it.toUi() }) }
                 var downloadTileSourceId by remember { mutableStateOf(settingsUseCase.getDownloadTileSourceId()) }
                 var downloadMultiThreadEnabled by remember { mutableStateOf(settingsUseCase.getDownloadMultiThreadEnabled()) }
                 var downloadThreadCount by remember { mutableStateOf(settingsUseCase.getDownloadThreadCount()) }
@@ -530,7 +530,7 @@ class MainActivity : ComponentActivity() {
                                 com.lavacrafter.maptimelinetool.ui.MapDownloadScreen(
                                     onBack = { showMapDownload = false },
                                     onAreaDownloaded = { area ->
-                                        downloadedAreas = settingsUseCase.addDownloadedArea(area)
+                                        downloadedAreas = settingsUseCase.addDownloadedArea(area.toDomain()).map { it.toUi() }
                                     },
                                     tileSource = downloadTileSource,
                                     useMultiThreadDownload = downloadMultiThreadEnabled,
@@ -553,7 +553,7 @@ class MainActivity : ComponentActivity() {
                                     cachePolicy = cachePolicy,
                                     onCachePolicyChange = {
                                         cachePolicy = it
-                                        settingsUseCase.setCachePolicy(it)
+                                        settingsUseCase.setCachePolicy(it.toDomain())
                                     },
                                     networkStatus = networkStatus,
                                     selectedDownloadTileSourceId = downloadTileSourceId,
@@ -576,7 +576,7 @@ class MainActivity : ComponentActivity() {
                                     zoomBehavior = zoomBehavior,
                                     onZoomBehaviorChange = {
                                         zoomBehavior = it
-                                        settingsUseCase.setZoomButtonBehavior(it)
+                                        settingsUseCase.setZoomButtonBehavior(it.toDomain())
                                     },
                                     markerScale = markerScale,
                                     onMarkerScaleChange = {
@@ -586,10 +586,10 @@ class MainActivity : ComponentActivity() {
                                     onOpenMapDownload = { showMapDownload = true },
                                     downloadedAreas = downloadedAreas,
                                     onRemoveDownloadedArea = { area ->
-                                        downloadedAreas = settingsUseCase.removeDownloadedArea(area)
+                                        downloadedAreas = settingsUseCase.removeDownloadedArea(area.toDomain()).map { it.toUi() }
                                     },
                                     onDeduplicateDownloadedAreas = {
-                                        downloadedAreas = settingsUseCase.dedupeDownloadedAreas()
+                                        downloadedAreas = settingsUseCase.dedupeDownloadedAreas().map { it.toUi() }
                                     },
                                     onExportCsv = exportCsv,
                                     onImportCsv = { importLauncher.launch("text/*") },

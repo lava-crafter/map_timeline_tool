@@ -1,12 +1,12 @@
 package com.lavacrafter.maptimelinetool.data
 
 import android.content.Context
+import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
+import com.lavacrafter.maptimelinetool.domain.model.SettingsLanguagePreference
+import com.lavacrafter.maptimelinetool.domain.model.SettingsMapCachePolicy
+import com.lavacrafter.maptimelinetool.domain.model.SettingsZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.domain.repository.SettingsManagementGateway
-import com.lavacrafter.maptimelinetool.ui.DownloadedArea
-import com.lavacrafter.maptimelinetool.ui.LanguagePreference
-import com.lavacrafter.maptimelinetool.ui.MapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
-import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 
 class SettingsRepository(context: Context) : SettingsManagementGateway {
     private val appContext = context.applicationContext
@@ -14,8 +14,8 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
     override fun getTimeoutSeconds(): Int = SettingsStore.getTimeoutSeconds(appContext)
     override fun setTimeoutSeconds(seconds: Int) = SettingsStore.setTimeoutSeconds(appContext, seconds)
 
-    override fun getCachePolicy(): MapCachePolicy = SettingsStore.getCachePolicy(appContext)
-    override fun setCachePolicy(policy: MapCachePolicy) = SettingsStore.setCachePolicy(appContext, policy)
+    override fun getCachePolicy(): SettingsMapCachePolicy = SettingsStore.getCachePolicy(appContext).toDomain()
+    override fun setCachePolicy(policy: SettingsMapCachePolicy) = SettingsStore.setCachePolicy(appContext, policy.toUi())
 
     override fun getPinnedTagIds(): List<Long> = SettingsStore.getPinnedTagIds(appContext)
     override fun setPinnedTagIds(tagIds: List<Long>) = SettingsStore.setPinnedTagIds(appContext, tagIds)
@@ -23,11 +23,11 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
     override fun getRecentTagIds(): List<Long> = SettingsStore.getRecentTagIds(appContext)
     override fun addRecentTagId(tagId: Long): List<Long> = SettingsStore.addRecentTagId(appContext, tagId)
 
-    override fun getZoomButtonBehavior(): ZoomButtonBehavior = SettingsStore.getZoomButtonBehavior(appContext)
-    override fun setZoomButtonBehavior(behavior: ZoomButtonBehavior) =
-        SettingsStore.setZoomButtonBehavior(appContext, behavior)
+    override fun getZoomButtonBehavior(): SettingsZoomButtonBehavior = SettingsStore.getZoomButtonBehavior(appContext).toDomain()
+    override fun setZoomButtonBehavior(behavior: SettingsZoomButtonBehavior) =
+        SettingsStore.setZoomButtonBehavior(appContext, behavior.toUi())
 
-    override fun getLanguagePreference(): LanguagePreference = SettingsStore.getLanguagePreference(appContext)
+    override fun getLanguagePreference(): SettingsLanguagePreference = SettingsStore.getLanguagePreference(appContext).toDomain()
 
     override fun getFollowSystemTheme(): Boolean = SettingsStore.getFollowSystemTheme(appContext)
     override fun setFollowSystemTheme(enabled: Boolean) = SettingsStore.setFollowSystemTheme(appContext, enabled)
@@ -48,12 +48,13 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
     override fun getDownloadThreadCount(): Int = SettingsStore.getDownloadThreadCount(appContext)
     override fun setDownloadThreadCount(count: Int) = SettingsStore.setDownloadThreadCount(appContext, count)
 
-    override fun getDownloadedAreas(): List<DownloadedArea> = SettingsStore.getDownloadedAreas(appContext)
-    override fun addDownloadedArea(area: DownloadedArea): List<DownloadedArea> =
-        SettingsStore.addDownloadedArea(appContext, area)
+    override fun getDownloadedAreas(): List<SettingsDownloadedArea> = SettingsStore.getDownloadedAreas(appContext).map { it.toDomain() }
+    override fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> =
+        SettingsStore.addDownloadedArea(appContext, area.toUi()).map { it.toDomain() }
 
-    override fun removeDownloadedArea(area: DownloadedArea): List<DownloadedArea> =
-        SettingsStore.removeDownloadedArea(appContext, area)
+    override fun removeDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> =
+        SettingsStore.removeDownloadedArea(appContext, area.toUi()).map { it.toDomain() }
 
-    override fun dedupeDownloadedAreas(): List<DownloadedArea> = SettingsStore.dedupeDownloadedAreas(appContext)
+    override fun dedupeDownloadedAreas(): List<SettingsDownloadedArea> =
+        SettingsStore.dedupeDownloadedAreas(appContext).map { it.toDomain() }
 }

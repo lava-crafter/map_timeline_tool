@@ -1,7 +1,7 @@
 package com.lavacrafter.maptimelinetool.domain.usecase
 
 import android.location.Location
-import com.lavacrafter.maptimelinetool.data.PointEntity
+import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.sensor.SensorSnapshot
 
@@ -32,19 +32,19 @@ class PointWriteUseCase(
         }
     }
 
-    suspend fun updatePoint(point: PointEntity, title: String, note: String, photoPath: String?) {
+    suspend fun updatePoint(point: Point, title: String, note: String, photoPath: String?) {
         repository.update(point.copy(title = title, note = note, photoPath = photoPath))
         if (point.photoPath != photoPath) {
             deletePhoto(point.photoPath)
         }
     }
 
-    suspend fun deletePoint(point: PointEntity) {
+    suspend fun deletePoint(point: Point) {
         repository.delete(point)
         deletePhoto(point.photoPath)
     }
 
-    suspend fun importPoints(pointsList: List<PointEntity>) {
+    suspend fun importPoints(pointsList: List<Point>) {
         pointsList.forEach { repository.insert(it) }
     }
 
@@ -54,9 +54,9 @@ class PointWriteUseCase(
         location: Location,
         timestamp: Long,
         photoPath: String? = null
-    ): PointEntity {
+    ): Point {
         val sensorSnapshot = readSensorSnapshot()
-        return PointEntity(
+        return Point(
             timestamp = timestamp,
             latitude = location.latitude,
             longitude = location.longitude,

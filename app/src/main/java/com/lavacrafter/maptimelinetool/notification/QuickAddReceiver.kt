@@ -12,14 +12,8 @@ import android.os.Vibrator
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.lavacrafter.maptimelinetool.MapTimelineApp
 import com.lavacrafter.maptimelinetool.R
-import com.lavacrafter.maptimelinetool.data.AppDatabase
-import com.lavacrafter.maptimelinetool.data.PointEntity
-import com.lavacrafter.maptimelinetool.data.PointRepository
-import com.lavacrafter.maptimelinetool.data.SettingsRepository
-import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
-import com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot
-import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,33 +34,14 @@ class QuickAddReceiver : BroadcastReceiver() {
 
                 val timestamp = System.currentTimeMillis()
                 val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-                val sensorSnapshot = captureSensorSnapshot(context)
-
-                val repo = PointRepository(AppDatabase.get(context).pointDao())
-                val settingsUseCase = SettingsManagementUseCase(SettingsRepository(context))
-                val pointId = repo.insert(
-                    PointEntity(
-                        timestamp = timestamp,
-                        latitude = location.latitude,
-                        longitude = location.longitude,
-                        title = title,
-                        note = "",
-                        pressureHpa = sensorSnapshot.pressureHpa,
-                        ambientLightLux = sensorSnapshot.ambientLightLux,
-                        accelerometerX = sensorSnapshot.accelerometerX,
-                        accelerometerY = sensorSnapshot.accelerometerY,
-                        accelerometerZ = sensorSnapshot.accelerometerZ,
-                        gyroscopeX = sensorSnapshot.gyroscopeX,
-                        gyroscopeY = sensorSnapshot.gyroscopeY,
-                        gyroscopeZ = sensorSnapshot.gyroscopeZ,
-                        magnetometerX = sensorSnapshot.magnetometerX,
-                        magnetometerY = sensorSnapshot.magnetometerY,
-                        magnetometerZ = sensorSnapshot.magnetometerZ
-                    )
+                val app = context.applicationContext as MapTimelineApp
+                app.pointWriteUseCase.addPointWithTags(
+                    title = title,
+                    note = "",
+                    location = location,
+                    timestamp = timestamp,
+                    tagIds = app.settingsManagementUseCase.getDefaultTagIds().toSet()
                 )
-                settingsUseCase.getDefaultTagIds().forEach { tagId ->
-                    repo.insertPointTag(pointId, tagId)
-                }
                 showToast(context, context.getString(R.string.toast_point_added))
                 vibrateOnce(context)
                 showAddNotification(context)

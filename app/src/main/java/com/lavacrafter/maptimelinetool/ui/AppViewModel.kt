@@ -8,6 +8,8 @@ import android.os.CancellationSignal
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lavacrafter.maptimelinetool.data.AppDatabase
+import com.lavacrafter.maptimelinetool.data.toDomain
+import com.lavacrafter.maptimelinetool.data.toEntity
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.TagEntity
@@ -21,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -37,8 +40,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         deletePhoto = { photoPath -> deletePointPhotoOnIo(photoPath) }
     )
     private val tagManagementUseCase = TagManagementUseCase(repo)
-    val points = repo.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val tags = tagManagementUseCase.observeTags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val points = repo.observeAll().map { list -> list.map { it.toEntity() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val tags = tagManagementUseCase.observeTags().map { list -> list.map { it.toEntity() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private var autoAddJob: kotlinx.coroutines.Job? = null
     private val _autoAdded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val autoAdded = _autoAdded
@@ -59,13 +64,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updatePoint(point: PointEntity, title: String, note: String, photoPath: String?) {
         viewModelScope.launch {
-            pointWriteUseCase.updatePoint(point, title, note, photoPath)
+            pointWriteUseCase.updatePoint(point.toDomain(), title, note, photoPath)
         }
     }
 
     fun deletePoint(point: PointEntity) {
         viewModelScope.launch {
-            pointWriteUseCase.deletePoint(point)
+            pointWriteUseCase.deletePoint(point.toDomain())
         }
     }
 
@@ -78,7 +83,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun renameTag(tag: TagEntity, name: String) {
         viewModelScope.launch {
-            tagManagementUseCase.renameTag(tag, name)
+            tagManagementUseCase.renameTag(tag.toDomain(), name)
         }
     }
 
@@ -90,7 +95,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun importPoints(pointsList: List<PointEntity>) {
         viewModelScope.launch {
-            pointWriteUseCase.importPoints(pointsList)
+            pointWriteUseCase.importPoints(pointsList.map { it.toDomain() })
         }
     }
 
@@ -102,7 +107,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun getTagIdsForPoint(pointId: Long): List<Long> = tagManagementUseCase.getTagIdsForPoint(pointId)
 
-    fun observePointsForTag(tagId: Long) = tagManagementUseCase.observePointsForTag(tagId)
+    fun observePointsForTag(tagId: Long) = tagManagementUseCase.observePointsForTag(tagId).map { list -> list.map { it.toEntity() } }
 
     fun getLastKnownLocation(): Location? {
         return com.lavacrafter.maptimelinetool.LocationUtils.getLastKnownLocation(getApplication())
@@ -149,5 +154,5 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         autoAddJob = null
     }
 
-    suspend fun getAllPoints(): List<PointEntity> = repo.getAll()
+    suspend fun getAllPoints(): List<PointEntity> = repo.getAll().map { it.toEntity() }
 }

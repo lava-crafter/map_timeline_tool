@@ -1,16 +1,16 @@
 package com.lavacrafter.maptimelinetool.domain.repository
 
-import com.lavacrafter.maptimelinetool.ui.DownloadedArea
-import com.lavacrafter.maptimelinetool.ui.LanguagePreference
-import com.lavacrafter.maptimelinetool.ui.MapCachePolicy
-import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
+import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
+import com.lavacrafter.maptimelinetool.domain.model.SettingsLanguagePreference
+import com.lavacrafter.maptimelinetool.domain.model.SettingsMapCachePolicy
+import com.lavacrafter.maptimelinetool.domain.model.SettingsZoomButtonBehavior
 
 interface SettingsManagementGateway {
     fun getTimeoutSeconds(): Int
     fun setTimeoutSeconds(seconds: Int)
 
-    fun getCachePolicy(): MapCachePolicy
-    fun setCachePolicy(policy: MapCachePolicy)
+    fun getCachePolicy(): SettingsMapCachePolicy
+    fun setCachePolicy(policy: SettingsMapCachePolicy)
 
     fun getPinnedTagIds(): List<Long>
     fun setPinnedTagIds(tagIds: List<Long>)
@@ -18,10 +18,10 @@ interface SettingsManagementGateway {
     fun getRecentTagIds(): List<Long>
     fun addRecentTagId(tagId: Long): List<Long>
 
-    fun getZoomButtonBehavior(): ZoomButtonBehavior
-    fun setZoomButtonBehavior(behavior: ZoomButtonBehavior)
+    fun getZoomButtonBehavior(): SettingsZoomButtonBehavior
+    fun setZoomButtonBehavior(behavior: SettingsZoomButtonBehavior)
 
-    fun getLanguagePreference(): LanguagePreference
+    fun getLanguagePreference(): SettingsLanguagePreference
 
     fun getFollowSystemTheme(): Boolean
     fun setFollowSystemTheme(enabled: Boolean)
@@ -41,8 +41,8 @@ interface SettingsManagementGateway {
     fun getDownloadThreadCount(): Int
     fun setDownloadThreadCount(count: Int)
 
-    fun getDownloadedAreas(): List<DownloadedArea>
-    fun addDownloadedArea(area: DownloadedArea): List<DownloadedArea>
-    fun removeDownloadedArea(area: DownloadedArea): List<DownloadedArea>
-    fun dedupeDownloadedAreas(): List<DownloadedArea>
+    fun getDownloadedAreas(): List<SettingsDownloadedArea>
+    fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea>
+    fun removeDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea>
+    fun dedupeDownloadedAreas(): List<SettingsDownloadedArea>
 }

@@ -1,10 +1,10 @@
 package com.lavacrafter.maptimelinetool.domain.usecase
 
+import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
+import com.lavacrafter.maptimelinetool.domain.model.SettingsLanguagePreference
+import com.lavacrafter.maptimelinetool.domain.model.SettingsMapCachePolicy
+import com.lavacrafter.maptimelinetool.domain.model.SettingsZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.domain.repository.SettingsManagementGateway
-import com.lavacrafter.maptimelinetool.ui.DownloadedArea
-import com.lavacrafter.maptimelinetool.ui.LanguagePreference
-import com.lavacrafter.maptimelinetool.ui.MapCachePolicy
-import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 
 class SettingsManagementUseCase(
     private val settingsGateway: SettingsManagementGateway
@@ -12,8 +12,8 @@ class SettingsManagementUseCase(
     fun getTimeoutSeconds(): Int = settingsGateway.getTimeoutSeconds()
     fun setTimeoutSeconds(seconds: Int) = settingsGateway.setTimeoutSeconds(seconds)
 
-    fun getCachePolicy(): MapCachePolicy = settingsGateway.getCachePolicy()
-    fun setCachePolicy(policy: MapCachePolicy) = settingsGateway.setCachePolicy(policy)
+    fun getCachePolicy(): SettingsMapCachePolicy = settingsGateway.getCachePolicy()
+    fun setCachePolicy(policy: SettingsMapCachePolicy) = settingsGateway.setCachePolicy(policy)
 
     fun getPinnedTagIds(): List<Long> = settingsGateway.getPinnedTagIds()
     fun setPinnedTagIds(tagIds: List<Long>) = settingsGateway.setPinnedTagIds(tagIds)
@@ -21,10 +21,10 @@ class SettingsManagementUseCase(
     fun getRecentTagIds(): List<Long> = settingsGateway.getRecentTagIds()
     fun addRecentTagId(tagId: Long): List<Long> = settingsGateway.addRecentTagId(tagId)
 
-    fun getZoomButtonBehavior(): ZoomButtonBehavior = settingsGateway.getZoomButtonBehavior()
-    fun setZoomButtonBehavior(behavior: ZoomButtonBehavior) = settingsGateway.setZoomButtonBehavior(behavior)
+    fun getZoomButtonBehavior(): SettingsZoomButtonBehavior = settingsGateway.getZoomButtonBehavior()
+    fun setZoomButtonBehavior(behavior: SettingsZoomButtonBehavior) = settingsGateway.setZoomButtonBehavior(behavior)
 
-    fun getLanguagePreference(): LanguagePreference = settingsGateway.getLanguagePreference()
+    fun getLanguagePreference(): SettingsLanguagePreference = settingsGateway.getLanguagePreference()
 
     fun getFollowSystemTheme(): Boolean = settingsGateway.getFollowSystemTheme()
     fun setFollowSystemTheme(enabled: Boolean) = settingsGateway.setFollowSystemTheme(enabled)
@@ -44,8 +44,8 @@ class SettingsManagementUseCase(
     fun getDownloadThreadCount(): Int = settingsGateway.getDownloadThreadCount()
     fun setDownloadThreadCount(count: Int) = settingsGateway.setDownloadThreadCount(count)
 
-    fun getDownloadedAreas(): List<DownloadedArea> = settingsGateway.getDownloadedAreas()
-    fun addDownloadedArea(area: DownloadedArea): List<DownloadedArea> = settingsGateway.addDownloadedArea(area)
-    fun removeDownloadedArea(area: DownloadedArea): List<DownloadedArea> = settingsGateway.removeDownloadedArea(area)
-    fun dedupeDownloadedAreas(): List<DownloadedArea> = settingsGateway.dedupeDownloadedAreas()
+    fun getDownloadedAreas(): List<SettingsDownloadedArea> = settingsGateway.getDownloadedAreas()
+    fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> = settingsGateway.addDownloadedArea(area)
+    fun removeDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> = settingsGateway.removeDownloadedArea(area)
+    fun dedupeDownloadedAreas(): List<SettingsDownloadedArea> = settingsGateway.dedupeDownloadedAreas()
 }
