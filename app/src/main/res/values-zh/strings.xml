@@ -42,6 +42,13 @@
     <string name="label_auto_save_paused">自动保存已暂停（%1$d 秒）</string>
     <string name="label_new_tag">新标签</string>
     <string name="label_tag_name">标签名称</string>
+    <string name="label_sensor_data">传感器数据</string>
+    <string name="label_sensor_none">没有记录到传感器数据</string>
+    <string name="label_sensor_pressure">气压计：%1$.2f hPa</string>
+    <string name="label_sensor_light">环境光：%1$.2f lx</string>
+    <string name="label_sensor_accelerometer">加速度计：X %1$.3f，Y %2$.3f，Z %3$.3f m/s²</string>
+    <string name="label_sensor_gyroscope">陀螺仪：X %1$.3f，Y %2$.3f，Z %3$.3f rad/s</string>
+    <string name="label_sensor_magnetometer">磁力计：X %1$.3f，Y %2$.3f，Z %3$.3f μT</string>
     <string name="settings_title">设置</string>
     <string name="settings_theme_label">深色主题</string>
     <string name="settings_theme_follow_system">跟随系统</string>
