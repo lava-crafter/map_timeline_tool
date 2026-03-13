@@ -31,6 +31,17 @@ enum class SettingsLanguagePreference(val value: Int, val localeTag: String?) {
     }
 }
 
+enum class SettingsPhotoCompressFormat(val value: Int) {
+    JPEG(0),
+    PNG(1),
+    WEBP(2);
+
+    companion object {
+        fun fromValue(value: Int): SettingsPhotoCompressFormat =
+            values().firstOrNull { it.value == value } ?: JPEG
+    }
+}
+
 data class SettingsDownloadedArea(
     val north: Double,
     val south: Double,

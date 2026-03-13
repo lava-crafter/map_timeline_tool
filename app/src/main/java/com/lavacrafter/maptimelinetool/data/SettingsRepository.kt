@@ -4,6 +4,7 @@ import android.content.Context
 import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
 import com.lavacrafter.maptimelinetool.domain.model.SettingsLanguagePreference
 import com.lavacrafter.maptimelinetool.domain.model.SettingsMapCachePolicy
+import com.lavacrafter.maptimelinetool.domain.model.SettingsPhotoCompressFormat
 import com.lavacrafter.maptimelinetool.domain.model.SettingsZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.domain.repository.SettingsManagementGateway
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
@@ -47,6 +48,14 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
 
     override fun getDownloadThreadCount(): Int = SettingsStore.getDownloadThreadCount(appContext)
     override fun setDownloadThreadCount(count: Int) = SettingsStore.setDownloadThreadCount(appContext, count)
+
+    override fun getPhotoLosslessEnabled(): Boolean = SettingsStore.getPhotoLosslessEnabled(appContext)
+    override fun setPhotoLosslessEnabled(enabled: Boolean) = SettingsStore.setPhotoLosslessEnabled(appContext, enabled)
+    override fun getPhotoCompressFormat(): SettingsPhotoCompressFormat = SettingsStore.getPhotoCompressFormat(appContext).toDomain()
+    override fun setPhotoCompressFormat(format: SettingsPhotoCompressFormat) =
+        SettingsStore.setPhotoCompressFormat(appContext, format.toUi())
+    override fun getPhotoCompressQuality(): Int = SettingsStore.getPhotoCompressQuality(appContext)
+    override fun setPhotoCompressQuality(quality: Int) = SettingsStore.setPhotoCompressQuality(appContext, quality)
 
     override fun getPressureEnabled(): Boolean = SettingsStore.getPressureEnabled(appContext)
     override fun setPressureEnabled(enabled: Boolean) = SettingsStore.setPressureEnabled(appContext, enabled)

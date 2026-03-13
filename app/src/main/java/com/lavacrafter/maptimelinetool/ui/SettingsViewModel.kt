@@ -31,6 +31,9 @@ class SettingsViewModel(
             downloadTileSourceId = settingsUseCase.getDownloadTileSourceId(),
             downloadMultiThreadEnabled = settingsUseCase.getDownloadMultiThreadEnabled(),
             downloadThreadCount = settingsUseCase.getDownloadThreadCount(),
+            photoLosslessEnabled = settingsUseCase.getPhotoLosslessEnabled(),
+            photoCompressFormat = settingsUseCase.getPhotoCompressFormat().toUi(),
+            photoCompressQuality = settingsUseCase.getPhotoCompressQuality(),
             pressureEnabled = settingsUseCase.getPressureEnabled(),
             ambientLightEnabled = settingsUseCase.getAmbientLightEnabled(),
             accelerometerEnabled = settingsUseCase.getAccelerometerEnabled(),
@@ -73,6 +76,21 @@ class SettingsViewModel(
     fun setDownloadThreadCount(count: Int) {
         settingsUseCase.setDownloadThreadCount(count)
         _uiState.update { it.copy(downloadThreadCount = count) }
+    }
+
+    fun setPhotoLosslessEnabled(enabled: Boolean) {
+        settingsUseCase.setPhotoLosslessEnabled(enabled)
+        _uiState.update { it.copy(photoLosslessEnabled = enabled) }
+    }
+
+    fun setPhotoCompressFormat(format: PhotoCompressFormat) {
+        settingsUseCase.setPhotoCompressFormat(format.toDomain())
+        _uiState.update { it.copy(photoCompressFormat = format) }
+    }
+
+    fun setPhotoCompressQuality(quality: Int) {
+        settingsUseCase.setPhotoCompressQuality(quality)
+        _uiState.update { it.copy(photoCompressQuality = quality) }
     }
 
     fun setNoiseEnabled(enabled: Boolean) {

@@ -67,6 +67,12 @@ fun SettingsScreen(
     onDownloadMultiThreadEnabledChange: (Boolean) -> Unit,
     downloadThreadCount: Int,
     onDownloadThreadCountChange: (Int) -> Unit,
+    photoLosslessEnabled: Boolean,
+    onPhotoLosslessEnabledChange: (Boolean) -> Unit,
+    photoCompressFormat: PhotoCompressFormat,
+    onPhotoCompressFormatChange: (PhotoCompressFormat) -> Unit,
+    photoCompressQuality: Int,
+    onPhotoCompressQualityChange: (Int) -> Unit,
     pressureEnabled: Boolean,
     onPressureEnabledChange: (Boolean) -> Unit,
     ambientLightEnabled: Boolean,
@@ -137,6 +143,12 @@ fun SettingsScreen(
             onZoomBehaviorChange = onZoomBehaviorChange,
             markerScale = markerScale,
             onMarkerScaleChange = onMarkerScaleChange,
+            photoLosslessEnabled = photoLosslessEnabled,
+            onPhotoLosslessEnabledChange = onPhotoLosslessEnabledChange,
+            photoCompressFormat = photoCompressFormat,
+            onPhotoCompressFormatChange = onPhotoCompressFormatChange,
+            photoCompressQuality = photoCompressQuality,
+            onPhotoCompressQualityChange = onPhotoCompressQualityChange,
             onBack = onNavigateBack
         )
         SettingsRoute.Cache -> CacheSettings(
@@ -315,6 +327,12 @@ private fun MapOperationsSettings(
     onZoomBehaviorChange: (ZoomButtonBehavior) -> Unit,
     markerScale: Float,
     onMarkerScaleChange: (Float) -> Unit,
+    photoLosslessEnabled: Boolean,
+    onPhotoLosslessEnabledChange: (Boolean) -> Unit,
+    photoCompressFormat: PhotoCompressFormat,
+    onPhotoCompressFormatChange: (PhotoCompressFormat) -> Unit,
+    photoCompressQuality: Int,
+    onPhotoCompressQualityChange: (Int) -> Unit,
     onBack: () -> Unit
 ) {
     SettingsSubpageScaffold(
@@ -364,6 +382,54 @@ private fun MapOperationsSettings(
                     value = markerScale,
                     onValueChange = onMarkerScaleChange,
                     valueRange = 0.3f..1.75f
+                )
+            }
+
+            SelectionGroup(
+                title = stringResource(R.string.settings_photo_compress_mode_label),
+                options = listOf(
+                    SelectionItem(
+                        label = stringResource(R.string.settings_photo_compress_mode_lossless),
+                        value = true
+                    ),
+                    SelectionItem(
+                        label = stringResource(R.string.settings_photo_compress_mode_compressed),
+                        value = false
+                    )
+                ),
+                selectedValue = photoLosslessEnabled,
+                onSelect = onPhotoLosslessEnabledChange
+            )
+
+            SelectionGroup(
+                title = stringResource(R.string.settings_photo_compress_format_label),
+                options = listOf(
+                    SelectionItem(
+                        label = stringResource(R.string.settings_photo_compress_format_jpeg),
+                        value = PhotoCompressFormat.JPEG
+                    ),
+                    SelectionItem(
+                        label = stringResource(R.string.settings_photo_compress_format_png),
+                        value = PhotoCompressFormat.PNG
+                    ),
+                    SelectionItem(
+                        label = stringResource(R.string.settings_photo_compress_format_webp),
+                        value = PhotoCompressFormat.WEBP
+                    )
+                ),
+                selectedValue = photoCompressFormat,
+                onSelect = onPhotoCompressFormatChange
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = stringResource(R.string.settings_photo_compress_quality_label))
+                Text(text = stringResource(R.string.settings_photo_compress_quality_value, photoCompressQuality))
+                Slider(
+                    value = photoCompressQuality.toFloat(),
+                    onValueChange = { onPhotoCompressQualityChange(it.roundToInt().coerceIn(1, 100)) },
+                    valueRange = 1f..100f,
+                    steps = 98,
+                    enabled = !photoLosslessEnabled
                 )
             }
         }

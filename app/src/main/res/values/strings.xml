@@ -132,6 +132,15 @@
     <string name="settings_zoom_behavior_always">Always show zoom buttons</string>
     <string name="settings_marker_size_label">Marker size</string>
     <string name="settings_marker_size_value">%1$d%%</string>
+    <string name="settings_photo_compress_mode_label">Photo size preset</string>
+    <string name="settings_photo_compress_mode_lossless">Lossless (keep original)</string>
+    <string name="settings_photo_compress_mode_compressed">Compressed</string>
+    <string name="settings_photo_compress_format_label">Default compressed format</string>
+    <string name="settings_photo_compress_format_jpeg">JPEG</string>
+    <string name="settings_photo_compress_format_png">PNG</string>
+    <string name="settings_photo_compress_format_webp">WEBP</string>
+    <string name="settings_photo_compress_quality_label">Compression quality</string>
+    <string name="settings_photo_compress_quality_value">%1$d%%</string>
     <string name="settings_map_download_title">Download map area</string>
     <string name="settings_map_download_desc">Download tiles by area and zoom level</string>
     <string name="settings_downloaded_areas_title">Downloaded areas</string>

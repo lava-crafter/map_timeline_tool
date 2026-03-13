@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.Context
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.net.Uri
 import android.os.Bundle
 import android.content.pm.PackageManager
@@ -269,6 +268,19 @@ class MainActivity : ComponentActivity() {
                 fun deletePhotoOnIo(path: String?) {
                     scope.launch(Dispatchers.IO) { deletePointPhotoFile(context, path) }
                 }
+                suspend fun preparePhotoPathForPersist(rawPhotoPath: String?): String? {
+                    return withContext(Dispatchers.IO) {
+                        preparePhotoForPersist(
+                            context = context,
+                            photoPath = rawPhotoPath,
+                            options = PhotoPersistOptions(
+                                losslessEnabled = settingsState.photoLosslessEnabled,
+                                compressFormat = settingsState.photoCompressFormat,
+                                compressQuality = settingsState.photoCompressQuality
+                            )
+                        )
+                    }
+                }
                 val clearPendingAddPhoto = {
                     val pathToDelete = pendingAddPhotoPath
                     pendingAddPhotoPath = null
@@ -370,7 +382,8 @@ class MainActivity : ComponentActivity() {
                                 deletePointPhotoFile(context, addPhotoPath)
                             }
                         } else {
-                            viewModel.addPointWithTags(title, note, loc, createdAt, newPointSelectedTagIds, addPhotoPath)
+                            val persistedPhotoPath = preparePhotoPathForPersist(addPhotoPath)
+                            viewModel.addPointWithTags(title, note, loc, createdAt, newPointSelectedTagIds, persistedPhotoPath)
                             vibrateOnce(context)
                             Toast.makeText(context, context.getString(R.string.toast_point_added), Toast.LENGTH_SHORT).show()
                         }
@@ -553,6 +566,12 @@ class MainActivity : ComponentActivity() {
                                     onDownloadMultiThreadEnabledChange = settingsViewModel::setDownloadMultiThreadEnabled,
                                     downloadThreadCount = settingsState.downloadThreadCount,
                                     onDownloadThreadCountChange = settingsViewModel::setDownloadThreadCount,
+                                    photoLosslessEnabled = settingsState.photoLosslessEnabled,
+                                    onPhotoLosslessEnabledChange = settingsViewModel::setPhotoLosslessEnabled,
+                                    photoCompressFormat = settingsState.photoCompressFormat,
+                                    onPhotoCompressFormatChange = settingsViewModel::setPhotoCompressFormat,
+                                    photoCompressQuality = settingsState.photoCompressQuality,
+                                    onPhotoCompressQualityChange = settingsViewModel::setPhotoCompressQuality,
                                     pressureEnabled = settingsState.pressureEnabled,
                                     onPressureEnabledChange = settingsViewModel::setPressureEnabled,
                                     ambientLightEnabled = settingsState.ambientLightEnabled,
@@ -684,7 +703,8 @@ class MainActivity : ComponentActivity() {
                                         deletePointPhotoFile(context, addPhotoPath)
                                     }
                                 } else {
-                                    viewModel.addPointWithTags(title, note, loc, createdAt, selectedTags, addPhotoPath)
+                                    val persistedPhotoPath = preparePhotoPathForPersist(addPhotoPath)
+                                    viewModel.addPointWithTags(title, note, loc, createdAt, selectedTags, persistedPhotoPath)
                                     vibrateOnce(context)
                                     Toast.makeText(context, context.getString(R.string.toast_point_added), Toast.LENGTH_SHORT).show()
                                 }
@@ -776,8 +796,15 @@ class MainActivity : ComponentActivity() {
                             previewPhotoPath = editingPointPhotoPath
                         },
                         onSave = { title, note, photoPath ->
-                            viewModel.updatePoint(point, title, note, photoPath)
-                            resetEditingPointState()
+                            scope.launch {
+                                val persistedPhotoPath = if (photoPath == point.photoPath) {
+                                    photoPath
+                                } else {
+                                    preparePhotoPathForPersist(photoPath)
+                                }
+                                viewModel.updatePoint(point, title, note, persistedPhotoPath)
+                                resetEditingPointState()
+                            }
                         },
                         onDelete = {
                             clearUnsavedEditingPhoto()
@@ -944,36 +971,11 @@ private fun decodePreviewBitmap(file: java.io.File): android.graphics.Bitmap? {
     val orientation = runCatching {
         ExifInterface(file.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
     }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-    return applyExifOrientation(decoded, orientation)
-}
-
-private fun applyExifOrientation(
-    bitmap: android.graphics.Bitmap,
-    orientation: Int
-): android.graphics.Bitmap {
-    val matrix = Matrix().apply {
-        when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> postRotate(90f)
-            ExifInterface.ORIENTATION_ROTATE_180 -> postRotate(180f)
-            ExifInterface.ORIENTATION_ROTATE_270 -> postRotate(270f)
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
-            ExifInterface.ORIENTATION_TRANSPOSE -> {
-                postScale(-1f, 1f)
-                postRotate(270f)
-            }
-            ExifInterface.ORIENTATION_TRANSVERSE -> {
-                postScale(-1f, 1f)
-                postRotate(90f)
-            }
-        }
+    val corrected = applyExifOrientation(decoded, orientation)
+    if (corrected != decoded) {
+        decoded.recycle()
     }
-    if (matrix.isIdentity) return bitmap
-    return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true).also {
-        if (it != bitmap) {
-            bitmap.recycle()
-        }
-    }
+    return corrected
 }
 
 enum class NetworkStatus { WIFI, CELLULAR, NONE }

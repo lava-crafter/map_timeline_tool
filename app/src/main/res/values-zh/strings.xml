@@ -119,6 +119,15 @@
     <string name="settings_zoom_behavior_always">始终显示</string>
     <string name="settings_marker_size_label">打点大小</string>
     <string name="settings_marker_size_value">%1$d%%</string>
+    <string name="settings_photo_compress_mode_label">照片大小预设</string>
+    <string name="settings_photo_compress_mode_lossless">无损（保留原图）</string>
+    <string name="settings_photo_compress_mode_compressed">压缩</string>
+    <string name="settings_photo_compress_format_label">默认压缩格式</string>
+    <string name="settings_photo_compress_format_jpeg">JPEG</string>
+    <string name="settings_photo_compress_format_png">PNG</string>
+    <string name="settings_photo_compress_format_webp">WEBP</string>
+    <string name="settings_photo_compress_quality_label">压缩率</string>
+    <string name="settings_photo_compress_quality_value">%1$d%%</string>
     <string name="settings_map_download_title">下载地图区域</string>
     <string name="settings_map_download_desc">按区域与级别下载地图瓦片</string>
     <string name="settings_downloaded_areas_title">已下载区域</string>

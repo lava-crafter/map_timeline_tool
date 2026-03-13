@@ -3,6 +3,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
 import com.lavacrafter.maptimelinetool.domain.model.SettingsLanguagePreference
 import com.lavacrafter.maptimelinetool.domain.model.SettingsMapCachePolicy
+import com.lavacrafter.maptimelinetool.domain.model.SettingsPhotoCompressFormat
 import com.lavacrafter.maptimelinetool.domain.model.SettingsZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.domain.repository.SettingsManagementGateway
 
@@ -43,6 +44,13 @@ class SettingsManagementUseCase(
 
     fun getDownloadThreadCount(): Int = settingsGateway.getDownloadThreadCount()
     fun setDownloadThreadCount(count: Int) = settingsGateway.setDownloadThreadCount(count)
+
+    fun getPhotoLosslessEnabled(): Boolean = settingsGateway.getPhotoLosslessEnabled()
+    fun setPhotoLosslessEnabled(enabled: Boolean) = settingsGateway.setPhotoLosslessEnabled(enabled)
+    fun getPhotoCompressFormat(): SettingsPhotoCompressFormat = settingsGateway.getPhotoCompressFormat()
+    fun setPhotoCompressFormat(format: SettingsPhotoCompressFormat) = settingsGateway.setPhotoCompressFormat(format)
+    fun getPhotoCompressQuality(): Int = settingsGateway.getPhotoCompressQuality()
+    fun setPhotoCompressQuality(quality: Int) = settingsGateway.setPhotoCompressQuality(quality)
 
     fun getPressureEnabled(): Boolean = settingsGateway.getPressureEnabled()
     fun setPressureEnabled(enabled: Boolean) = settingsGateway.setPressureEnabled(enabled)

@@ -17,6 +17,9 @@ object SettingsStore {
     private const val KEY_DOWNLOAD_TILE_SOURCE = "download_tile_source"
     private const val KEY_DOWNLOAD_MULTI_THREAD = "download_multi_thread"
     private const val KEY_DOWNLOAD_THREAD_COUNT = "download_thread_count"
+    private const val KEY_PHOTO_LOSSLESS_ENABLED = "photo_lossless_enabled"
+    private const val KEY_PHOTO_COMPRESS_FORMAT = "photo_compress_format"
+    private const val KEY_PHOTO_COMPRESS_QUALITY = "photo_compress_quality"
     private const val KEY_PRESSURE_ENABLED = "pressure_enabled"
     private const val KEY_AMBIENT_LIGHT_ENABLED = "ambient_light_enabled"
     private const val KEY_ACCELEROMETER_ENABLED = "accelerometer_enabled"
@@ -166,6 +169,44 @@ object SettingsStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putInt(KEY_DOWNLOAD_THREAD_COUNT, count.coerceIn(2, 32))
+            .apply()
+    }
+
+    fun getPhotoLosslessEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_PHOTO_LOSSLESS_ENABLED, true)
+    }
+
+    fun setPhotoLosslessEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PHOTO_LOSSLESS_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getPhotoCompressFormat(context: Context): PhotoCompressFormat {
+        val value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_PHOTO_COMPRESS_FORMAT, PhotoCompressFormat.JPEG.value)
+        return PhotoCompressFormat.fromValue(value)
+    }
+
+    fun setPhotoCompressFormat(context: Context, format: PhotoCompressFormat) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_PHOTO_COMPRESS_FORMAT, format.value)
+            .apply()
+    }
+
+    fun getPhotoCompressQuality(context: Context): Int {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_PHOTO_COMPRESS_QUALITY, 80)
+            .coerceIn(1, 100)
+    }
+
+    fun setPhotoCompressQuality(context: Context, quality: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_PHOTO_COMPRESS_QUALITY, quality.coerceIn(1, 100))
             .apply()
     }
 

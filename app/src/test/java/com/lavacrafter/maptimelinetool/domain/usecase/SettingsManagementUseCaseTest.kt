@@ -3,6 +3,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
 import com.lavacrafter.maptimelinetool.domain.model.SettingsLanguagePreference
 import com.lavacrafter.maptimelinetool.domain.model.SettingsMapCachePolicy
+import com.lavacrafter.maptimelinetool.domain.model.SettingsPhotoCompressFormat
 import com.lavacrafter.maptimelinetool.domain.model.SettingsZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.domain.repository.SettingsManagementGateway
 import org.junit.Assert.assertEquals
@@ -59,6 +60,20 @@ class SettingsManagementUseCaseTest {
         assertEquals(false, useCase.getGyroscopeEnabled())
         assertEquals(false, useCase.getMagnetometerEnabled())
     }
+
+    @Test
+    fun `photo compression settings delegate read and write`() {
+        val fake = FakeSettingsGateway()
+        val useCase = SettingsManagementUseCase(fake)
+
+        useCase.setPhotoLosslessEnabled(false)
+        useCase.setPhotoCompressFormat(SettingsPhotoCompressFormat.WEBP)
+        useCase.setPhotoCompressQuality(65)
+
+        assertEquals(false, useCase.getPhotoLosslessEnabled())
+        assertEquals(SettingsPhotoCompressFormat.WEBP, useCase.getPhotoCompressFormat())
+        assertEquals(65, useCase.getPhotoCompressQuality())
+    }
 }
 
 private class FakeSettingsGateway : SettingsManagementGateway {
@@ -74,6 +89,9 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     private var downloadTileSourceId: String = "osm"
     private var downloadMultiThreadEnabled: Boolean = false
     private var downloadThreadCount: Int = 4
+    private var photoLosslessEnabled: Boolean = true
+    private var photoCompressFormat: SettingsPhotoCompressFormat = SettingsPhotoCompressFormat.JPEG
+    private var photoCompressQuality: Int = 80
     private var pressureEnabled: Boolean = true
     private var ambientLightEnabled: Boolean = true
     private var accelerometerEnabled: Boolean = true
@@ -138,6 +156,19 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     override fun getDownloadThreadCount(): Int = downloadThreadCount
     override fun setDownloadThreadCount(count: Int) {
         downloadThreadCount = count
+    }
+
+    override fun getPhotoLosslessEnabled(): Boolean = photoLosslessEnabled
+    override fun setPhotoLosslessEnabled(enabled: Boolean) {
+        photoLosslessEnabled = enabled
+    }
+    override fun getPhotoCompressFormat(): SettingsPhotoCompressFormat = photoCompressFormat
+    override fun setPhotoCompressFormat(format: SettingsPhotoCompressFormat) {
+        photoCompressFormat = format
+    }
+    override fun getPhotoCompressQuality(): Int = photoCompressQuality
+    override fun setPhotoCompressQuality(quality: Int) {
+        photoCompressQuality = quality
     }
 
     override fun getPressureEnabled(): Boolean = pressureEnabled
