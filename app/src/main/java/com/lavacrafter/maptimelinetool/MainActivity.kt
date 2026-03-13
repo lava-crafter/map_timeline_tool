@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -54,6 +55,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
 import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
@@ -913,7 +915,9 @@ private fun PhotoPreviewDialog(
     val context = LocalContext.current
     val photoFile = remember(photoPath) { resolvePointPhotoFile(context, photoPath) }
     val bitmap = remember(photoFile?.absolutePath) {
-        photoFile?.takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.absolutePath) }
+        photoFile?.takeIf { it.exists() && it.isFile && it.canRead() }?.let { file ->
+            decodePreviewBitmap(file)
+        }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -934,6 +938,43 @@ private fun PhotoPreviewDialog(
             }
         }
     )
+}
+
+private fun decodePreviewBitmap(file: java.io.File): android.graphics.Bitmap? {
+    val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return null
+    val orientation = runCatching {
+        ExifInterface(file.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    return applyExifOrientation(decoded, orientation)
+}
+
+private fun applyExifOrientation(
+    bitmap: android.graphics.Bitmap,
+    orientation: Int
+): android.graphics.Bitmap {
+    val matrix = Matrix().apply {
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                postScale(-1f, 1f)
+                postRotate(270f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                postScale(-1f, 1f)
+                postRotate(90f)
+            }
+        }
+    }
+    if (matrix.isIdentity) return bitmap
+    return android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true).also {
+        if (it != bitmap) {
+            bitmap.recycle()
+        }
+    }
 }
 
 enum class NetworkStatus { WIFI, CELLULAR, NONE }
