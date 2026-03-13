@@ -143,6 +143,9 @@ fun SettingsScreen(
             onZoomBehaviorChange = onZoomBehaviorChange,
             markerScale = markerScale,
             onMarkerScaleChange = onMarkerScaleChange,
+            onBack = onNavigateBack
+        )
+        SettingsRoute.PhotoCompression -> PhotoCompressionSettings(
             photoLosslessEnabled = photoLosslessEnabled,
             onPhotoLosslessEnabledChange = onPhotoLosslessEnabledChange,
             photoCompressFormat = photoCompressFormat,
@@ -231,6 +234,11 @@ private fun SettingsOverviewScreen(
                 title = stringResource(R.string.settings_map_operations_title),
                 description = stringResource(R.string.settings_map_operations_desc),
                 onClick = { onNavigateTo(SettingsRoute.MapOperations) }
+            )
+            SettingsOverviewItem(
+                title = stringResource(R.string.settings_photo_compression_title),
+                description = stringResource(R.string.settings_photo_compression_desc),
+                onClick = { onNavigateTo(SettingsRoute.PhotoCompression) }
             )
             SettingsOverviewItem(
                 title = stringResource(R.string.settings_cache_title),
@@ -327,12 +335,6 @@ private fun MapOperationsSettings(
     onZoomBehaviorChange: (ZoomButtonBehavior) -> Unit,
     markerScale: Float,
     onMarkerScaleChange: (Float) -> Unit,
-    photoLosslessEnabled: Boolean,
-    onPhotoLosslessEnabledChange: (Boolean) -> Unit,
-    photoCompressFormat: PhotoCompressFormat,
-    onPhotoCompressFormatChange: (PhotoCompressFormat) -> Unit,
-    photoCompressQuality: Int,
-    onPhotoCompressQualityChange: (Int) -> Unit,
     onBack: () -> Unit
 ) {
     SettingsSubpageScaffold(
@@ -384,7 +386,26 @@ private fun MapOperationsSettings(
                     valueRange = 0.3f..1.75f
                 )
             }
+        }
+    }
+}
 
+@Composable
+private fun PhotoCompressionSettings(
+    photoLosslessEnabled: Boolean,
+    onPhotoLosslessEnabledChange: (Boolean) -> Unit,
+    photoCompressFormat: PhotoCompressFormat,
+    onPhotoCompressFormatChange: (PhotoCompressFormat) -> Unit,
+    photoCompressQuality: Int,
+    onPhotoCompressQualityChange: (Int) -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsSubpageScaffold(
+        title = stringResource(R.string.settings_photo_compression_title),
+        tutorialText = stringResource(R.string.settings_help_photo_compression),
+        onBack = onBack
+    ) { modifier ->
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SelectionGroup(
                 title = stringResource(R.string.settings_photo_compress_mode_label),
                 options = listOf(

@@ -58,9 +58,10 @@
     <string name="label_sensor_magnetometer">Magnetometer: X %1$.3f, Y %2$.3f, Z %3$.3f μT</string>
     <string name="label_sensor_noise">Noise (dBFS): %1$.2f dB</string>
     <string name="label_sensor_noise_unavailable">Noise (dBFS): not recorded</string>
+    <string name="label_photo_size">Photo size: %1$s</string>
     <string name="settings_title">Settings</string>
     <string name="settings_help_title">Help</string>
-    <string name="settings_help_overview">Tap the cards below to reach the panels for themes, map controls, cache, downloads, and default tags. Each screen has a ? button for quick tips.</string>
+    <string name="settings_help_overview">Tap the cards below to reach the panels for themes, map controls, photo compression, cache, downloads, and default tags. Each screen has a ? button for quick tips.</string>
     <string name="settings_theme_label">Dark theme</string>
     <string name="settings_theme_follow_system">Follow system</string>
     <string name="settings_theme_follow_system_hint">Follow system — controls dark theme</string>
@@ -81,6 +82,9 @@
     <string name="settings_map_operations_title">Map operations</string>
     <string name="settings_map_operations_desc">Adjust the timeout, zoom controls, and marker size.</string>
     <string name="settings_help_map_operations">Set how long a queued point waits before auto-saved, when the zoom controls appear, and how large markers should be. Tap Done when you understand the behavior.</string>
+    <string name="settings_photo_compression_title">Photo compression</string>
+    <string name="settings_photo_compression_desc">Configure default photo compression behavior.</string>
+    <string name="settings_help_photo_compression">Choose whether photos keep original quality or are compressed by default. In compressed mode, pick a format and compression quality.</string>
     <string name="settings_cache_title">Map cache</string>
     <string name="settings_cache_desc">Choose a tile source and cache policy for the map.</string>
     <string name="settings_help_cache">Select the upstream tile source and how aggressively the app keeps tiles. Clearing the cache removes tiles not part of downloaded areas.</string>

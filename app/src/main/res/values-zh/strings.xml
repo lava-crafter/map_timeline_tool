@@ -58,6 +58,7 @@
     <string name="label_sensor_magnetometer">磁力计：X %1$.3f，Y %2$.3f，Z %3$.3f μT</string>
     <string name="label_sensor_noise">噪音（dBFS）：%1$.2f dB</string>
     <string name="label_sensor_noise_unavailable">噪音（dBFS）：未记录</string>
+    <string name="label_photo_size">照片大小：%1$s</string>
     <string name="settings_title">设置</string>
     <string name="settings_theme_label">深色主题</string>
     <string name="settings_theme_follow_system">跟随系统</string>
@@ -75,6 +76,9 @@
     <string name="settings_sensor_noise">噪音（3 秒 dBFS）</string>
     <string name="settings_noise_collect_label">采集 3 秒噪音</string>
     <string name="settings_noise_collect_desc">需要麦克风权限，打点后异步采集并回填。</string>
+    <string name="settings_photo_compression_title">图片压缩</string>
+    <string name="settings_photo_compression_desc">配置拍照默认压缩行为。</string>
+    <string name="settings_help_photo_compression">可设置拍照默认使用无损或压缩。选择压缩时，可配置默认格式和压缩率。</string>
     <string name="settings_cache_policy_label">地图缓存策略</string>
     <string name="settings_cache_policy_disabled">不缓存新地图</string>
     <string name="settings_cache_policy_wifi">仅 Wi-Fi 缓存地图</string>

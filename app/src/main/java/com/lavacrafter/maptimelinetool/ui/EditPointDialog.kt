@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -23,12 +23,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
+import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -53,6 +56,11 @@ fun EditPointDialog(
 
     val selectedTags = remember(tags, selectedTagIds) {
         tags.filter { selectedTagIds.contains(it.id) }
+    }
+    val context = LocalContext.current
+    val photoFileSizeText = remember(currentPhotoPath, context) {
+        val file = resolvePointPhotoFile(context, currentPhotoPath)
+        file?.takeIf { it.exists() && it.isFile }?.length()?.let(::formatPhotoFileSize)
     }
 
     AlertDialog(
@@ -89,6 +97,10 @@ fun EditPointDialog(
                     text = if (currentPhotoPath.isNullOrBlank()) stringResource(R.string.label_photo_not_added) else stringResource(R.string.label_photo_added),
                     fontWeight = FontWeight.Medium
                 )
+                if (photoFileSizeText != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = stringResource(R.string.label_photo_size, photoFileSizeText))
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -205,3 +217,11 @@ private fun PointEntity.hasSensorData(): Boolean =
         (gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null) ||
         (magnetometerX != null && magnetometerY != null && magnetometerZ != null) ||
         noiseDb != null
+
+private fun formatPhotoFileSize(bytes: Long): String {
+    if (bytes < 1024) return "${bytes}B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return String.format(Locale.getDefault(), "%.1fKB", kb)
+    val mb = kb / 1024.0
+    return String.format(Locale.getDefault(), "%.2fMB", mb)
+}
