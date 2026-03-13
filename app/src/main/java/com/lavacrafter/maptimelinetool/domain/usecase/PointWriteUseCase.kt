@@ -1,19 +1,19 @@
 package com.lavacrafter.maptimelinetool.domain.usecase
 
-import android.location.Location
+import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
-import com.lavacrafter.maptimelinetool.sensor.SensorSnapshot
 
 class PointWriteUseCase(
     private val repository: PointRepositoryGateway,
-    private val readSensorSnapshot: suspend () -> SensorSnapshot,
+    private val sensorSnapshotPort: SensorSnapshotPort,
     private val deletePhoto: suspend (String?) -> Unit
 ) {
     suspend fun addPointWithTags(
         title: String,
         note: String,
-        location: Location,
+        location: GeoPoint,
         timestamp: Long,
         tagIds: Set<Long>,
         photoPath: String? = null
@@ -51,11 +51,11 @@ class PointWriteUseCase(
     private suspend fun buildPoint(
         title: String,
         note: String,
-        location: Location,
+        location: GeoPoint,
         timestamp: Long,
         photoPath: String? = null
     ): Point {
-        val sensorSnapshot = readSensorSnapshot()
+        val sensorSnapshot = sensorSnapshotPort.readSnapshot()
         return Point(
             timestamp = timestamp,
             latitude = location.latitude,

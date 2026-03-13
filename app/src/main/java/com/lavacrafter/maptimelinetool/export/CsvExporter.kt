@@ -1,13 +1,13 @@
 package com.lavacrafter.maptimelinetool.export
 
-import com.lavacrafter.maptimelinetool.data.PointEntity
+import com.lavacrafter.maptimelinetool.domain.model.Point
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
 object CsvExporter {
-    fun buildCsv(points: List<PointEntity>): String {
+    fun buildCsv(points: List<Point>): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }

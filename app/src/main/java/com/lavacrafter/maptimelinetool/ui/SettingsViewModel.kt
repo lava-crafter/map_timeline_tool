@@ -1,0 +1,127 @@
+package com.lavacrafter.maptimelinetool.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.lavacrafter.maptimelinetool.data.toDomain
+import com.lavacrafter.maptimelinetool.data.toUi
+import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+class SettingsViewModel(
+    app: Application,
+    private val settingsUseCase: SettingsManagementUseCase
+) : AndroidViewModel(app) {
+    private val _uiState = MutableStateFlow(
+        SettingsUiState(
+            followSystemTheme = settingsUseCase.getFollowSystemTheme(),
+            timeoutSeconds = settingsUseCase.getTimeoutSeconds(),
+            cachePolicy = settingsUseCase.getCachePolicy().toUi(),
+            pinnedTagIds = settingsUseCase.getPinnedTagIds().toSet(),
+            recentTagIds = settingsUseCase.getRecentTagIds(),
+            zoomBehavior = settingsUseCase.getZoomButtonBehavior().toUi(),
+            markerScale = settingsUseCase.getMarkerScale(),
+            defaultTagIds = settingsUseCase.getDefaultTagIds().toSet(),
+            downloadedAreas = settingsUseCase.getDownloadedAreas().map { it.toUi() },
+            downloadTileSourceId = settingsUseCase.getDownloadTileSourceId(),
+            downloadMultiThreadEnabled = settingsUseCase.getDownloadMultiThreadEnabled(),
+            downloadThreadCount = settingsUseCase.getDownloadThreadCount()
+        )
+    )
+    val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    fun setDarkTheme(enabled: Boolean) {
+        _uiState.update { it.copy(isDarkTheme = enabled) }
+    }
+
+    fun setFollowSystemTheme(enabled: Boolean) {
+        settingsUseCase.setFollowSystemTheme(enabled)
+        _uiState.update { it.copy(followSystemTheme = enabled) }
+    }
+
+    fun setTimeoutSeconds(seconds: Int) {
+        settingsUseCase.setTimeoutSeconds(seconds)
+        _uiState.update { it.copy(timeoutSeconds = seconds) }
+    }
+
+    fun setCachePolicy(policy: MapCachePolicy) {
+        settingsUseCase.setCachePolicy(policy.toDomain())
+        _uiState.update { it.copy(cachePolicy = policy) }
+    }
+
+    fun setDownloadTileSourceId(sourceId: String) {
+        settingsUseCase.setDownloadTileSourceId(sourceId)
+        _uiState.update { it.copy(downloadTileSourceId = sourceId) }
+    }
+
+    fun setDownloadMultiThreadEnabled(enabled: Boolean) {
+        settingsUseCase.setDownloadMultiThreadEnabled(enabled)
+        _uiState.update { it.copy(downloadMultiThreadEnabled = enabled) }
+    }
+
+    fun setDownloadThreadCount(count: Int) {
+        settingsUseCase.setDownloadThreadCount(count)
+        _uiState.update { it.copy(downloadThreadCount = count) }
+    }
+
+    fun setMapTileSourceId(sourceId: String) {
+        _uiState.update { it.copy(mapTileSourceId = sourceId) }
+    }
+
+    fun setZoomBehavior(behavior: ZoomButtonBehavior) {
+        settingsUseCase.setZoomButtonBehavior(behavior.toDomain())
+        _uiState.update { it.copy(zoomBehavior = behavior) }
+    }
+
+    fun setMarkerScale(scale: Float) {
+        settingsUseCase.setMarkerScale(scale)
+        _uiState.update { it.copy(markerScale = scale) }
+    }
+
+    fun setPinnedTagIds(tagIds: Set<Long>) {
+        settingsUseCase.setPinnedTagIds(tagIds.toList())
+        _uiState.update { it.copy(pinnedTagIds = tagIds) }
+    }
+
+    fun addRecentTagId(tagId: Long) {
+        _uiState.update { it.copy(recentTagIds = settingsUseCase.addRecentTagId(tagId)) }
+    }
+
+    fun toggleDefaultTag(tagId: Long) {
+        val next = if (_uiState.value.defaultTagIds.contains(tagId)) {
+            _uiState.value.defaultTagIds - tagId
+        } else {
+            _uiState.value.defaultTagIds + tagId
+        }
+        settingsUseCase.setDefaultTagIds(next.toList())
+        _uiState.update { it.copy(defaultTagIds = next) }
+    }
+
+    fun addDownloadedArea(area: DownloadedArea) {
+        _uiState.update { it.copy(downloadedAreas = settingsUseCase.addDownloadedArea(area.toDomain()).map { a -> a.toUi() }) }
+    }
+
+    fun removeDownloadedArea(area: DownloadedArea) {
+        _uiState.update { it.copy(downloadedAreas = settingsUseCase.removeDownloadedArea(area.toDomain()).map { a -> a.toUi() }) }
+    }
+
+    fun dedupeDownloadedAreas() {
+        _uiState.update { it.copy(downloadedAreas = settingsUseCase.dedupeDownloadedAreas().map { a -> a.toUi() }) }
+    }
+
+    companion object {
+        fun factory(app: Application, settingsUseCase: SettingsManagementUseCase): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                SettingsViewModel(
+                    app = app,
+                    settingsUseCase = settingsUseCase
+                )
+            }
+        }
+    }
+}

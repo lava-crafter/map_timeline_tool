@@ -1,10 +1,6 @@
 package com.lavacrafter.maptimelinetool.ui
 
 import android.app.Application
-import android.location.Location
-import android.location.LocationManager
-import android.os.Build
-import android.os.CancellationSignal
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -14,18 +10,18 @@ import com.lavacrafter.maptimelinetool.data.toDomain
 import com.lavacrafter.maptimelinetool.data.toEntity
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
-import com.lavacrafter.maptimelinetool.MapTimelineApp
+import com.lavacrafter.maptimelinetool.AppGraph
+import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
+import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
-import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,7 +30,8 @@ class AppViewModel(
     app: Application,
     private val repo: PointRepositoryGateway,
     private val pointWriteUseCase: PointWriteUseCase,
-    private val tagManagementUseCase: TagManagementUseCase
+    private val tagManagementUseCase: TagManagementUseCase,
+    private val locationProvider: LocationProvider
 ) : AndroidViewModel(app) {
     val points = repo.observeAll().map { list -> list.map { it.toEntity() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -47,7 +44,7 @@ class AppViewModel(
     fun addPointWithTags(
         title: String,
         note: String,
-        location: Location?,
+        location: GeoPoint?,
         timestamp: Long,
         tagIds: Set<Long>,
         photoPath: String? = null
@@ -89,9 +86,9 @@ class AppViewModel(
         }
     }
 
-    fun importPoints(pointsList: List<PointEntity>) {
+    fun importPoints(pointsList: List<Point>) {
         viewModelScope.launch {
-            pointWriteUseCase.importPoints(pointsList.map { it.toDomain() })
+            pointWriteUseCase.importPoints(pointsList)
         }
     }
 
@@ -105,13 +102,9 @@ class AppViewModel(
 
     fun observePointsForTag(tagId: Long) = tagManagementUseCase.observePointsForTag(tagId).map { list -> list.map { it.toEntity() } }
 
-    fun getLastKnownLocation(): Location? {
-        return com.lavacrafter.maptimelinetool.LocationUtils.getLastKnownLocation(getApplication())
-    }
+    fun getLastKnownLocation(): GeoPoint? = locationProvider.getLastKnownLocation()
 
-    suspend fun getFreshLocation(timeoutMs: Long): Location? {
-        return com.lavacrafter.maptimelinetool.LocationUtils.getFreshLocation(getApplication(), timeoutMs)
-    }
+    suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? = locationProvider.getFreshLocation(timeoutMs)
 
     fun scheduleAutoAdd(createdAt: Long, timeoutSeconds: Int) {
         autoAddJob?.cancel()
@@ -127,18 +120,6 @@ class AppViewModel(
         }
     }
 
-    private fun readCachedLocation(): Location? {
-        val prefs = getApplication<Application>().getSharedPreferences(HeadingLocationOverlay.LOCATION_PREFS, Application.MODE_PRIVATE)
-        if (!prefs.contains(HeadingLocationOverlay.KEY_LAT) || !prefs.contains(HeadingLocationOverlay.KEY_LON)) {
-            return null
-        }
-        return Location("cached").apply {
-            latitude = prefs.getFloat(HeadingLocationOverlay.KEY_LAT, 0f).toDouble()
-            longitude = prefs.getFloat(HeadingLocationOverlay.KEY_LON, 0f).toDouble()
-            time = prefs.getLong(HeadingLocationOverlay.KEY_TIME, System.currentTimeMillis())
-        }
-    }
-
     fun cancelAutoAdd() {
         autoAddJob?.cancel()
         autoAddJob = null
@@ -147,13 +128,14 @@ class AppViewModel(
     suspend fun getAllPoints(): List<PointEntity> = repo.getAll().map { it.toEntity() }
 
     companion object {
-        fun factory(app: MapTimelineApp): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(app: Application, graph: AppGraph): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 AppViewModel(
                     app = app,
-                    repo = app.pointRepositoryGateway,
-                    pointWriteUseCase = app.pointWriteUseCase,
-                    tagManagementUseCase = app.tagManagementUseCase
+                    repo = graph.pointRepositoryGateway,
+                    pointWriteUseCase = graph.pointWriteUseCase,
+                    tagManagementUseCase = graph.tagManagementUseCase,
+                    locationProvider = graph.locationProvider
                 )
             }
         }

@@ -3,7 +3,6 @@ package com.lavacrafter.maptimelinetool.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -12,8 +11,8 @@ import android.os.Vibrator
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.lavacrafter.maptimelinetool.MapTimelineApp
 import com.lavacrafter.maptimelinetool.R
+import com.lavacrafter.maptimelinetool.appGraph
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -26,7 +25,8 @@ class QuickAddReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val location = com.lavacrafter.maptimelinetool.LocationUtils.getFreshLocation(context, 5000L)
+                val graph = context.appGraph()
+                val location = graph.locationProvider.getFreshLocation(5000L)
                     ?: run {
                         showToast(context, context.getString(R.string.toast_location_failed))
                         return@launch
@@ -34,13 +34,12 @@ class QuickAddReceiver : BroadcastReceiver() {
 
                 val timestamp = System.currentTimeMillis()
                 val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-                val app = context.applicationContext as MapTimelineApp
-                app.pointWriteUseCase.addPointWithTags(
+                graph.pointWriteUseCase.addPointWithTags(
                     title = title,
                     note = "",
                     location = location,
                     timestamp = timestamp,
-                    tagIds = app.settingsManagementUseCase.getDefaultTagIds().toSet()
+                    tagIds = graph.settingsManagementUseCase.getDefaultTagIds().toSet()
                 )
                 showToast(context, context.getString(R.string.toast_point_added))
                 vibrateOnce(context)
@@ -51,9 +50,6 @@ class QuickAddReceiver : BroadcastReceiver() {
         }
     }
 }
-
-private fun readCachedLocation(context: Context) =
-    com.lavacrafter.maptimelinetool.LocationUtils.getLastKnownLocation(context)
 
 private fun showToast(context: Context, message: String) {
     Handler(Looper.getMainLooper()).post {
