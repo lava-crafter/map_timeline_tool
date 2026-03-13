@@ -12,6 +12,8 @@ import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
+import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.CancellationException
@@ -19,18 +21,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = PointRepository(AppDatabase.get(app).pointDao())
+    private val repo: PointRepositoryGateway = PointRepository(AppDatabase.get(app).pointDao())
+    private val pointWriteUseCase = PointWriteUseCase(
+        repository = repo,
+        readSensorSnapshot = { captureSensorSnapshot(getApplication()) },
+        deletePhoto = { photoPath -> deletePointPhotoOnIo(photoPath) }
+    )
     val points = repo.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tags = repo.observeTags().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private var autoAddJob: kotlinx.coroutines.Job? = null
@@ -47,34 +51,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         if (location == null) return
         viewModelScope.launch {
-            val id = repo.insert(
-                buildPointEntity(
-                    title = title,
-                    note = note,
-                    location = location,
-                    timestamp = timestamp,
-                    photoPath = photoPath
-                )
-            )
-            tagIds.forEach { tagId ->
-                repo.insertPointTag(id, tagId)
-            }
+            pointWriteUseCase.addPointWithTags(title, note, location, timestamp, tagIds, photoPath)
         }
     }
 
     fun updatePoint(point: PointEntity, title: String, note: String, photoPath: String?) {
         viewModelScope.launch {
-            repo.update(point.copy(title = title, note = note, photoPath = photoPath))
-            if (point.photoPath != photoPath) {
-                deletePointPhotoOnIo(point.photoPath)
-            }
+            pointWriteUseCase.updatePoint(point, title, note, photoPath)
         }
     }
 
     fun deletePoint(point: PointEntity) {
         viewModelScope.launch {
-            repo.delete(point)
-            deletePointPhotoOnIo(point.photoPath)
+            pointWriteUseCase.deletePoint(point)
         }
     }
 
@@ -99,7 +88,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun importPoints(pointsList: List<PointEntity>) {
         viewModelScope.launch {
-            pointsList.forEach { repo.insert(it) }
+            pointWriteUseCase.importPoints(pointsList)
         }
     }
 
@@ -129,46 +118,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
             val location = getFreshLocation(5000L)
             if (location != null) {
-                repo.insert(
-                    buildPointEntity(
-                        title = title,
-                        note = "",
-                        location = location,
-                        timestamp = timestamp
-                    )
-                )
+                pointWriteUseCase.addPointWithTags(title, "", location, timestamp, emptySet())
                 _autoAdded.tryEmit(Unit)
             }
         }
-    }
-
-    private suspend fun buildPointEntity(
-        title: String,
-        note: String,
-        location: Location,
-        timestamp: Long,
-        photoPath: String? = null
-    ): PointEntity {
-        val sensorSnapshot = captureSensorSnapshot(getApplication())
-        return PointEntity(
-            timestamp = timestamp,
-            latitude = location.latitude,
-            longitude = location.longitude,
-            title = title,
-            note = note,
-            pressureHpa = sensorSnapshot.pressureHpa,
-            ambientLightLux = sensorSnapshot.ambientLightLux,
-            accelerometerX = sensorSnapshot.accelerometerX,
-            accelerometerY = sensorSnapshot.accelerometerY,
-            accelerometerZ = sensorSnapshot.accelerometerZ,
-            gyroscopeX = sensorSnapshot.gyroscopeX,
-            gyroscopeY = sensorSnapshot.gyroscopeY,
-            gyroscopeZ = sensorSnapshot.gyroscopeZ,
-            magnetometerX = sensorSnapshot.magnetometerX,
-            magnetometerY = sensorSnapshot.magnetometerY,
-            magnetometerZ = sensorSnapshot.magnetometerZ,
-            photoPath = photoPath
-        )
     }
 
     private suspend fun deletePointPhotoOnIo(photoPath: String?) {
