@@ -94,11 +94,11 @@ import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
 import com.lavacrafter.maptimelinetool.ui.theme.MapTimelineToolTheme
 import com.lavacrafter.maptimelinetool.notification.QuickAddService
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
-import java.io.IOException
 import org.osmdroid.config.Configuration
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -255,9 +255,9 @@ class MainActivity : ComponentActivity() {
                                         runCatching {
                                             val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
                                             val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
-                                            val target = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
-                                            target.outputStream().buffered().use { output -> photoInput.copyTo(output) }
-                                            toStoredPhotoPath(target)
+                                            val importedPhotoFile = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
+                                            importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
+                                            toStoredPhotoPath(importedPhotoFile)
                                         }.getOrNull()
                                     }
                                 } ?: ZipImporter.ImportStats(emptyList(), 0, 0)

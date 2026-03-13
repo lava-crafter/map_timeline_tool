@@ -117,14 +117,14 @@ object CsvImporter {
                 return record
             }
 
-            var c = intChar.toChar()
-            if (!anyContent && c == '\uFEFF') {
+            val currentChar = intChar.toChar()
+            if (!anyContent && currentChar == '\uFEFF') {
                 continue
             }
 
             anyContent = true
             when {
-                c == '"' -> {
+                currentChar == '"' -> {
                     if (inQuotes) {
                         val next = reader.read()
                         if (next == '"'.code) {
@@ -137,15 +137,15 @@ object CsvImporter {
                         inQuotes = true
                     }
                 }
-                c == ',' && !inQuotes -> {
+                currentChar == ',' && !inQuotes -> {
                     record.add(field.toString())
                     field.clear()
                 }
-                c == '\n' && !inQuotes -> {
+                currentChar == '\n' && !inQuotes -> {
                     record.add(field.toString())
                     return record
                 }
-                c == '\r' && !inQuotes -> {
+                currentChar == '\r' && !inQuotes -> {
                     val next = reader.read()
                     if (next != '\n'.code && next != -1) {
                         reader.unread(next)
@@ -153,7 +153,7 @@ object CsvImporter {
                     record.add(field.toString())
                     return record
                 }
-                else -> field.append(c)
+                else -> field.append(currentChar)
             }
         }
     }

@@ -97,8 +97,10 @@ object ZipExporter {
         val photoFile = resolvePhotoFile(sourcePath)
         if (photoFile == null || !photoFile.exists() || !photoFile.isFile || !photoFile.canRead()) return PointPhotoMeta()
 
-        var baseName = photoFile.name.ifBlank { "photo.bin" }.replace("/", "_").replace("\\", "_")
-        if (baseName.contains("..")) baseName = baseName.replace("..", "_")
+        var baseName = photoFile.name
+            .ifBlank { "photo.bin" }
+            .replace(Regex("""[/\\]|\.{2,}"""), "_")
+            .replace(Regex("""[\u0000-\u001F\u007F]"""), "_")
         var relPath = "photos/$baseName"
         var suffix = 1
         while (photoEntries.containsKey(relPath) && photoEntries[relPath]?.absolutePath != photoFile.absolutePath) {
