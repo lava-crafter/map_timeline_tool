@@ -53,7 +53,10 @@ internal fun pressureToAltitudeMeters(
     seaLevelPressureHpa: Float = 1013.25f
 ): Float {
     if (pressureHpa <= 0f || seaLevelPressureHpa <= 0f) return 0f
-    return (44330f * (1f - (pressureHpa / seaLevelPressureHpa).toDouble().pow(1.0 / 5.255).toFloat()))
+    return (
+        STANDARD_ATMOSPHERE_SCALE_HEIGHT_METERS *
+            (1f - (pressureHpa / seaLevelPressureHpa).toDouble().pow(1.0 / BAROMETRIC_EXPONENT).toFloat())
+        )
 }
 
 internal fun toAmbientLightLevel(lux: Float): AmbientLightLevel =
@@ -69,11 +72,11 @@ internal fun magnetometerToAzimuthDegrees(x: Float, y: Float): Float {
 }
 
 internal fun gyroscopeRateToPitchDegrees(rateRadPerSec: Float): Float =
-    Math.toDegrees(rateRadPerSec.toDouble()).toFloat().coerceIn(-89f, 89f)
+    Math.toDegrees((rateRadPerSec * GYROSCOPE_SNAPSHOT_WINDOW_SECONDS).toDouble()).toFloat().coerceIn(-89f, 89f)
 
 internal fun estimateViewDistanceMeters(pitchDegrees: Float): Double {
-    val normalized = ((pitchDegrees + 90f) / 180f).coerceIn(0f, 1f)
-    return 40.0 + normalized * 220.0
+    val normalized = ((pitchDegrees + PITCH_MIN_DEGREES) / PITCH_RANGE_DEGREES).coerceIn(0f, 1f)
+    return VIEW_DISTANCE_MIN_METERS + normalized * (VIEW_DISTANCE_MAX_METERS - VIEW_DISTANCE_MIN_METERS)
 }
 
 internal fun buildViewSector(
@@ -101,8 +104,7 @@ private fun destinationPoint(
     bearingDegrees: Float,
     distanceMeters: Double
 ): Pair<Double, Double> {
-    val earthRadius = 6_371_000.0
-    val angularDistance = distanceMeters / earthRadius
+    val angularDistance = distanceMeters / EARTH_RADIUS_METERS
     val bearing = Math.toRadians(bearingDegrees.toDouble())
     val lat1 = Math.toRadians(latitude)
     val lon1 = Math.toRadians(longitude)
@@ -119,3 +121,12 @@ private fun destinationPoint(
     )
     return Math.toDegrees(lat2) to Math.toDegrees(lon2)
 }
+
+private const val GYROSCOPE_SNAPSHOT_WINDOW_SECONDS = 0.5f
+private const val STANDARD_ATMOSPHERE_SCALE_HEIGHT_METERS = 44330f
+private const val BAROMETRIC_EXPONENT = 5.255
+private const val PITCH_MIN_DEGREES = 90f
+private const val PITCH_RANGE_DEGREES = 180f
+private const val VIEW_DISTANCE_MIN_METERS = 40.0
+private const val VIEW_DISTANCE_MAX_METERS = 260.0
+private const val EARTH_RADIUS_METERS = 6_371_000.0

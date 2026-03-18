@@ -63,6 +63,7 @@ fun EditPointDialog(
         file?.takeIf { it.exists() && it.isFile }?.length()?.let(::formatPhotoFileSize)
     }
     val readableSummary = remember(point) { point.toReadableSensorSummary() }
+    val lookDirection = remember(point) { point.toLookDirection() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -178,12 +179,12 @@ fun EditPointDialog(
                     readableSummary.pitchDegrees?.let { pitch ->
                         Text(stringResource(R.string.label_sensor_pitch, pitch))
                     }
-                    if (readableSummary.azimuthDegrees != null && readableSummary.pitchDegrees != null) {
+                    if (lookDirection != null) {
                         Text(
                             stringResource(
                                 R.string.label_sensor_view_direction,
-                                readableSummary.azimuthDegrees,
-                                readableSummary.pitchDegrees
+                                lookDirection.azimuthDegrees,
+                                lookDirection.pitchDegrees
                             )
                         )
                     }

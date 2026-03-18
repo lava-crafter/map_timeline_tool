@@ -28,6 +28,12 @@ class SensorReadableTest {
     }
 
     @Test
+    fun `gyroscope pitch conversion integrates over snapshot window`() {
+        assertEquals(0f, gyroscopeRateToPitchDegrees(0f), 0.001f)
+        assertEquals(28.6f, gyroscopeRateToPitchDegrees(1f), 0.2f)
+    }
+
+    @Test
     fun `look direction falls back to zero pitch when gyroscope missing`() {
         val point = PointEntity(
             timestamp = 1L,
