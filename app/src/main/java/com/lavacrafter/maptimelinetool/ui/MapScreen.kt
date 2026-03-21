@@ -136,14 +136,6 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(isActive, mapView) {
-        if (!isActive) return@LaunchedEffect
-        while (isActive) {
-            mapView?.postInvalidate()
-            delay(1000L)
-        }
-    }
-
     var lastOverlaySignature by remember { mutableStateOf<List<Long>>(emptyList()) }
     var overlaysReady by remember { mutableStateOf(false) }
 
