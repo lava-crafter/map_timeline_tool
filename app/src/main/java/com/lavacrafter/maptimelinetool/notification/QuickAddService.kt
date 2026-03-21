@@ -8,26 +8,11 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
 import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
 import com.lavacrafter.maptimelinetool.R
 
 class QuickAddService : Service() {
-    private val handler = Handler(Looper.getMainLooper())
-    private val keepAliveRunnable = object : Runnable {
-        override fun run() {
-            val notification = buildNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
-            handler.postDelayed(this, 15_000L)
-        }
-    }
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -38,16 +23,10 @@ class QuickAddService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        handler.postDelayed(keepAliveRunnable, 15_000L)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return START_STICKY
-    }
-
-    override fun onDestroy() {
-        handler.removeCallbacks(keepAliveRunnable)
-        super.onDestroy()
     }
 
     private fun buildNotification(): Notification {
