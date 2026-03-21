@@ -21,7 +21,6 @@ import androidx.compose.ui.res.stringResource
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.R
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -35,18 +34,13 @@ fun ListScreen(
 ) {
     val todayOrderById = remember(points) { buildTodayOrder(points) }
     val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
-    val calendar = remember { Calendar.getInstance() }
-    val today = remember { Calendar.getInstance() }
-    today.timeInMillis = System.currentTimeMillis()
-    val todayYear = today.get(Calendar.YEAR)
-    val todayDay = today.get(Calendar.DAY_OF_YEAR)
     LazyColumn(modifier = modifier.fillMaxSize().padding(8.dp)) {
         items(points) { p ->
             val latLonText = stringResource(R.string.label_lat_lon, p.latitude, p.longitude)
             val noteText = p.note
             val orderText = todayOrderById[p.id]?.toString()
             val localTimeText = timeFormat.format(Date(p.timestamp))
-            val isToday = isSameDay(todayYear, todayDay, calendar, p.timestamp)
+            val isToday = todayOrderById.containsKey(p.id)
             ListItem(
                 modifier = Modifier
                     .background(if (isToday) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
@@ -77,10 +71,4 @@ fun ListScreen(
             Divider()
         }
     }
-}
-
-private fun isSameDay(todayYear: Int, todayDay: Int, calendar: Calendar, timestamp: Long): Boolean {
-    calendar.timeInMillis = timestamp
-    return calendar.get(Calendar.YEAR) == todayYear
-        && calendar.get(Calendar.DAY_OF_YEAR) == todayDay
 }
