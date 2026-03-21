@@ -1,185 +1,257 @@
-# Photo Persistence Optimization Plan
+# Project Roadmap
 
-## Goal
-在不改变当前拍照交互体验的前提下，优化图片存储与清理机制，并将压缩能力改造成可配置选项：
-- 是否压缩（开关）
-- 默认压缩格式（常见格式）
+## 1. Objectives
 
-## Scope
-1. 将图片压缩改为设置项（而不是强制压缩）
-2. 文件 IO 统一放到后台线程
-3. 增加应用启动时的孤儿图片清理
-4. 数据库存储从绝对路径逐步迁移为相对路径/文件名
+Keep the app small, local-first, and responsive while improving maintainability.
 
-## Non-goals
-- 不改动拍照入口与确认/取消/重拍的交互流程
-- 不引入云存储或跨设备同步
-- 不把图片二进制存入 Room
+Primary goals:
+- Reduce cold-start work on the main thread.
+- Remove background work that stays alive longer than necessary.
+- Keep Compose recomposition and map redraws event-driven rather than periodic.
+- Make data and settings flows explicit and cheap.
+- Preserve the current offline-first behavior and device-local storage model.
 
-## Design
+Secondary goals:
+- Finish localization coverage for the settings screens.
+- Keep photo handling reliable and safe.
+- Maintain backwards compatibility for existing data.
 
-### 1) Photo Compression Settings
+## 2. Current Architecture Snapshot
 
-#### 1.1 Data model (SettingsStore)
-新增配置项：
-- `photo_compress_enabled`: `Boolean`
-- `photo_compress_format`: `String` (枚举字符串)
+The app already follows a reasonable structure:
+- `MainActivity` hosts the single-activity Compose UI.
+- `AppViewModel` handles point CRUD, tagging, import/export, and location access.
+- `SettingsViewModel` owns configuration state.
+- `MapTimelineApp` provides app-level wiring through a lightweight graph.
+- Room is used for persistent point and tag data.
+- Settings are stored separately from the Room database.
+- osmdroid provides the map layer and tile caching.
 
-新增枚举 `PhotoCompressFormat`（建议放在 `ui` 或 `photo` package）：
-- `JPEG`
-- `PNG`
-- `WEBP_LOSSY`
-- `WEBP_LOSSLESS`
+This is a solid base. The remaining work is mostly about tightening the expensive paths rather than rewriting the architecture.
 
-兼容策略：
-- Android API >= 30：使用 `Bitmap.CompressFormat.WEBP_LOSSY` / `WEBP_LOSSLESS`
-- Android API < 30：
-  - `WEBP_LOSSY`/`WEBP_LOSSLESS` 回退到 `Bitmap.CompressFormat.WEBP`
-  - 记录日志（debug）便于排查行为差异
+## 3. Performance Priorities
 
-默认值建议：
-- `photo_compress_enabled = false`（保持当前“原图落盘”行为）
-- `photo_compress_format = JPEG`
+### 3.1 Cold Start
 
-#### 1.2 Settings UI
-在设置页新增“Photo”配置区（可放在 Map operations 子页，或新增子路由 `SettingsRoute.Photo`）：
-- `Switch`: Enable photo compression
-- `SelectionGroup`/`Radio`: Default photo format
-  - JPEG
-  - PNG
-  - WEBP (lossy)
-  - WEBP (lossless)
+Observed risk:
+- The current startup path eagerly constructs the app graph and can reach Room setup early.
 
-文案需补充中英文 strings。
+Plan:
+1. Defer any repository or database work that is not needed for the first frame.
+2. Keep `Application.onCreate()` minimal.
+3. Move nonessential prewarming to a background coroutine.
+4. Avoid synchronous reads in `MainActivity.onCreate()` unless they are required to render the first screen.
 
-#### 1.3 Capture pipeline integration
-在“用户确认使用照片”时执行：
-- 若 `photo_compress_enabled == false`：保持原逻辑，直接使用拍照文件
-- 若 `photo_compress_enabled == true`：
-  1. 读取拍照文件
-  2. （可选）按 EXIF 修正方向
-  3. 以用户选择格式压缩后写入新文件
-  4. 用新文件替换 pending path
-  5. 删除旧拍照文件
+Target outcome:
+- The UI appears as soon as possible, with data loading happening after the first frame.
 
-失败回退：
-- 压缩失败时保留原图，提示 toast（不中断保存流程）
+### 3.2 Long-Running Work
 
-### 2) File IO on Background Thread
-对以下路径统一改为 `Dispatchers.IO`：
-- 删除图片 (`deletePointPhoto`)
-- 压缩与写文件
-- 启动时目录扫描与清理
+Observed risk:
+- The quick-add foreground service stays alive and repeats work on a fixed interval.
 
-建议提供 suspend API：
-- `suspend fun deletePointPhotoAsync(path: String?)`
-- `suspend fun optimizePendingPhotoIfNeeded(...)`
-- `suspend fun cleanupOrphanPhotos(...)`
+Plan:
+1. Re-evaluate whether the service needs to remain active outside the quick-add feature.
+2. Remove the 15-second self-rescheduling keepalive loop if the feature can function without it.
+3. If the service must stay, make its lifetime narrower and explicitly tied to user action.
+4. Prefer one-shot background work over persistent loops wherever possible.
 
-UI 层调用通过 `rememberCoroutineScope().launch` 或 `viewModelScope.launch`。
+Target outcome:
+- Lower battery use and less background churn.
 
-### 3) Orphan Photo Cleanup on Startup
+### 3.3 Map Rendering
 
-#### 3.1 Trigger
-应用启动后（MainActivity 首次进入时）异步触发一次清理任务。
+Observed risk:
+- The map screen invalidates every second while active.
+- Map overlays are cleared and rebuilt when the point signature changes.
 
-#### 3.2 Algorithm
-1. 扫描 `filesDir/point_photos`
-2. 从数据库读取全部点的 `photoPath`
-3. 将数据库路径归一化为文件名集合
-4. 目录文件名集合 - 数据库引用集合 = 孤儿文件
-5. 删除孤儿文件
+Plan:
+1. Replace fixed-interval invalidation with event-driven invalidation where possible.
+2. Keep the 1-second refresh only if it is needed for a visible feature.
+3. Split stable overlays from dynamic overlays so unchanged markers are not recreated.
+4. Cache marker icons or other expensive drawing artifacts when the inputs do not change.
+5. Review whether the overlay rebuild can be reduced to incremental updates.
 
-#### 3.3 Safety rules
-- 仅操作 `point_photos` 目录
-- 仅删除“文件名不在数据库引用中的文件”
-- 全程异常捕获，失败不影响主流程
+Target outcome:
+- Lower CPU use during long map sessions and smoother interaction under large datasets.
 
-### 4) Relative Path Migration
+### 3.4 List and Ordering Logic
 
-#### 4.1 New storage rule
-`PointEntity.photoPath` 逐步改为仅存 `fileName`（如 `point_photo_123.jpg`），运行时拼接为绝对路径。
+Observed risk:
+- `buildTodayOrder()` filters and sorts the full list.
+- List rows also perform per-item date comparisons.
 
-#### 4.2 Compatibility phase
-读取时支持两种格式：
-- 旧数据：绝对路径
-- 新数据：文件名
+Plan:
+1. Keep today-order calculation out of per-row code paths when possible.
+2. Consider computing today group/order once in the ViewModel or repository layer.
+3. Avoid repeated `Calendar` creation for each item if the list grows.
+4. Use immutable derived state only when the underlying data changes.
 
-写入时统一为文件名。
+Target outcome:
+- Scrolling remains cheap even if the point count grows significantly.
 
-#### 4.3 Optional DB migration
-若需要一次性清理历史数据，可增加 migration（可选）：
-- 对绝对路径做截取，仅保留 basename
-- 对异常值保持原样，避免坏迁移
+## 4. Data and Storage
 
-## Implementation Steps
+### 4.1 Room and Repository Boundaries
 
-### Phase 1: Config scaffolding
-1. 新增 `PhotoCompressFormat` 枚举与映射
-2. 扩展 `SettingsStore` 的 get/set
-3. `MainActivity` 读取并持有 photo 设置状态
+Plan:
+1. Keep Room access behind repository interfaces.
+2. Avoid synchronous database reads on the main thread.
+3. Keep migration logic explicit and small.
+4. Prefer `Flow` for UI-observable collections and suspend functions for one-shot reads/writes.
 
-### Phase 2: Settings UI
-1. 在设置页面增加 Photo 配置入口（或子页）
-2. 增加开关与格式选择组件
-3. 新增中英文 strings
+### 4.2 Photo Storage
 
-### Phase 3: Capture pipeline
-1. 新增图片压缩/转码工具方法
-2. 在“确认 pending photo”动作中接入可选压缩
-3. 失败回退与 toast 提示
+Status:
+- Photo handling already exists and is separate from point metadata.
 
-### Phase 4: IO threading
-1. 将 delete/cleanup/compress 全部迁移到 `Dispatchers.IO`
-2. 审核所有调用点，避免主线程直接文件操作
+Plan:
+1. Keep file IO off the main thread.
+2. Continue using cleanup for unused or orphaned photo files.
+3. If path normalization is introduced, keep backward compatibility for old records.
+4. Do not move binary image data into Room.
 
-### Phase 5: Orphan cleanup
-1. 启动时异步触发 cleanup
-2. 增加日志与保护逻辑
+### 4.3 Cache Policy
 
-### Phase 6: Relative path
-1. 增加 path normalize/resolve 工具
-2. 写路径改为文件名
-3. 读取支持双格式
-4. （可选）补 migration
+Status:
+- Cache size depends on the selected tile source.
 
-## Risks and Mitigations
-- 风险：不同 Android 版本 WebP 编码能力差异
-  - 规避：按 API 分级，老版本回退 `WEBP`
-- 风险：压缩失败导致用户误以为保存失败
-  - 规避：压缩失败自动回退原图 + toast
-- 风险：孤儿清理误删
-  - 规避：仅扫描固定目录 + 文件名差集匹配 + 严格异常保护
+Plan:
+1. Keep the cache policy logic explicit and small.
+2. Remove dead dependencies from recomposition if the selected settings do not affect runtime behavior.
+3. If cache policy becomes user-facing in the runtime path, make the policy application happen once per actual change.
 
-## Acceptance Criteria
-- 设置中可切换是否压缩，并可设置默认格式
-- 新拍照片按配置生效（关闭压缩即原图，开启则按格式压缩）
-- 所有文件操作不阻塞 UI 主线程
-- 应用启动可清理未引用图片，不影响正常数据
-- photoPath 新写入使用相对路径/文件名，旧数据仍可读取
+## 5. Startup and Initialization
 
-## Manual Test Checklist
-1. 关闭压缩，拍照并保存，确认文件存在且可预览
-2. 开启压缩 + JPEG，拍照并保存，确认格式与体积变化
-3. 切换 PNG / WEBP，分别验证保存与预览
-4. 新增点后取消、重拍、替换，确认废弃文件被删除
-5. 杀进程后重启，确认孤儿清理运行且不影响已有点
-6. 编辑点替换照片、删除点，确认旧图被清理
-7. 升级旧数据（含绝对路径）后仍可正常显示
+Plan:
+1. Keep `MapTimelineApp` as a thin wiring layer.
+2. Initialize osmdroid configuration only once.
+3. Make `MainActivity` responsible for UI bootstrap, not background setup.
+4. Move any scanning, cleanup, or prefetch tasks to background coroutines triggered after UI startup.
+5. Audit `LaunchedEffect(Unit)` blocks so they only start essential work.
 
-## File-level Change Plan
-- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/SettingsStore.kt`
-- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/SettingsScreen.kt`
-- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/SettingsRoute.kt`（若新增子页）
+## 6. Compose and State Management
+
+Plan:
+1. Keep state hoisted to `ViewModel` whenever it is shared or persisted.
+2. Keep transient UI state local to the screen.
+3. Use `remember` only for derived values that are expensive or stable across recompositions.
+4. Avoid side effects in recomposition unless they are guarded by stable keys.
+5. Review `observeNetworkStatus()` and similar helpers to ensure they register listeners only while the screen is visible.
+
+## 7. Localization and Settings
+
+Plan:
+1. Finish coverage for all settings strings in the supported locales.
+2. Keep the language picker sorted by English names.
+3. Keep the selected language persisted and applied through the app locale APIs.
+4. Continue verifying that release packaging does not strip non-English resources.
+
+Acceptance for localization:
+- No user-visible settings screen should fall back to English unless the locale genuinely has no translation.
+
+## 8. Reliability and Safety
+
+Plan:
+1. Keep file cleanup and photo deletion fail-safe.
+2. Never let orphan cleanup block the main thread or crash startup.
+3. Preserve old data during any migration.
+4. Prefer conservative fallbacks when a feature cannot complete.
+5. Add logging only where it helps diagnose startup, cleanup, or import/export failures.
+
+## 9. Concrete Work Phases
+
+### Phase 1: Startup budget
+Deliverables:
+- Identify everything currently running during startup.
+- Move nonessential work off the main path.
+- Verify the app reaches first frame faster.
+
+### Phase 2: Long-running cleanup
+Deliverables:
+- Remove or narrow the quick-add service keepalive behavior.
+- Make background work event-driven.
+- Verify battery and process activity improve.
+
+### Phase 3: Map rendering optimization
+Deliverables:
+- Reduce periodic invalidation.
+- Minimize overlay rebuild work.
+- Cache expensive map artifacts.
+
+### Phase 4: Data-flow cleanup
+Deliverables:
+- Move repeated list derivations out of composables where appropriate.
+- Keep repository and ViewModel boundaries explicit.
+- Tighten IO threading rules.
+
+### Phase 5: Localization completion
+Deliverables:
+- Finish untranslated settings strings.
+- Validate every supported locale.
+- Confirm packaging includes the full resource set.
+
+### Phase 6: Photo pipeline hardening
+Deliverables:
+- Ensure all photo IO is asynchronous.
+- Keep orphan cleanup safe.
+- Preserve backward compatibility for existing photo records.
+
+## 10. Risks
+
+- Risk: removing the quick-add keepalive could break notification behavior.
+  - Mitigation: verify feature requirements before changing lifecycle rules.
+
+- Risk: incremental map updates may be more complex than rebuilding overlays.
+  - Mitigation: only optimize when point counts or redraw cost justify the complexity.
+
+- Risk: path migration can break old photo references.
+  - Mitigation: keep a compatibility resolver until the migration is proven safe.
+
+- Risk: startup prewarming can move work instead of reducing it.
+  - Mitigation: measure first-frame time before and after each change.
+
+## 11. Acceptance Criteria
+
+The plan is complete when:
+- The first screen renders without unnecessary synchronous work.
+- Long-running background behavior is limited to what the user actually needs.
+- The map does not redraw on a fixed timer unless a visible feature requires it.
+- Photo and file IO are off the main thread.
+- Localization is complete for the supported languages.
+- Existing user data still loads correctly.
+
+## 12. Suggested Implementation Order
+
+1. Reduce startup work in `MainActivity` and the app graph.
+2. Remove or redesign the quick-add service keepalive loop.
+3. Optimize map invalidation and overlay rebuild behavior.
+4. Move derived list/grouping work out of composables where practical.
+5. Finish localization and resource coverage checks.
+6. Keep the photo pipeline safe and backward compatible.
+
+## 13. Files Most Likely to Change
+
 - `app/src/main/java/com/lavacrafter/maptimelinetool/MainActivity.kt`
-- `app/src/main/java/com/lavacrafter/maptimelinetool/PointPhotoUtils.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/MapTimelineApp.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/data/AppDatabase.kt`
 - `app/src/main/java/com/lavacrafter/maptimelinetool/ui/AppViewModel.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/MapScreen.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/ListScreen.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/DayOrderUtils.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/notification/QuickAddService.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/notification/QuickAddReceiver.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/PointPhotoUtils.kt`
+- `app/src/main/java/com/lavacrafter/maptimelinetool/ui/SettingsStore.kt`
 - `app/src/main/res/values/strings.xml`
-- `app/src/main/res/values-zh/strings.xml`（若存在）
-- `app/src/main/java/com/lavacrafter/maptimelinetool/data/AppDatabase.kt`（仅在需要 migration 时）
+- `app/src/main/res/values-zh/strings.xml`
 
-## Suggested Commit Strategy
-1. feat(settings): add photo compression options (enable + default format)
-2. refactor(photo): move file operations to IO dispatcher
-3. feat(photo): startup orphan cleanup task
-4. refactor(photo): store relative photo path with backward compatibility
+## 14. Verification Checklist
+
+- Build succeeds with `./gradlew assembleDebug`.
+- Launch time is acceptable on a cold start.
+- Quick add still works after any service changes.
+- Map interactions remain smooth after redraw changes.
+- List ordering still matches the current behavior.
+- No localized settings labels fall back unexpectedly.
+- Existing photos and points still display correctly.
