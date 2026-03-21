@@ -11,7 +11,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.Build
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -104,7 +104,7 @@ import java.util.UUID
 import org.osmdroid.config.Configuration
 
 @OptIn(ExperimentalMaterial3Api::class)
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private val graph by lazy { applicationContext.appGraph() }
     private val viewModel: AppViewModel by viewModels {
         AppViewModel.factory(application, graph)

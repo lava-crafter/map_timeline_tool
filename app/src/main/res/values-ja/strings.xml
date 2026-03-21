@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_map">マップ</string>
+    <string name="tab_list">リスト</string>
+    <string name="tab_tags">タグ</string>
+    <string name="tab_settings">設定</string>
+    <string name="settings_language_title">言語</string>
+    <string name="language_follow_system">システムに従う</string>
+    <string name="settings_sensors_title">Sensors</string>
+</resources>

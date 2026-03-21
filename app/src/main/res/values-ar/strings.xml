@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_map">الخريطة</string>
+    <string name="tab_list">القائمة</string>
+    <string name="tab_tags">العلامات</string>
+    <string name="tab_settings">الإعدادات</string>
+    <string name="settings_language_title">اللغة</string>
+    <string name="language_follow_system">اتباع النظام</string>
+    <string name="settings_sensors_title">Sensors</string>
+</resources>

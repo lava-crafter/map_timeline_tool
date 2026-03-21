@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_map">Карта</string>
+    <string name="tab_list">Список</string>
+    <string name="tab_tags">Теги</string>
+    <string name="tab_settings">Настройки</string>
+    <string name="settings_language_title">Язык</string>
+    <string name="language_follow_system">Как в системе</string>
+    <string name="settings_sensors_title">Sensors</string>
+</resources>

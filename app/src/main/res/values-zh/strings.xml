@@ -253,4 +253,16 @@
 
 
 
+    <string name="settings_help_title">帮助</string>
+    <string name="settings_help_overview">点击下方的卡片可进行主题、地图控件、照片压缩、缓存、下载和默认标签的配置。每个页面都有一个 ? 按钮提供快速提示。</string>
+    <string name="settings_theme_dark_mode">深色模式</string>
+    <string name="settings_map_operations_title">地图操作</string>
+    <string name="settings_map_operations_desc">调整打点超时时间、缩放控件和地图标记大小。</string>
+    <string name="settings_help_map_operations">设置新点自动保存的等待时间，缩放按钮何时显示，以及地图标记的大小。</string>
+    <string name="settings_cache_title">地图缓存</string>
+    <string name="settings_cache_desc">选择地图瓦片源和缓存策略。</string>
+    <string name="settings_help_cache">选择地图加载源以及应用的缓存策略。清除缓存会移除当前未保存的瓦片区域。</string>
+    <string name="settings_download_title">下载</string>
+    <string name="settings_download_desc">选择下载源并管理已保存区域。</string>
+    <string name="settings_help_download">选择批量下载的瓦片服务器，启动地图区域下载，或者在此修剪、去重已保存的部分。</string>
 </resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_map">Carte</string>
+    <string name="tab_list">Liste</string>
+    <string name="tab_tags">Balises</string>
+    <string name="tab_settings">Paramètres</string>
+    <string name="settings_language_title">Langues</string>
+    <string name="language_follow_system">Suivre le système</string>
+    <string name="settings_sensors_title">Sensors</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_map">지도</string>
+    <string name="tab_list">목록</string>
+    <string name="tab_tags">태그</string>
+    <string name="tab_settings">설정</string>
+    <string name="settings_language_title">언어</string>
+    <string name="language_follow_system">시스템 설정 따름</string>
+    <string name="settings_sensors_title">Sensors</string>
+</resources>

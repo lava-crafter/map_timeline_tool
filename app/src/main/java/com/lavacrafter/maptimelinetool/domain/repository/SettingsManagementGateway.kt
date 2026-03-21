@@ -26,6 +26,7 @@ interface SettingsManagementGateway {
     fun setZoomButtonBehavior(behavior: SettingsZoomButtonBehavior)
 
     fun getLanguagePreference(): SettingsLanguagePreference
+    fun setLanguagePreference(preference: SettingsLanguagePreference)
 
     fun getFollowSystemTheme(): Boolean
     fun setFollowSystemTheme(enabled: Boolean)
