@@ -3,6 +3,7 @@ package com.lavacrafter.maptimelinetool.ui
 data class SettingsUiState(
     val isDarkTheme: Boolean = false,
     val followSystemTheme: Boolean = true,
+    val languagePreference: LanguagePreference = LanguagePreference.FOLLOW_SYSTEM,
     val timeoutSeconds: Int = 20,
     val cachePolicy: MapCachePolicy = MapCachePolicy.WIFI_ONLY,
     val satelliteCachePolicy: MapCachePolicy = MapCachePolicy.WIFI_ONLY,

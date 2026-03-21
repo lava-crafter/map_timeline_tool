@@ -650,6 +650,8 @@ class MainActivity : ComponentActivity() {
                                     onDarkThemeChange = settingsViewModel::setDarkTheme,
                                     followSystemTheme = settingsState.followSystemTheme,
                                     onFollowSystemThemeChange = settingsViewModel::setFollowSystemTheme,
+                                    languagePreference = settingsState.languagePreference,
+                                    onLanguagePreferenceChange = settingsViewModel::setLanguagePreference,
                                     timeoutSeconds = settingsState.timeoutSeconds,
                                     onTimeoutSecondsChange = settingsViewModel::setTimeoutSeconds,
                                     cachePolicy = settingsState.cachePolicy,

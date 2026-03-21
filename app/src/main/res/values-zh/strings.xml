@@ -78,6 +78,8 @@
     <string name="settings_theme_follow_system_hint">跟随系统 — 控制深色模式</string>
     <string name="settings_timeout_label">打点超时（秒）</string>
     <string name="settings_timeout_hint">超时秒数</string>
+    <string name="settings_language_title">语言</string>
+    <string name="language_follow_system">跟随系统</string>
     <string name="settings_sensors_title">传感器</string>
     <string name="settings_sensors_desc">按传感器分别配置采集开关。</string>
     <string name="settings_help_sensors">可分别开启或关闭每种传感器对新打点的采集。噪音采集需要麦克风权限。</string>
