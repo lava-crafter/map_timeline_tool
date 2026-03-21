@@ -46,6 +46,7 @@ import org.osmdroid.events.ZoomEvent
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.infowindow.InfoWindow
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -192,11 +193,24 @@ fun MapScreen(
                 points.forEach { p ->
                     val order = todayOrderById[p.id]
                     val color = if (order != null) spectrumColor(order) else DEFAULT_MARKER_COLOR
+                    val lookDirection = p.toLookDirection()
+                    val timeDescription = sdf.format(Date(p.timestamp))
+                    val lookDescription = lookDirection?.let { direction ->
+                        context.getString(
+                            R.string.label_sensor_view_direction,
+                            direction.azimuthDegrees,
+                            direction.pitchDegrees
+                        )
+                    }
                     val marker = Marker(map).apply {
                         position = GeoPoint(p.latitude, p.longitude)
                         title = p.title
                         snippet = p.note
-                        subDescription = sdf.format(Date(p.timestamp))
+                        subDescription = if (lookDescription != null) {
+                            "$timeDescription\n$lookDescription"
+                        } else {
+                            timeDescription
+                        }
                         icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
                         infoWindow = object : org.osmdroid.views.overlay.infowindow.MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
                             override fun onOpen(item: Any?) {
@@ -214,6 +228,24 @@ fun MapScreen(
                         }
                     }
                     map.overlays.add(marker)
+                    if (lookDirection != null) {
+                        val sector = buildViewSector(
+                            latitude = p.latitude,
+                            longitude = p.longitude,
+                            azimuthDegrees = lookDirection.azimuthDegrees,
+                            pitchDegrees = lookDirection.pitchDegrees
+                        )
+                        val sectorPoints = sector.map { (lat, lon) -> GeoPoint(lat, lon) }
+                        val polygon = Polygon().apply {
+                            fillPaint.color = Color.argb(48, Color.red(color), Color.green(color), Color.blue(color))
+                            outlinePaint.color = Color.argb(180, Color.red(color), Color.green(color), Color.blue(color))
+                            outlinePaint.strokeWidth = 2f
+                            title = context.getString(R.string.label_map_view_sector)
+                            snippet = lookDescription.orEmpty()
+                        }
+                        polygon.setPoints(sectorPoints)
+                        map.overlays.add(polygon)
+                    }
                     if (p.id == selectedPointId) {
                         marker.showInfoWindow()
                     }

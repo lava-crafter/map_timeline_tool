@@ -62,6 +62,8 @@ fun EditPointDialog(
         val file = resolvePointPhotoFile(context, currentPhotoPath)
         file?.takeIf { it.exists() && it.isFile }?.length()?.let(::formatPhotoFileSize)
     }
+    val readableSummary = remember(point) { point.toReadableSensorSummary() }
+    val lookDirection = remember(point) { point.toLookDirection() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -148,14 +150,82 @@ fun EditPointDialog(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(stringResource(R.string.label_lat_lon, point.latitude, point.longitude))
+                val hasReadableSummary = true // We always have coordinates now
+
+                if (hasReadableSummary) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.label_sensor_readable),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val latDir = if (point.latitude >= 0) R.string.label_lat_n else R.string.label_lat_s
+                    val lonDir = if (point.longitude >= 0) R.string.label_lon_e else R.string.label_lon_w
+                    Text(
+                        stringResource(
+                            R.string.label_quick_insights_coordinates,
+                            kotlin.math.abs(point.latitude),
+                            stringResource(latDir),
+                            kotlin.math.abs(point.longitude),
+                            stringResource(lonDir)
+                        )
+                    )
+
+                    readableSummary.altitudeMeters?.let { altitude ->
+                        Text(stringResource(R.string.label_sensor_altitude, altitude))
+                    }
+                    readableSummary.ambientLightLevel?.let { level ->
+                        val levelText = when (level) {
+                            AmbientLightLevel.HIGH -> stringResource(R.string.label_sensor_light_level_high)
+                            AmbientLightLevel.MEDIUM -> stringResource(R.string.label_sensor_light_level_medium)
+                            AmbientLightLevel.LOW -> stringResource(R.string.label_sensor_light_level_low)
+                        }
+                        Text(stringResource(R.string.label_sensor_light_level, levelText))
+                    }
+                    readableSummary.noiseLevel?.let { level ->
+                        val levelText = when (level) {
+                            NoiseLevel.QUIET -> stringResource(R.string.label_sensor_noise_quiet)
+                            NoiseLevel.RELATIVELY_QUIET -> stringResource(R.string.label_sensor_noise_relatively_quiet)
+                            NoiseLevel.NOISY -> stringResource(R.string.label_sensor_noise_noisy)
+                            NoiseLevel.EXTREMELY_NOISY -> stringResource(R.string.label_sensor_noise_extremely_noisy)
+                        }
+                        Text(stringResource(R.string.label_sensor_noise_level, levelText))
+                    }
+                    readableSummary.azimuthDegrees?.let { azimuth ->
+                        val dirRes = when {
+                            azimuth < 22.5f || azimuth >= 337.5f -> R.string.label_direction_n
+                            azimuth < 67.5f -> R.string.label_direction_ne
+                            azimuth < 112.5f -> R.string.label_direction_e
+                            azimuth < 157.5f -> R.string.label_direction_se
+                            azimuth < 202.5f -> R.string.label_direction_s
+                            azimuth < 247.5f -> R.string.label_direction_sw
+                            azimuth < 292.5f -> R.string.label_direction_w
+                            else -> R.string.label_direction_nw
+                        }
+                        Text(stringResource(R.string.label_sensor_azimuth, stringResource(dirRes), azimuth))
+                    }
+                    readableSummary.pitchDegrees?.let { pitch ->
+                        val pitchType = if (pitch >= 0) R.string.label_sensor_pitch_elevation else R.string.label_sensor_pitch_depression
+                        Text(stringResource(R.string.label_sensor_pitch, stringResource(pitchType), kotlin.math.abs(pitch)))
+                    }
+                    if (lookDirection != null) {
+                        Text(
+                            stringResource(
+                                R.string.label_sensor_view_direction,
+                                lookDirection.azimuthDegrees,
+                                lookDirection.pitchDegrees
+                            )
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.label_sensor_data),
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                Text(stringResource(R.string.label_lat_lon, point.latitude, point.longitude))
                 SensorReadingText(
                     value = point.pressureHpa,
                     formatRes = R.string.label_sensor_pressure

@@ -45,6 +45,9 @@ class PointWriteUseCaseTest {
         assertEquals(1000f, inserted.pressureHpa)
         assertEquals(1f, inserted.accelerometerX)
         assertEquals(setOf(2L, 3L), fakeRepository.insertedTags.map { it.second }.toSet())
+        
+        kotlinx.coroutines.delay(50) // wait for async noise collection
+
         assertEquals(listOf(10L to -20f), fakeRepository.updatedNoiseDb)
     }
 }

@@ -27,7 +27,14 @@ class ZipExportImportTest {
         )
         val output = ByteArrayOutputStream()
 
-        ZipExporter.export(listOf(point), output) { path -> File(path) }
+        ZipExporter.export(
+            points = listOf(point),
+            outputStream = output,
+            resolvePhotoFile = { path -> File(path) },
+            options = ZipExporter.ExportOptions(includePoints = true, includeTags = false, includeSensors = false, includePhotos = true),
+            tags = emptyList(),
+            pointTagIdsByPointId = emptyMap()
+        )
 
         val entryNames = mutableSetOf<String>()
         java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->

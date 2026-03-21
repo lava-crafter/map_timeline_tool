@@ -61,6 +61,16 @@
     <string name="label_sensor_magnetometer">磁力计：X %1$.3f，Y %2$.3f，Z %3$.3f μT</string>
     <string name="label_sensor_noise">噪音（dBFS）：%1$.2f dB</string>
     <string name="label_sensor_noise_unavailable">噪音（dBFS）：未记录</string>
+    <string name="label_sensor_readable">传感器可读信息</string>
+    <string name="label_sensor_altitude">估算海拔：%1$.1f 米</string>
+    <string name="label_sensor_light_level">环境亮度档位：%1$s</string>
+    <string name="label_sensor_light_level_high">高</string>
+    <string name="label_sensor_light_level_medium">中</string>
+    <string name="label_sensor_light_level_low">低</string>
+    <string name="label_sensor_azimuth">方位角：%1$s（%2$.0f°）</string>
+    <string name="label_sensor_pitch">夹角：%1$s %2$.0f°</string>
+    <string name="label_sensor_view_direction">视线方向：方位角 %1$.0f° / 仰角 %2$.0f°</string>
+    <string name="label_map_view_sector">视域扇形</string>
     <string name="label_photo_size">照片大小：%1$s</string>
     <string name="settings_title">设置</string>
     <string name="settings_theme_label">深色主题</string>
@@ -214,4 +224,31 @@
         <string name="open_source_osmdroid_license">osmdroid（Apache-2.0）— https://www.apache.org/licenses/LICENSE-2.0</string>
         <string name="open_source_kotlin_license">Kotlin（Apache-2.0）— https://www.apache.org/licenses/LICENSE-2.0</string>
         <string name="open_source_osm_license">OpenStreetMap 数据（ODbL 1.0）— https://opendatacommons.org/licenses/odbl/</string>
+
+
+    <string name="label_sensor_pitch_elevation">仰角</string>
+    <string name="label_sensor_pitch_depression">俯角</string>
+    <string name="label_sensor_noise_level">环境噪音：%1$s</string>
+    <string name="label_sensor_noise_quiet">安静</string>
+    <string name="label_sensor_noise_relatively_quiet">相对安静</string>
+    <string name="label_sensor_noise_noisy">噪声较大</string>
+    <string name="label_sensor_noise_extremely_noisy">大量噪音</string>
+    <string name="label_direction_n">北</string>
+    <string name="label_direction_ne">东北</string>
+    <string name="label_direction_e">东</string>
+    <string name="label_direction_se">东南</string>
+    <string name="label_direction_s">南</string>
+    <string name="label_direction_sw">西南</string>
+    <string name="label_direction_w">西</string>
+    <string name="label_direction_nw">西北</string>
+    <string name="label_quick_insights_coordinates">坐标：%1$.5f°%2$s，%3$.5f°%4$s</string>
+    <string name="label_lat_n">N (北纬)</string>
+    <string name="label_lat_s">S (南纬)</string>
+    <string name="label_lon_e">E (东经)</string>
+    <string name="label_lon_w">W (西经)</string>
+
+
+
+
+
 </resources>

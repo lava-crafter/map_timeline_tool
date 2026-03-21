@@ -61,6 +61,16 @@
     <string name="label_sensor_magnetometer">Magnetometer: X %1$.3f, Y %2$.3f, Z %3$.3f μT</string>
     <string name="label_sensor_noise">Noise (dBFS): %1$.2f dB</string>
     <string name="label_sensor_noise_unavailable">Noise (dBFS): not recorded</string>
+    <string name="label_sensor_readable">Quick sensor insights</string>
+    <string name="label_sensor_altitude">Estimated altitude: %1$.1f m</string>
+    <string name="label_sensor_light_level">Ambient light level: %1$s</string>
+    <string name="label_sensor_light_level_high">High</string>
+    <string name="label_sensor_light_level_medium">Medium</string>
+    <string name="label_sensor_light_level_low">Low</string>
+    <string name="label_sensor_azimuth">Azimuth: %1$s (%2$.0f°)</string>
+    <string name="label_sensor_pitch">Pitch: %1$s %2$.0f°</string>
+    <string name="label_sensor_view_direction">Looking direction: %1$.0f° / %2$.0f°</string>
+    <string name="label_map_view_sector">View sector</string>
     <string name="label_photo_size">Photo size: %1$s</string>
     <string name="settings_title">Settings</string>
     <string name="settings_help_title">Help</string>
@@ -227,4 +237,31 @@
     <string name="open_source_osmdroid_license">osmdroid (Apache-2.0) — https://www.apache.org/licenses/LICENSE-2.0</string>
     <string name="open_source_kotlin_license">Kotlin (Apache-2.0) — https://www.apache.org/licenses/LICENSE-2.0</string>
     <string name="open_source_osm_license">OpenStreetMap data (ODbL 1.0) — https://opendatacommons.org/licenses/odbl/</string>
+
+
+    <string name="label_sensor_pitch_elevation">Elevation</string>
+    <string name="label_sensor_pitch_depression">Depression</string>
+    <string name="label_sensor_noise_level">Noise rating: %1$s</string>
+    <string name="label_sensor_noise_quiet">Quiet</string>
+    <string name="label_sensor_noise_relatively_quiet">Relatively quiet</string>
+    <string name="label_sensor_noise_noisy">Noisy</string>
+    <string name="label_sensor_noise_extremely_noisy">Extremely noisy</string>
+    <string name="label_direction_n">North</string>
+    <string name="label_direction_ne">Northeast</string>
+    <string name="label_direction_e">East</string>
+    <string name="label_direction_se">Southeast</string>
+    <string name="label_direction_s">South</string>
+    <string name="label_direction_sw">Southwest</string>
+    <string name="label_direction_w">West</string>
+    <string name="label_direction_nw">Northwest</string>
+    <string name="label_quick_insights_coordinates">Coordinates: %1$.5f°%2$s, %3$.5f°%4$s</string>
+    <string name="label_lat_n">N (North latitude)</string>
+    <string name="label_lat_s">S (South latitude)</string>
+    <string name="label_lon_e">E (East longitude)</string>
+    <string name="label_lon_w">W (West longitude)</string>
+
+
+
+
+
 </resources>
