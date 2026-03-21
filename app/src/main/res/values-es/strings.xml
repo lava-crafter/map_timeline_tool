@@ -214,4 +214,16 @@
     <string name="label_lat_s">S (latitud sur)</string>
     <string name="label_lon_e">E (longitud este)</string>
     <string name="label_lon_w">O (longitud oeste)</string>
+
+    <string name="settings_cache_source_label">Fuente de mosaicos para caché</string>
+    <string name="settings_cache_source_notice">EOX Sentinel-2 Cloudless es solo para uso no comercial (BY-NC-SA).</string>
+    <string name="settings_network_status_label">Red actual: %1$s</string>
+    <string name="settings_network_status_wifi">Wi‑Fi</string>
+    <string name="settings_network_status_cellular">Datos móviles</string>
+    <string name="settings_network_status_offline">Sin conexión</string>
+    <string name="settings_cache_policy_label">Política de caché del mapa base</string>
+    <string name="settings_satellite_cache_policy_label">Política de caché del mapa satelital</string>
+    <string name="settings_cache_policy_disabled">No guardar mapas nuevos</string>
+    <string name="settings_cache_policy_wifi">Guardar solo con Wi‑Fi</string>
+    <string name="settings_cache_policy_always">Guardar mapas siempre</string>
 </resources>

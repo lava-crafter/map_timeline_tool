@@ -214,4 +214,16 @@
     <string name="label_lat_s">S（南緯）</string>
     <string name="label_lon_e">E（東經）</string>
     <string name="label_lon_w">W（西經）</string>
+
+    <string name="settings_cache_source_label">快取瓦片來源</string>
+    <string name="settings_cache_source_notice">EOX Sentinel-2 Cloudless 僅限非商業用途（BY-NC-SA）。</string>
+    <string name="settings_network_status_label">目前網路：%1$s</string>
+    <string name="settings_network_status_wifi">Wi‑Fi</string>
+    <string name="settings_network_status_cellular">行動數據</string>
+    <string name="settings_network_status_offline">離線</string>
+    <string name="settings_cache_policy_label">一般地圖快取策略</string>
+    <string name="settings_satellite_cache_policy_label">衛星地圖快取策略</string>
+    <string name="settings_cache_policy_disabled">不快取新地圖</string>
+    <string name="settings_cache_policy_wifi">僅在 Wi‑Fi 快取</string>
+    <string name="settings_cache_policy_always">一律快取</string>
 </resources>

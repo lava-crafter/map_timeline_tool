@@ -214,4 +214,16 @@
     <string name="label_lat_s">S (южная широта)</string>
     <string name="label_lon_e">E (восточная долгота)</string>
     <string name="label_lon_w">W (западная долгота)</string>
+
+    <string name="settings_cache_source_label">Источник тайлов для кэша</string>
+    <string name="settings_cache_source_notice">EOX Sentinel-2 Cloudless предназначен только для некоммерческого использования (BY-NC-SA).</string>
+    <string name="settings_network_status_label">Текущая сеть: %1$s</string>
+    <string name="settings_network_status_wifi">Wi‑Fi</string>
+    <string name="settings_network_status_cellular">Мобильные данные</string>
+    <string name="settings_network_status_offline">Нет сети</string>
+    <string name="settings_cache_policy_label">Политика кэша обычной карты</string>
+    <string name="settings_satellite_cache_policy_label">Политика кэша спутниковой карты</string>
+    <string name="settings_cache_policy_disabled">Не кэшировать новые карты</string>
+    <string name="settings_cache_policy_wifi">Кэшировать только по Wi‑Fi</string>
+    <string name="settings_cache_policy_always">Кэшировать всегда</string>
 </resources>

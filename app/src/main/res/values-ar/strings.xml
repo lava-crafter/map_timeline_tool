@@ -214,4 +214,16 @@
     <string name="label_lat_s">S (خط عرض جنوبي)</string>
     <string name="label_lon_e">E (خط طول شرقي)</string>
     <string name="label_lon_w">W (خط طول غربي)</string>
+
+    <string name="settings_cache_source_label">مصدر البلاطات للذاكرة المؤقتة</string>
+    <string name="settings_cache_source_notice">EOX Sentinel-2 Cloudless مخصص للاستخدام غير التجاري فقط (BY-NC-SA).</string>
+    <string name="settings_network_status_label">الشبكة الحالية: %1$s</string>
+    <string name="settings_network_status_wifi">Wi‑Fi</string>
+    <string name="settings_network_status_cellular">بيانات الهاتف</string>
+    <string name="settings_network_status_offline">غير متصل</string>
+    <string name="settings_cache_policy_label">سياسة ذاكرة الخريطة العادية</string>
+    <string name="settings_satellite_cache_policy_label">سياسة ذاكرة الخريطة الفضائية</string>
+    <string name="settings_cache_policy_disabled">عدم تخزين الخرائط الجديدة</string>
+    <string name="settings_cache_policy_wifi">التخزين فقط عبر Wi‑Fi</string>
+    <string name="settings_cache_policy_always">التخزين دائمًا</string>
 </resources>

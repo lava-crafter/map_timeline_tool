@@ -213,4 +213,16 @@
     <string name="label_lat_s">S（南緯）</string>
     <string name="label_lon_e">E（東経）</string>
     <string name="label_lon_w">W（西経）</string>
+
+    <string name="settings_cache_source_label">キャッシュ用タイルソース</string>
+    <string name="settings_cache_source_notice">EOX Sentinel-2 Cloudless は非商用利用のみです（BY-NC-SA）。</string>
+    <string name="settings_network_status_label">現在のネットワーク: %1$s</string>
+    <string name="settings_network_status_wifi">Wi‑Fi</string>
+    <string name="settings_network_status_cellular">モバイルデータ</string>
+    <string name="settings_network_status_offline">オフライン</string>
+    <string name="settings_cache_policy_label">通常地図のキャッシュ方針</string>
+    <string name="settings_satellite_cache_policy_label">衛星地図のキャッシュ方針</string>
+    <string name="settings_cache_policy_disabled">新しい地図をキャッシュしない</string>
+    <string name="settings_cache_policy_wifi">Wi‑Fi のみでキャッシュする</string>
+    <string name="settings_cache_policy_always">常にキャッシュする</string>
 </resources>
