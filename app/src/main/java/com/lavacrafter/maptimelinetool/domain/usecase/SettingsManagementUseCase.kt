@@ -29,6 +29,7 @@ class SettingsManagementUseCase(
     fun setZoomButtonBehavior(behavior: SettingsZoomButtonBehavior) = settingsGateway.setZoomButtonBehavior(behavior)
 
     fun getLanguagePreference(): SettingsLanguagePreference = settingsGateway.getLanguagePreference()
+    fun setLanguagePreference(preference: SettingsLanguagePreference) = settingsGateway.setLanguagePreference(preference)
 
     fun getFollowSystemTheme(): Boolean = settingsGateway.getFollowSystemTheme()
     fun setFollowSystemTheme(enabled: Boolean) = settingsGateway.setFollowSystemTheme(enabled)

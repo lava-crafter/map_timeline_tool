@@ -32,6 +32,7 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
         SettingsStore.setZoomButtonBehavior(appContext, behavior.toUi())
 
     override fun getLanguagePreference(): SettingsLanguagePreference = SettingsStore.getLanguagePreference(appContext).toDomain()
+    override fun setLanguagePreference(preference: SettingsLanguagePreference) = SettingsStore.setLanguagePreference(appContext, preference.toUi())
 
     override fun getFollowSystemTheme(): Boolean = SettingsStore.getFollowSystemTheme(appContext)
     override fun setFollowSystemTheme(enabled: Boolean) = SettingsStore.setFollowSystemTheme(appContext, enabled)

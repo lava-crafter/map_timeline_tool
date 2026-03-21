@@ -81,6 +81,8 @@
     <string name="settings_theme_dark_mode">Dark mode</string>
     <string name="settings_timeout_label">Add timeout (seconds)</string>
     <string name="settings_timeout_hint">Timeout seconds</string>
+    <string name="settings_language_title">Language</string>
+    <string name="language_follow_system">Follow System</string>
     <string name="settings_sensors_title">Sensors</string>
     <string name="settings_sensors_desc">Configure each sensor capture switch.</string>
     <string name="settings_help_sensors">Turn each sensor on or off independently for new points. Noise capture requires microphone permission.</string>

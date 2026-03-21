@@ -56,6 +56,8 @@ fun SettingsScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     followSystemTheme: Boolean,
     onFollowSystemThemeChange: (Boolean) -> Unit,
+    languagePreference: LanguagePreference,
+    onLanguagePreferenceChange: (LanguagePreference) -> Unit,
     timeoutSeconds: Int,
     onTimeoutSecondsChange: (Int) -> Unit,
     cachePolicy: MapCachePolicy,
@@ -119,6 +121,7 @@ fun SettingsScreen(
             onDarkThemeChange = onDarkThemeChange,
             followSystemTheme = followSystemTheme,
             onFollowSystemThemeChange = onFollowSystemThemeChange,
+            languagePreference = languagePreference,
             onNavigateTo = onNavigateTo,
             onExportCsv = onExportCsv,
             onExportZip = onExportZip,
@@ -126,6 +129,11 @@ fun SettingsScreen(
             onImportZip = onImportZip,
             onClearCache = onClearCache,
             onOpenAbout = onOpenAbout
+        )
+        SettingsRoute.Language -> LanguageSettings(
+            languagePreference = languagePreference,
+            onLanguagePreferenceChange = onLanguagePreferenceChange,
+            onNavigateBack = onNavigateBack
         )
         SettingsRoute.Sensors -> SensorSettings(
             pressureEnabled = pressureEnabled,
@@ -199,6 +207,7 @@ private fun SettingsOverviewScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     followSystemTheme: Boolean,
     onFollowSystemThemeChange: (Boolean) -> Unit,
+    languagePreference: LanguagePreference,
     onNavigateTo: (SettingsRoute) -> Unit,
     onExportCsv: () -> Unit,
     onExportZip: () -> Unit,
@@ -235,6 +244,25 @@ private fun SettingsOverviewScreen(
                 onFollowSystemThemeChange = onFollowSystemThemeChange
             )
 
+            SettingsOverviewItem(
+                title = stringResource(R.string.settings_language_title),
+                description = when (languagePreference) {
+                    LanguagePreference.FOLLOW_SYSTEM -> stringResource(R.string.language_follow_system)
+                    LanguagePreference.ARABIC -> "العربية"
+                    LanguagePreference.ENGLISH -> "English"
+                    LanguagePreference.FRENCH -> "Français"
+                    LanguagePreference.HEBREW -> "עברית"
+                    LanguagePreference.JAPANESE -> "日本語"
+                    LanguagePreference.KOREAN -> "한국어"
+                    LanguagePreference.PORTUGUESE -> "Português"
+                    LanguagePreference.RUSSIAN -> "Русский"
+                    LanguagePreference.CHINESE_SIMPLIFIED -> "简体中文"
+                    LanguagePreference.SPANISH -> "Español"
+                    LanguagePreference.CHINESE_TRADITIONAL -> "繁体中文"
+                    else -> stringResource(R.string.language_follow_system)
+                },
+                onClick = { onNavigateTo(SettingsRoute.Language) }
+            )
             SettingsOverviewItem(
                 title = stringResource(R.string.settings_sensors_title),
                 description = stringResource(R.string.settings_sensors_desc),
@@ -807,3 +835,65 @@ private fun <T> SelectionGroup(
 }
 
 data class SelectionItem<T>(val label: String, val value: T)
+@Composable
+fun LanguageSettings(
+    languagePreference: LanguagePreference,
+    onLanguagePreferenceChange: (LanguagePreference) -> Unit,
+    onNavigateBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.settings_language_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+        ) {
+            val languages = listOf(
+                LanguagePreference.FOLLOW_SYSTEM to R.string.language_follow_system,
+                LanguagePreference.ARABIC to "العربية",
+                LanguagePreference.CHINESE_SIMPLIFIED to "简体中文",
+                LanguagePreference.CHINESE_TRADITIONAL to "繁体中文",
+                LanguagePreference.ENGLISH to "English",
+                LanguagePreference.FRENCH to "Français",
+                LanguagePreference.HEBREW to "עברית",
+                LanguagePreference.JAPANESE to "日本語",
+                LanguagePreference.KOREAN to "한국어",
+                LanguagePreference.PORTUGUESE to "Português",
+                LanguagePreference.RUSSIAN to "Русский",
+                LanguagePreference.SPANISH to "Español"
+            )
+
+            languages.forEach { (pref, label) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLanguagePreferenceChange(pref as LanguagePreference) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = languagePreference == pref,
+                        onClick = { onLanguagePreferenceChange(pref as LanguagePreference) }
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    if (label is Int) {
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+                    } else if (label is String) {
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        }
+    }
+}

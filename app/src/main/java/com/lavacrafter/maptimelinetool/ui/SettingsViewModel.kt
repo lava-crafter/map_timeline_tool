@@ -26,6 +26,7 @@ class SettingsViewModel(
     private val _uiState = MutableStateFlow(
         SettingsUiState(
             followSystemTheme = settingsUseCase.getFollowSystemTheme(),
+            languagePreference = settingsUseCase.getLanguagePreference().toUi(),
             timeoutSeconds = settingsUseCase.getTimeoutSeconds(),
             cachePolicy = settingsUseCase.getCachePolicy().toUi(),
             satelliteCachePolicy = settingsUseCase.getSatelliteCachePolicy().toUi(),
@@ -59,6 +60,12 @@ class SettingsViewModel(
     fun setFollowSystemTheme(enabled: Boolean) {
         settingsUseCase.setFollowSystemTheme(enabled)
         _uiState.update { it.copy(followSystemTheme = enabled) }
+    }
+
+    fun setLanguagePreference(preference: LanguagePreference) {
+        settingsUseCase.setLanguagePreference(preference.toDomain())
+        _uiState.update { it.copy(languagePreference = preference) }
+        applyLanguagePreference(preference)
     }
 
     fun setTimeoutSeconds(seconds: Int) {
