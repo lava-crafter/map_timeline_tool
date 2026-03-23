@@ -51,6 +51,7 @@ object ZipExporter {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
+        val includeTagsInArchive = options.includePoints && options.includeTags
         val photoEntries = mutableMapOf<String, File>()
         val pointPhotoMeta = points.map { point ->
             buildPhotoMeta(
@@ -111,7 +112,7 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
-            if (options.includePoints && options.includeTags) {
+            if (includeTagsInArchive) {
                 val pointsWithIndex = points.withIndex().associate { (index, point) -> point.id to index }
                 val usedTagIds = pointTagIdsByPointId
                     .filterKeys { pointsWithIndex.containsKey(it) }
@@ -148,20 +149,20 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
-            val settingsJson = settingsJsonProvider?.invoke()?.takeIf { !it.isNullOrBlank() }
+            val settingsJson = settingsJsonProvider?.invoke()?.takeIf { it.isNotBlank() }
             val manifestJson = JSONObject().apply {
                 put("backup_version", 1)
                 put("created_at_utc", sdf.format(Date()))
                 put("app_version", appVersion.orEmpty())
                 put("sections", JSONObject().apply {
                     put("points", options.includePoints)
-                    put("tags", options.includePoints && options.includeTags)
+                    put("tags", includeTagsInArchive)
                     put("photos", options.includePhotos)
                     put("settings", settingsJson != null)
                 })
                 put("counts", JSONObject().apply {
                     put("points", if (options.includePoints) points.size else 0)
-                    put("tags", if (options.includePoints && options.includeTags) tags.size else 0)
+                    put("tags", if (includeTagsInArchive) tags.size else 0)
                     put("photos", photoEntries.size)
                 })
             }.toString()

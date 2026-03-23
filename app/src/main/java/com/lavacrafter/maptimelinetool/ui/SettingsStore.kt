@@ -28,7 +28,8 @@ object SettingsStore {
     private const val KEY_GYROSCOPE_ENABLED = "gyroscope_enabled"
     private const val KEY_MAGNETOMETER_ENABLED = "magnetometer_enabled"
     private const val KEY_NOISE_ENABLED = "noise_enabled"
-    private const val BACKUP_SCHEMA_VERSION = 1
+    private const val SETTINGS_SCHEMA_VERSION = 1
+    private const val MAX_RECENT_TAGS = 3
 
     fun getTimeoutSeconds(context: Context): Int {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -85,7 +86,7 @@ object SettingsStore {
         val updated = getRecentTagIds(context).toMutableList().apply {
             remove(tagId)
             add(0, tagId)
-            while (size > 3) removeLast()
+            while (size > MAX_RECENT_TAGS) removeLast()
         }
         saveLongList(context, KEY_RECENT_TAGS, updated)
         return updated
@@ -352,7 +353,7 @@ object SettingsStore {
 
     fun exportBackupJson(context: Context): String {
         val root = org.json.JSONObject()
-        root.put("schema_version", BACKUP_SCHEMA_VERSION)
+        root.put("schema_version", SETTINGS_SCHEMA_VERSION)
         root.put(KEY_TIMEOUT, getTimeoutSeconds(context))
         root.put(KEY_CACHE_POLICY, getCachePolicy(context).value)
         root.put(KEY_SATELLITE_CACHE_POLICY, getSatelliteCachePolicy(context).value)
@@ -401,7 +402,10 @@ object SettingsStore {
                 setSatelliteCachePolicy(context, MapCachePolicy.fromValue(root.optInt(KEY_SATELLITE_CACHE_POLICY, getSatelliteCachePolicy(context).value)))
             }
             if (root.has(KEY_PINNED_TAGS)) setPinnedTagIds(context, parseLongArray(root.optJSONArray(KEY_PINNED_TAGS)))
-            if (root.has(KEY_RECENT_TAGS)) saveLongList(context, KEY_RECENT_TAGS, parseLongArray(root.optJSONArray(KEY_RECENT_TAGS)).take(3))
+            if (root.has(KEY_RECENT_TAGS)) {
+                // Validate external backup payload and keep in-app recent tags limit.
+                saveLongList(context, KEY_RECENT_TAGS, parseLongArray(root.optJSONArray(KEY_RECENT_TAGS)).take(MAX_RECENT_TAGS))
+            }
             if (root.has(KEY_ZOOM_BEHAVIOR)) {
                 setZoomButtonBehavior(context, ZoomButtonBehavior.fromValue(root.optInt(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)))
             }
