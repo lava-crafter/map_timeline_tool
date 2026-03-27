@@ -2,6 +2,9 @@
     <string name="app_name">Map Timeline Tool</string>
     <string name="action_add_point">Add</string>
     <string name="action_export_csv">Export CSV</string>
+    <string name="action_export_geojson">Export GeoJSON</string>
+    <string name="action_export_kml">Export KML</string>
+    <string name="action_export_kmz">Export KMZ</string>
     <string name="action_export_zip">Export ZIP</string>
     <string name="action_import_csv">Import CSV</string>
     <string name="action_import_zip">Import ZIP</string>
@@ -165,7 +168,7 @@
     <string name="settings_default_tags_desc">Tags automatically added to new points</string>
     <string name="settings_backup_restore_title">Backup and Restore</string>
     <string name="settings_backup_restore_desc">Import or export data, and share full backup ZIP</string>
-    <string name="settings_help_backup_restore">Use this page to import/export CSV or ZIP. You can also package a full ZIP backup locally and open the system share sheet to send it to other apps or cloud drives.</string>
+    <string name="settings_help_backup_restore">Use this page to import/export CSV, GeoJSON, KML, KMZ, or ZIP. You can also package a full ZIP backup locally and open the system share sheet to send it to other apps or cloud drives.</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_language_follow_system">System default</string>
     <string name="settings_language_english">English</string>
