@@ -66,7 +66,6 @@ fun MapDownloadScreen(
     val context = LocalContext.current
     var mapView: MapView? by remember { mutableStateOf(null) }
     var cacheManagerRef: CacheManager? by remember { mutableStateOf(null) }
-    var selectedBox: BoundingBox? by remember { mutableStateOf(null) }
     var minZoom by remember { mutableStateOf(8) }
     var maxZoom by remember { mutableStateOf(14) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -211,17 +210,6 @@ fun MapDownloadScreen(
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    val map = mapView
-                    if (map == null) {
-                        Toast.makeText(context, context.getString(R.string.toast_map_not_ready), Toast.LENGTH_SHORT).show()
-                        return@OutlinedButton
-                    }
-                    selectedBox = visibleBoundingBox(map)
-                    Toast.makeText(context, context.getString(R.string.map_download_view_selected), Toast.LENGTH_SHORT).show()
-                }) {
-                    Text(text = stringResource(R.string.map_download_use_current_view))
-                }
                 Button(
                     onClick = {
                         val map = mapView
@@ -229,7 +217,7 @@ fun MapDownloadScreen(
                             Toast.makeText(context, context.getString(R.string.toast_map_not_ready), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        val bbox = selectedBox ?: visibleBoundingBox(map)
+                        val bbox = visibleBoundingBox(map)
                         if (bbox == null) {
                             Toast.makeText(context, context.getString(R.string.toast_map_not_ready), Toast.LENGTH_SHORT).show()
                             return@Button
