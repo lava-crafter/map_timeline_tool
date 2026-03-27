@@ -26,7 +26,7 @@ class QuickAddReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val graph = context.appGraph()
-                val location = graph.locationProvider.getFreshLocation(5000L)
+                val location = graph.locationProvider.getFreshLocation(12000L)
                     ?: run {
                         showToast(context, context.getString(R.string.toast_location_failed))
                         return@launch
@@ -41,6 +41,9 @@ class QuickAddReceiver : BroadcastReceiver() {
                     timestamp = timestamp,
                     tagIds = graph.settingsManagementUseCase.getDefaultTagIds().toSet()
                 )
+                if (graph.settingsManagementUseCase.getNoiseEnabled()) {
+                    kotlinx.coroutines.delay(3500L)
+                }
                 showToast(context, context.getString(R.string.toast_point_added))
                 vibrateOnce(context)
                 showAddNotification(context)

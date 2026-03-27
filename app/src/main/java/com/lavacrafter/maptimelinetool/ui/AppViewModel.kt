@@ -144,7 +144,7 @@ class AppViewModel(
             kotlinx.coroutines.delay(timeoutSeconds * 1000L)
             val timestamp = createdAt
             val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-            val location = getFreshLocation(5000L)
+            val location = getFreshLocation(12000L)
             if (location != null) {
                 pointWriteUseCase.addPointWithTags(title, "", location, timestamp, emptySet())
                 _autoAdded.tryEmit(Unit)

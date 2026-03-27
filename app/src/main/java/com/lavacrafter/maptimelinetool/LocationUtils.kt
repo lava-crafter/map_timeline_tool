@@ -47,8 +47,15 @@ object LocationUtils {
 
     @SuppressLint("MissingPermission")
     private suspend fun getCurrentLocationOnce(context: Context): Location = suspendCancellableCoroutine { cont ->
-        val lm = context.getSystemService(LocationManager::class.java)
-        val provider = lm?.getProviders(true)?.firstOrNull()
+        val lm = context.getSystemService(LocationManager::class.java) ?: run {
+            cont.resumeWithException(IllegalStateException("No location manager"))
+            return@suspendCancellableCoroutine
+        }
+        val providers = lm.getProviders(true)
+        val provider = providers.firstOrNull { it == LocationManager.FUSED_PROVIDER }
+            ?: providers.firstOrNull { it == LocationManager.GPS_PROVIDER }
+            ?: providers.firstOrNull { it == LocationManager.NETWORK_PROVIDER }
+            ?: providers.firstOrNull { it != LocationManager.PASSIVE_PROVIDER }
             ?: run {
                 cont.resumeWithException(IllegalStateException("No location provider"))
                 return@suspendCancellableCoroutine
