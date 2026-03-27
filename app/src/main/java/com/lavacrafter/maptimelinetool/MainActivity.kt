@@ -67,6 +67,9 @@ import com.lavacrafter.maptimelinetool.data.toDomain
 import com.lavacrafter.maptimelinetool.data.toUi
 import com.lavacrafter.maptimelinetool.export.CsvExporter
 import com.lavacrafter.maptimelinetool.export.CsvImporter
+import com.lavacrafter.maptimelinetool.export.GeoJsonExporter
+import com.lavacrafter.maptimelinetool.export.KmlExporter
+import com.lavacrafter.maptimelinetool.export.KmzExporter
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.export.ZipImporter
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
@@ -103,6 +106,32 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import org.osmdroid.config.Configuration
+
+private suspend fun buildPointTagNameMap(
+    viewModel: AppViewModel,
+    points: List<com.lavacrafter.maptimelinetool.domain.model.Point>
+): Map<Long, List<String>> {
+    val tags = viewModel.tags.first()
+    val tagNamesById = tags.associate { it.id to it.name }
+    val result = mutableMapOf<Long, List<String>>()
+    points.forEach { point ->
+        val tagNames = viewModel.getTagIdsForPoint(point.id)
+            .mapNotNull { tagId -> tagNamesById[tagId] }
+            .filter { it.isNotBlank() }
+        if (tagNames.isNotEmpty()) {
+            result[point.id] = tagNames
+        }
+    }
+    return result
+}
+
+private enum class ExportFileKind {
+    CSV,
+    GEOJSON,
+    KML,
+    ZIP,
+    KMZ
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
@@ -167,6 +196,7 @@ class MainActivity : AppCompatActivity() {
                 val scope = rememberCoroutineScope()
                 data class PendingExportPayload(
                     val points: List<com.lavacrafter.maptimelinetool.domain.model.Point>,
+                    val kind: ExportFileKind,
                     val zip: Boolean,
                     val zipOptions: ZipExporter.ExportOptions = ZipExporter.ExportOptions(),
                     val zipTags: List<ZipExporter.TagRecord> = emptyList(),
@@ -204,6 +234,99 @@ class MainActivity : AppCompatActivity() {
                             withContext(Dispatchers.IO) {
                                 context.contentResolver.openOutputStream(uri)?.use { output ->
                                     CsvExporter.writeCsv(pending.points, output)
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
+                val exportGeoJsonLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/geo+json")
+                ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    GeoJsonExporter.writeGeoJson(
+                                        points = pending.points,
+                                        outputStream = output,
+                                        includeSensors = true,
+                                        pointTagNamesByPointId = pointTagNameMap,
+                                        photoRelPathResolver = { null }
+                                    )
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
+                val exportKmlLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
+                ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    KmlExporter.writeKml(
+                                        points = pending.points,
+                                        outputStream = output,
+                                        includeSensors = true,
+                                        pointTagNamesByPointId = pointTagNameMap,
+                                        photoRelPathResolver = { null }
+                                    )
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
+                val exportKmzLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kmz")
+                ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    KmzExporter.export(
+                                        points = pending.points,
+                                        outputStream = output,
+                                        resolvePhotoFile = { photoPath ->
+                                            resolvePointPhotoFile(context, photoPath)
+                                        },
+                                        includeSensors = true,
+                                        includePhotos = true,
+                                        pointTagNamesByPointId = pointTagNameMap
+                                    )
                                 } ?: throw IOException("Failed to open output stream")
                             }
                         }.onSuccess {
@@ -513,7 +636,11 @@ class MainActivity : AppCompatActivity() {
                         return@LaunchedEffect
                     }
                     val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                    val payload = PendingExportPayload(points = pointsToExportDomain, zip = false)
+                    val payload = PendingExportPayload(
+                        points = pointsToExportDomain,
+                        kind = ExportFileKind.CSV,
+                        zip = false
+                    )
                     pendingExportPayload = payload
                     exportCsvLauncher.launch("$baseName.csv")
                     pendingExportSelection = null
@@ -531,6 +658,51 @@ class MainActivity : AppCompatActivity() {
                 val exportCsv: () -> Unit = {
                     // Open export flow UI
                     showExportFlow = true
+                }
+                val exportGeoJson: () -> Unit = {
+                    scope.launch {
+                        val allPointsDomain = pointsState.map { it.toDomain() }
+                        val pending = pendingExportPayload
+                        if (pending != null) return@launch
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                        pendingExportPayload = PendingExportPayload(
+                            points = allPointsDomain,
+                            kind = ExportFileKind.GEOJSON,
+                            zip = false
+                        )
+                        exportGeoJsonLauncher.launch("$baseName.geojson")
+                    }
+                }
+                val exportKml: () -> Unit = {
+                    scope.launch {
+                        val allPointsDomain = pointsState.map { it.toDomain() }
+                        val pending = pendingExportPayload
+                        if (pending != null) return@launch
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                        pendingExportPayload = PendingExportPayload(
+                            points = allPointsDomain,
+                            kind = ExportFileKind.KML,
+                            zip = false
+                        )
+                        exportKmlLauncher.launch("$baseName.kml")
+                    }
+                }
+                val exportKmz: () -> Unit = {
+                    scope.launch {
+                        val allPointsDomain = pointsState.map { it.toDomain() }
+                        val pending = pendingExportPayload
+                        if (pending != null) return@launch
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                        pendingExportPayload = PendingExportPayload(
+                            points = allPointsDomain,
+                            kind = ExportFileKind.KMZ,
+                            zip = false
+                        )
+                        exportKmzLauncher.launch("$baseName.kmz")
+                    }
                 }
                 val exportZip: () -> Unit = {
                     zipIncludePoints = true
@@ -779,6 +951,9 @@ class MainActivity : AppCompatActivity() {
                                     onRemoveDownloadedArea = settingsViewModel::removeDownloadedArea,
                                     onDeduplicateDownloadedAreas = settingsViewModel::dedupeDownloadedAreas,
                                     onExportCsv = exportCsv,
+                                    onExportGeoJson = exportGeoJson,
+                                    onExportKml = exportKml,
+                                    onExportKmz = exportKmz,
                                     onExportZip = exportZip,
                                     onShareBackupZip = shareBackupZip,
                                     onImportCsv = { importCsvLauncher.launch("text/*") },
@@ -887,6 +1062,7 @@ class MainActivity : AppCompatActivity() {
                                                 }
                                                 val payload = PendingExportPayload(
                                                     points = allPointsDomain,
+                                                    kind = ExportFileKind.ZIP,
                                                     zip = true,
                                                     zipOptions = ZipExporter.ExportOptions(
                                                         includePoints = includePoints,

@@ -100,6 +100,9 @@ fun SettingsScreen(
     onDeduplicateDownloadedAreas: () -> Unit,
     onOpenMapDownload: () -> Unit,
     onExportCsv: () -> Unit,
+    onExportGeoJson: () -> Unit,
+    onExportKml: () -> Unit,
+    onExportKmz: () -> Unit,
     onExportZip: () -> Unit,
     onShareBackupZip: () -> Unit,
     onImportCsv: () -> Unit,
@@ -129,6 +132,9 @@ fun SettingsScreen(
         )
         SettingsRoute.BackupRestore -> BackupRestoreSettings(
             onExportCsv = onExportCsv,
+            onExportGeoJson = onExportGeoJson,
+            onExportKml = onExportKml,
+            onExportKmz = onExportKmz,
             onExportZip = onExportZip,
             onShareBackupZip = onShareBackupZip,
             onImportCsv = onImportCsv,
@@ -325,6 +331,9 @@ private fun SettingsOverviewScreen(
 @Composable
 private fun BackupRestoreSettings(
     onExportCsv: () -> Unit,
+    onExportGeoJson: () -> Unit,
+    onExportKml: () -> Unit,
+    onExportKmz: () -> Unit,
     onExportZip: () -> Unit,
     onShareBackupZip: () -> Unit,
     onImportCsv: () -> Unit,
@@ -339,6 +348,15 @@ private fun BackupRestoreSettings(
         Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = onExportCsv, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_export_csv))
+            }
+            Button(onClick = onExportGeoJson, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_geojson))
+            }
+            Button(onClick = onExportKml, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_kml))
+            }
+            Button(onClick = onExportKmz, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_kmz))
             }
             Button(onClick = onExportZip, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_export_zip))

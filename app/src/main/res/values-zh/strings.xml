@@ -2,6 +2,9 @@
     <string name="app_name">地图时间线工具</string>
     <string name="action_add_point">打点</string>
     <string name="action_export_csv">导出 CSV</string>
+    <string name="action_export_geojson">导出 GeoJSON</string>
+    <string name="action_export_kml">导出 KML</string>
+    <string name="action_export_kmz">导出 KMZ</string>
     <string name="action_export_zip">导出 ZIP</string>
     <string name="action_import_csv">导入 CSV</string>
     <string name="action_import_zip">导入 ZIP</string>
@@ -268,5 +271,5 @@
     <string name="settings_help_download">选择批量下载的瓦片服务器，启动地图区域下载，或者在此修剪、去重已保存的部分。</string>
     <string name="settings_backup_restore_title">备份与恢复</string>
     <string name="settings_backup_restore_desc">导入或导出数据，并可分享完整备份 ZIP</string>
-    <string name="settings_help_backup_restore">可在本页导入/导出 CSV 或 ZIP。还可先在本地打包完整 ZIP 备份，再唤起系统分享，发送给其他应用或存入网盘。</string>
+    <string name="settings_help_backup_restore">可在本页导入/导出 CSV、GeoJSON、KML、KMZ 或 ZIP。还可先在本地打包完整 ZIP 备份，再唤起系统分享，发送给其他应用或存入网盘。</string>
 </resources>

@@ -33,6 +33,7 @@ object ZipImporter {
     ): ImportStats {
         val photoMapping = mutableMapOf<String, String>()
         var points = emptyList<Point>()
+        var pointsGeoJsonText: String? = null
         var tags = emptyList<ImportedTag>()
         var pointTags = emptyList<ImportedPointTag>()
         var settingsJson: String? = null
@@ -50,6 +51,8 @@ object ZipImporter {
                 }
                 if (normalizedName.equals("points.csv", ignoreCase = true)) {
                     points = CsvImporter.parseCsv(InputStreamReader(zip, Charsets.UTF_8))
+                } else if (normalizedName.equals("points.geojson", ignoreCase = true) || normalizedName.equals("data.geojson", ignoreCase = true)) {
+                    pointsGeoJsonText = runCatching { zip.readBytes().toString(Charsets.UTF_8) }.getOrNull()
                 } else if (normalizedName.equals("tags.csv", ignoreCase = true)) {
                     tags = parseTagsCsv(InputStreamReader(zip, Charsets.UTF_8))
                 } else if (normalizedName.equals("point_tags.csv", ignoreCase = true)) {
@@ -63,6 +66,12 @@ object ZipImporter {
                     settingsJson = runCatching { zip.readBytes().toString(Charsets.UTF_8) }.getOrNull()
                 }
                 zip.closeEntry()
+            }
+        }
+
+        if (points.isEmpty() && !pointsGeoJsonText.isNullOrBlank()) {
+            points = GeoJsonExporter.parsePointsFromGeoJson(pointsGeoJsonText!!) { relPath ->
+                photoMapping[normalizePhotoRelPath(relPath)]
             }
         }
 
