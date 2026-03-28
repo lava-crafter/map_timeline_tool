@@ -70,7 +70,7 @@ object ZipImporter {
         }
 
         if (points.isEmpty() && !pointsGeoJsonText.isNullOrBlank()) {
-            points = GeoJsonExporter.parsePointsFromGeoJson(pointsGeoJsonText!!) { relPath ->
+            points = GeoJsonExporter.parsePointsFromGeoJson(requireNotNull(pointsGeoJsonText)) { relPath ->
                 photoMapping[normalizePhotoRelPath(relPath)]
             }
         }

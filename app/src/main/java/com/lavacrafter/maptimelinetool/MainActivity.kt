@@ -616,15 +616,14 @@ class MainActivity : AppCompatActivity() {
                     val pointsToExport = when (sel.kind) {
                         is ExportKind.All -> pointsState
                         is ExportKind.ByTag -> {
-                            val tagId = (sel.kind as ExportKind.ByTag).tagId
+                            val tagId = sel.kind.tagId
                             viewModel.observePointsForTag(tagId).first()
                         }
                         is ExportKind.ByTime -> {
-                            val k = sel.kind as ExportKind.ByTime
-                            pointsState.filter { it.timestamp in k.fromMs..k.toMs }
+                            pointsState.filter { it.timestamp in sel.kind.fromMs..sel.kind.toMs }
                         }
                         is ExportKind.Manual -> {
-                            val ids = (sel.kind as ExportKind.Manual).ids
+                            val ids = sel.kind.ids
                             pointsState.filter { ids.contains(it.id) }
                         }
                     }
@@ -772,10 +771,12 @@ class MainActivity : AppCompatActivity() {
 
                 Scaffold(
                     topBar = {
-                        TopAppBar(
-                            title = { Text(stringResource(R.string.app_name)) },
-                            actions = { }
-                        )
+                        if (tab != 2) {
+                            TopAppBar(
+                                title = { Text(stringResource(R.string.app_name)) },
+                                actions = { }
+                            )
+                        }
                     },
                     floatingActionButton = {
                         if (tab == 0) {
@@ -1389,7 +1390,7 @@ private fun MapWithListSheet(
 }
 
 private fun vibrateOnce(context: Context) {
-    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+    val vibrator = context.getSystemService(Vibrator::class.java) ?: return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
     } else {
@@ -1472,6 +1473,7 @@ fun observeNetworkStatus(context: Context): androidx.compose.runtime.State<Netwo
       return state
 }
 
+@Suppress("DEPRECATION")
 private fun resolveVpnNetworkStatus(cm: android.net.ConnectivityManager): NetworkStatus {
     val underlying = cm.allNetworks.find {
         val c = cm.getNetworkCapabilities(it)

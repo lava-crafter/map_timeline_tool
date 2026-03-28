@@ -80,6 +80,15 @@ object LocationUtils {
             cont.resume(location)
         }
         cont.invokeOnCancellation { lm.removeUpdates(listener) }
-        lm.requestSingleUpdate(provider, listener, null)
+            requestSingleUpdateCompat(lm, provider, listener)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestSingleUpdateCompat(
+        locationManager: android.location.LocationManager,
+        provider: String,
+        listener: android.location.LocationListener,
+    ) {
+        locationManager.requestSingleUpdate(provider, listener, null)
     }
 }

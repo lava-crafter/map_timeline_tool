@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -178,7 +178,7 @@ fun TagSelectionDialog(
                     Text(stringResource(R.string.action_add))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Divider()
+                HorizontalDivider()
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(tags) { tag ->
                         Row(
@@ -195,7 +195,7 @@ fun TagSelectionDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(tag.name)
                         }
-                        Divider()
+                        HorizontalDivider()
                     }
                 }
             }

@@ -23,6 +23,7 @@ private fun isOnWifi(context: Context): Boolean {
     val caps = cm.getNetworkCapabilities(network) ?: return false
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return true
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+        @Suppress("DEPRECATION")
         val underlying = cm.allNetworks.find {
             val c = cm.getNetworkCapabilities(it)
             c != null && !c.hasTransport(NetworkCapabilities.TRANSPORT_VPN) && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

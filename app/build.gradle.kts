@@ -1,5 +1,6 @@
 import java.io.File
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 val signingPropertiesFile = File(System.getProperty("user.home"), ".android/release-signing.properties")
 val signingProperties = Properties().apply {
@@ -30,19 +31,18 @@ val releaseSigningReady = releaseStoreFile.isFile &&
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.kapt")
-    id("com.google.android.gms.oss-licenses-plugin")
+    id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.lavacrafter.maptimelinetool"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.lavacrafter.maptimelinetool"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 3
         versionName = "0.1.5"
     }
@@ -51,17 +51,9 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     packaging {
@@ -95,6 +87,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.2")
@@ -108,9 +106,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview:1.7.1")
     implementation("com.google.android.material:material:1.12.0")
 
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     implementation("org.osmdroid:osmdroid-android:6.1.18")
     
@@ -119,28 +117,3 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-tasks.whenTaskAdded {
-    if (name.endsWith("OssLicensesTask")) {
-        doLast {
-            val variant = name.removeSuffix("OssLicensesTask").lowercase()
-            val metadataFile = project.layout.buildDirectory.file("generated/third_party_licenses/$variant/res/raw/third_party_license_metadata").get().asFile
-            if (metadataFile.exists()) {
-                val lines = metadataFile.readLines()
-                val uniqueLines = mutableListOf<String>()
-                val seenNames = mutableSetOf<String>()
-                for (line in lines) {
-                    val parts = line.split(" ", limit = 2)
-                    if (parts.size == 2) {
-                        val libName = parts[1].trim()
-                        if (seenNames.add(libName.lowercase())) {
-                            uniqueLines.add(line)
-                        }
-                    } else {
-                        uniqueLines.add(line)
-                    }
-                }
-                metadataFile.writeText(uniqueLines.joinToString("\n") + "\n")
-            }
-        }
-    }
-}

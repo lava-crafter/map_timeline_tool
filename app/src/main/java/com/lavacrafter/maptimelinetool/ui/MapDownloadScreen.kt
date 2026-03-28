@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -37,7 +37,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -49,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lavacrafter.maptimelinetool.LocationUtils
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.ui.DownloadTileSource
@@ -129,7 +129,7 @@ fun MapDownloadScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -137,7 +137,7 @@ fun MapDownloadScreen(
                 actions = {
                     IconButton(onClick = { showHelp = true }) {
                         Icon(
-                            imageVector = Icons.Default.HelpOutline,
+                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
                             contentDescription = "Help"
                         )
                     }
@@ -171,7 +171,7 @@ fun MapDownloadScreen(
                             )
                             setTileSource(tileSource.toOsmdroidSource(viewContext))
                             setMultiTouchControls(true)
-                            setBuiltInZoomControls(false)
+                            disableBuiltInZoomControls()
                             setUseDataConnection(!downloadedOnly)
                             tileProvider.setUseDataConnection(!downloadedOnly)
                             controller.setZoom(12.0)
@@ -413,6 +413,11 @@ fun MapDownloadScreen(
             }
         )
     }
+}
+
+@Suppress("DEPRECATION")
+private fun MapView.disableBuiltInZoomControls() {
+    setBuiltInZoomControls(false)
 }
 
 private fun visibleBoundingBox(map: MapView): BoundingBox? {
