@@ -442,8 +442,7 @@ class MainActivity : AppCompatActivity() {
                     permissionLauncher.launch(
                         arrayOf(
                             Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                            Manifest.permission.CAMERA
+                            Manifest.permission.ACCESS_COARSE_LOCATION
                         )
                     )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
