@@ -193,11 +193,12 @@ fun MapScreen(
             },
             update = { map ->
                 val targetSource = mapTileSourceById(mapTileSourceId).toOsmdroidSource(context)
-                map.setUseDataConnection(!downloadedOnly)
-                map.tileProvider.setUseDataConnection(!downloadedOnly)
                 if (map.tileProvider.tileSource.name() != targetSource.name()) {
                     map.setTileSource(targetSource)
                 }
+                // Important: setUseDataConnection must be called after setTileSource to ensure the internal provider respects it.
+                map.setUseDataConnection(!downloadedOnly)
+                map.tileProvider.setUseDataConnection(!downloadedOnly)
 
                 if (!hasAutoCentered) {
                     if (points.isNotEmpty()) {

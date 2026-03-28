@@ -183,9 +183,9 @@ fun MapDownloadScreen(
                         }
                     },
                     update = { map ->
+                        map.setTileSource(tileSource.toOsmdroidSource(context))
                         map.setUseDataConnection(!downloadedOnly)
                         map.tileProvider.setUseDataConnection(!downloadedOnly)
-                        map.setTileSource(tileSource.toOsmdroidSource(context))
                         mapView = map
                     }
                 )
