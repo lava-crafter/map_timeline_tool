@@ -96,9 +96,26 @@ class AppViewModel(
     }
 
     suspend fun importZipData(importStats: ZipImporter.ImportStats) {
+        val existingPoints = repo.getAll()
+        val existingMap = existingPoints.associateBy {
+            Triple(it.timestamp, it.latitude, it.longitude)
+        }.toMutableMap()
+
         val pointIdByIndex = mutableMapOf<Int, Long>()
         importStats.points.forEachIndexed { index, point ->
-            pointIdByIndex[index] = repo.insert(point.copy(id = 0))
+            val key = Triple(point.timestamp, point.latitude, point.longitude)
+            val existing = existingMap[key]
+            val actualId = if (existing != null) {
+                val merged = point.copy(id = existing.id)
+                repo.update(merged)
+                existingMap[key] = merged
+                existing.id
+            } else {
+                val newId = repo.insert(point.copy(id = 0))
+                existingMap[key] = point.copy(id = newId)
+                newId
+            }
+            pointIdByIndex[index] = actualId
         }
 
         if (importStats.tags.isEmpty() || importStats.pointTags.isEmpty()) return
@@ -144,7 +161,7 @@ class AppViewModel(
             kotlinx.coroutines.delay(timeoutSeconds * 1000L)
             val timestamp = createdAt
             val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-            val location = getFreshLocation(5000L)
+            val location = getFreshLocation(12000L)
             if (location != null) {
                 pointWriteUseCase.addPointWithTags(title, "", location, timestamp, emptySet())
                 _autoAdded.tryEmit(Unit)

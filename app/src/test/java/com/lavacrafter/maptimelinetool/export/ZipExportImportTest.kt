@@ -46,6 +46,7 @@ class ZipExportImportTest {
         }
         assertTrue(entryNames.contains("points.csv"))
         assertTrue(entryNames.any { it.startsWith("photos/") })
+        assertTrue(entryNames.contains("backup_manifest.json"))
     }
 
     @Test
@@ -79,6 +80,7 @@ class ZipExportImportTest {
         }
         assertTrue(entryNames.contains("tags.csv"))
         assertTrue(entryNames.contains("point_tags.csv"))
+        assertTrue(entryNames.contains("backup_manifest.json"))
     }
 
     @Test
@@ -115,6 +117,7 @@ class ZipExportImportTest {
         assertTrue(entryNames.contains("points.csv"))
         assertTrue(entryNames.any { it.startsWith("photos/") })
         assertTrue(entryNames.none { it == "tags.csv" || it == "point_tags.csv" })
+        assertTrue(entryNames.contains("backup_manifest.json"))
     }
 
     @Test
@@ -217,6 +220,7 @@ class ZipExportImportTest {
         }
         assertTrue(entryNames.none { it == "points.csv" })
         assertTrue(entryNames.any { it.startsWith("photos/") })
+        assertTrue(entryNames.contains("backup_manifest.json"))
     }
 
     @Test
@@ -244,5 +248,63 @@ class ZipExportImportTest {
         assertNull(imported.points.first().photoPath)
         assertEquals(1, imported.missingPhotoCount)
         assertNotNull(imported.points.first().title)
+    }
+
+    @Test
+    fun `zip export writes settings json when provided`() {
+        val output = ByteArrayOutputStream()
+
+        ZipExporter.export(
+            points = emptyList(),
+            outputStream = output,
+            resolvePhotoFile = { null },
+            options = ZipExporter.ExportOptions(includePoints = false, includeTags = false, includeSensors = false, includePhotos = false),
+            settingsJsonProvider = { """{"schema_version":1,"timeout_seconds":30}""" },
+            appVersion = "1.2.3"
+        )
+
+        val entryNames = mutableSetOf<String>()
+        var settingsContent: String? = null
+        java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                entryNames.add(entry.name)
+                if (entry.name == "settings.json") {
+                    settingsContent = zip.readBytes().toString(Charsets.UTF_8)
+                }
+                zip.closeEntry()
+            }
+        }
+        assertTrue(entryNames.contains("backup_manifest.json"))
+        assertTrue(entryNames.contains("settings.json"))
+        assertEquals("""{"schema_version":1,"timeout_seconds":30}""", settingsContent)
+    }
+
+    @Test
+    fun `zip import reads settings json and keeps legacy zip compatibility`() {
+        val zipBytes = ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(zipBytes).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("points.csv"))
+            val csv = CsvExporter.buildCsv(
+                listOf(
+                    Point(
+                        timestamp = 1710000000000L,
+                        latitude = 1.0,
+                        longitude = 2.0,
+                        title = "P",
+                        note = "N"
+                    )
+                )
+            )
+            zip.write(csv.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("settings.json"))
+            zip.write("""{"schema_version":1,"follow_system_theme":false}""".toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
+
+        val imported = ZipImporter.importZip(ByteArrayInputStream(zipBytes.toByteArray())) { _, _ -> null }
+        assertEquals(1, imported.points.size)
+        assertEquals("""{"schema_version":1,"follow_system_theme":false}""", imported.settingsJson)
     }
 }

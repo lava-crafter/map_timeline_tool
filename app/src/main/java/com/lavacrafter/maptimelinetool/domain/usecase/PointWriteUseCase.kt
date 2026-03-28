@@ -58,7 +58,23 @@ class PointWriteUseCase(
     }
 
     suspend fun importPoints(pointsList: List<Point>) {
-        pointsList.forEach { repository.insert(it) }
+        val existingPoints = repository.getAll()
+        val existingMap = existingPoints.associateBy {
+            Triple(it.timestamp, it.latitude, it.longitude)
+        }.toMutableMap()
+
+        pointsList.forEach { p ->
+            val key = Triple(p.timestamp, p.latitude, p.longitude)
+            val existing = existingMap[key]
+            if (existing != null) {
+                val merged = p.copy(id = existing.id)
+                repository.update(merged)
+                existingMap[key] = merged
+            } else {
+                val newId = repository.insert(p)
+                existingMap[key] = p.copy(id = newId)
+            }
+        }
     }
 
     private suspend fun buildPoint(

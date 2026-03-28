@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -67,7 +67,7 @@ fun TagListScreen(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
-        Divider()
+        HorizontalDivider()
         Spacer(modifier = Modifier.height(12.dp))
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             items(tags) { tag ->
@@ -90,7 +90,7 @@ fun TagListScreen(
                         }
                     }
                 )
-                Divider()
+                HorizontalDivider()
             }
         }
     }

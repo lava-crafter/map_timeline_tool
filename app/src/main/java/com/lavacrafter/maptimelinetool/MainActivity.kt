@@ -67,6 +67,9 @@ import com.lavacrafter.maptimelinetool.data.toDomain
 import com.lavacrafter.maptimelinetool.data.toUi
 import com.lavacrafter.maptimelinetool.export.CsvExporter
 import com.lavacrafter.maptimelinetool.export.CsvImporter
+import com.lavacrafter.maptimelinetool.export.GeoJsonExporter
+import com.lavacrafter.maptimelinetool.export.KmlExporter
+import com.lavacrafter.maptimelinetool.export.KmzExporter
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.export.ZipImporter
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
@@ -88,6 +91,7 @@ import com.lavacrafter.maptimelinetool.ui.TagListScreen
 import com.lavacrafter.maptimelinetool.ui.TagSelectionDialog
 import com.lavacrafter.maptimelinetool.ui.SettingsRoute
 import com.lavacrafter.maptimelinetool.ui.SettingsScreen
+import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import com.lavacrafter.maptimelinetool.ui.SettingsViewModel
 import com.lavacrafter.maptimelinetool.ui.downloadTileSourceById
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
@@ -102,6 +106,32 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import org.osmdroid.config.Configuration
+
+private suspend fun buildPointTagNameMap(
+    viewModel: AppViewModel,
+    points: List<com.lavacrafter.maptimelinetool.domain.model.Point>
+): Map<Long, List<String>> {
+    val tags = viewModel.tags.first()
+    val tagNamesById = tags.associate { it.id to it.name }
+    val result = mutableMapOf<Long, List<String>>()
+    points.forEach { point ->
+        val tagNames = viewModel.getTagIdsForPoint(point.id)
+            .mapNotNull { tagId -> tagNamesById[tagId] }
+            .filter { it.isNotBlank() }
+        if (tagNames.isNotEmpty()) {
+            result[point.id] = tagNames
+        }
+    }
+    return result
+}
+
+private enum class ExportFileKind {
+    CSV,
+    GEOJSON,
+    KML,
+    ZIP,
+    KMZ
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
@@ -166,6 +196,7 @@ class MainActivity : AppCompatActivity() {
                 val scope = rememberCoroutineScope()
                 data class PendingExportPayload(
                     val points: List<com.lavacrafter.maptimelinetool.domain.model.Point>,
+                    val kind: ExportFileKind,
                     val zip: Boolean,
                     val zipOptions: ZipExporter.ExportOptions = ZipExporter.ExportOptions(),
                     val zipTags: List<ZipExporter.TagRecord> = emptyList(),
@@ -213,6 +244,99 @@ class MainActivity : AppCompatActivity() {
                         pendingExportPayload = null
                     }
                 }
+                val exportGeoJsonLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/geo+json")
+                ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    GeoJsonExporter.writeGeoJson(
+                                        points = pending.points,
+                                        outputStream = output,
+                                        includeSensors = true,
+                                        pointTagNamesByPointId = pointTagNameMap,
+                                        photoRelPathResolver = { null }
+                                    )
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
+                val exportKmlLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
+                ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    KmlExporter.writeKml(
+                                        points = pending.points,
+                                        outputStream = output,
+                                        includeSensors = true,
+                                        pointTagNamesByPointId = pointTagNameMap,
+                                        photoRelPathResolver = { null }
+                                    )
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
+                val exportKmzLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kmz")
+                ) { uri ->
+                    val pending = pendingExportPayload
+                    if (uri == null || pending == null) {
+                        pendingExportPayload = null
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
+                                context.contentResolver.openOutputStream(uri)?.use { output ->
+                                    KmzExporter.export(
+                                        points = pending.points,
+                                        outputStream = output,
+                                        resolvePhotoFile = { photoPath ->
+                                            resolvePointPhotoFile(context, photoPath)
+                                        },
+                                        includeSensors = true,
+                                        includePhotos = true,
+                                        pointTagNamesByPointId = pointTagNameMap
+                                    )
+                                } ?: throw IOException("Failed to open output stream")
+                            }
+                        }.onSuccess {
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, pending.points.size), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExportPayload = null
+                    }
+                }
                 val exportZipLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.CreateDocument("application/zip")
                 ) { uri ->
@@ -233,7 +357,9 @@ class MainActivity : AppCompatActivity() {
                                         },
                                         options = pending.zipOptions,
                                         tags = pending.zipTags,
-                                        pointTagIdsByPointId = pending.pointTagIdsByPointId
+                                        pointTagIdsByPointId = pending.pointTagIdsByPointId,
+                                        settingsJsonProvider = { SettingsStore.exportBackupJson(context) },
+                                        appVersion = packageManager.getPackageInfo(packageName, 0).versionName
                                     )
                                 } ?: throw IOException("Failed to open output stream")
                             }
@@ -276,9 +402,16 @@ class MainActivity : AppCompatActivity() {
                                             toStoredPhotoPath(importedPhotoFile)
                                         }.getOrNull()
                                     }
-                                } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0)
+                                } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0, null)
                             }
                             viewModel.importZipData(imported)
+                            imported.settingsJson?.let { json ->
+                                val restored = SettingsStore.importBackupJson(context, json)
+                                if (restored) {
+                                    settingsViewModel.reloadFromStore()
+                                    applyLanguagePreference(settingsViewModel.uiState.value.languagePreference)
+                                }
+                            }
                             Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
                         }.onFailure {
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
@@ -309,8 +442,7 @@ class MainActivity : AppCompatActivity() {
                     permissionLauncher.launch(
                         arrayOf(
                             Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                            Manifest.permission.CAMERA
+                            Manifest.permission.ACCESS_COARSE_LOCATION
                         )
                     )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -483,15 +615,14 @@ class MainActivity : AppCompatActivity() {
                     val pointsToExport = when (sel.kind) {
                         is ExportKind.All -> pointsState
                         is ExportKind.ByTag -> {
-                            val tagId = (sel.kind as ExportKind.ByTag).tagId
+                            val tagId = sel.kind.tagId
                             viewModel.observePointsForTag(tagId).first()
                         }
                         is ExportKind.ByTime -> {
-                            val k = sel.kind as ExportKind.ByTime
-                            pointsState.filter { it.timestamp in k.fromMs..k.toMs }
+                            pointsState.filter { it.timestamp in sel.kind.fromMs..sel.kind.toMs }
                         }
                         is ExportKind.Manual -> {
-                            val ids = (sel.kind as ExportKind.Manual).ids
+                            val ids = sel.kind.ids
                             pointsState.filter { ids.contains(it.id) }
                         }
                     }
@@ -503,7 +634,11 @@ class MainActivity : AppCompatActivity() {
                         return@LaunchedEffect
                     }
                     val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                    val payload = PendingExportPayload(points = pointsToExportDomain, zip = false)
+                    val payload = PendingExportPayload(
+                        points = pointsToExportDomain,
+                        kind = ExportFileKind.CSV,
+                        zip = false
+                    )
                     pendingExportPayload = payload
                     exportCsvLauncher.launch("$baseName.csv")
                     pendingExportSelection = null
@@ -522,6 +657,51 @@ class MainActivity : AppCompatActivity() {
                     // Open export flow UI
                     showExportFlow = true
                 }
+                val exportGeoJson: () -> Unit = {
+                    scope.launch {
+                        val allPointsDomain = pointsState.map { it.toDomain() }
+                        val pending = pendingExportPayload
+                        if (pending != null) return@launch
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                        pendingExportPayload = PendingExportPayload(
+                            points = allPointsDomain,
+                            kind = ExportFileKind.GEOJSON,
+                            zip = false
+                        )
+                        exportGeoJsonLauncher.launch("$baseName.geojson")
+                    }
+                }
+                val exportKml: () -> Unit = {
+                    scope.launch {
+                        val allPointsDomain = pointsState.map { it.toDomain() }
+                        val pending = pendingExportPayload
+                        if (pending != null) return@launch
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                        pendingExportPayload = PendingExportPayload(
+                            points = allPointsDomain,
+                            kind = ExportFileKind.KML,
+                            zip = false
+                        )
+                        exportKmlLauncher.launch("$baseName.kml")
+                    }
+                }
+                val exportKmz: () -> Unit = {
+                    scope.launch {
+                        val allPointsDomain = pointsState.map { it.toDomain() }
+                        val pending = pendingExportPayload
+                        if (pending != null) return@launch
+                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
+                        pendingExportPayload = PendingExportPayload(
+                            points = allPointsDomain,
+                            kind = ExportFileKind.KMZ,
+                            zip = false
+                        )
+                        exportKmzLauncher.launch("$baseName.kmz")
+                    }
+                }
                 val exportZip: () -> Unit = {
                     zipIncludePoints = true
                     zipIncludeTags = true
@@ -529,13 +709,73 @@ class MainActivity : AppCompatActivity() {
                     zipIncludePhotos = true
                     showZipExportOptions = true
                 }
+                val shareBackupZip: () -> Unit = {
+                    scope.launch {
+                        runCatching {
+                            val totalPointCount = pointsState.size
+                            val shareUri = withContext(Dispatchers.IO) {
+                                val allPointsDomain = pointsState.map { it.toDomain() }
+                                val pointTagMap = mutableMapOf<Long, List<Long>>()
+                                allPointsDomain.forEach { point ->
+                                    val tagIds = viewModel.getTagIdsForPoint(point.id)
+                                    if (tagIds.isNotEmpty()) {
+                                        pointTagMap[point.id] = tagIds
+                                    }
+                                }
+                                val usedTagIds = pointTagMap.values.flatten().toSet()
+                                val zipTags = tagsState
+                                    .filter { usedTagIds.contains(it.id) }
+                                    .map { ZipExporter.TagRecord(it.id, it.name) }
+                                val backupDir = java.io.File(context.filesDir, "shared_backups").apply { mkdirs() }
+                                val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
+                                val backupZip = java.io.File(backupDir, "map_timeline_backup_${sdf.format(java.util.Date())}.zip")
+                                backupZip.outputStream().buffered().use { output ->
+                                    ZipExporter.export(
+                                        points = allPointsDomain,
+                                        outputStream = output,
+                                        resolvePhotoFile = { photoPath ->
+                                            resolvePointPhotoFile(context, photoPath)
+                                        },
+                                        options = ZipExporter.ExportOptions(
+                                            includePoints = true,
+                                            includeTags = true,
+                                            includeSensors = true,
+                                            includePhotos = true
+                                        ),
+                                        tags = zipTags,
+                                        pointTagIdsByPointId = pointTagMap,
+                                        settingsJsonProvider = { SettingsStore.exportBackupJson(context) },
+                                        appVersion = packageManager.getPackageInfo(packageName, 0).versionName
+                                    )
+                                }
+                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", backupZip)
+                            }
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_STREAM, shareUri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(
+                                Intent.createChooser(
+                                    shareIntent,
+                                    context.getString(R.string.action_share_backup_zip)
+                                )
+                            )
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, totalPointCount), Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
 
                 Scaffold(
                     topBar = {
-                        TopAppBar(
-                            title = { Text(stringResource(R.string.app_name)) },
-                            actions = { }
-                        )
+                        if (tab != 2) {
+                            TopAppBar(
+                                title = { Text(stringResource(R.string.app_name)) },
+                                actions = { }
+                            )
+                        }
                     },
                     floatingActionButton = {
                         if (tab == 0) {
@@ -593,7 +833,7 @@ class MainActivity : AppCompatActivity() {
                                 isActive = tab == 0,
                                 zoomBehavior = settingsState.zoomBehavior,
                                 markerScale = settingsState.markerScale,
-                                downloadedOnly = settingsState.downloadedAreas.isNotEmpty() || run {
+                                downloadedOnly = run {
                                     val isSatellite = settingsState.mapTileSourceId == "eox_sentinel2_cloudless_2024"
                                     val policy = if (isSatellite) settingsState.satelliteCachePolicy else settingsState.cachePolicy
                                     policy == MapCachePolicy.DISABLED || (policy == MapCachePolicy.WIFI_ONLY && networkStatus != NetworkStatus.WIFI)
@@ -646,7 +886,12 @@ class MainActivity : AppCompatActivity() {
                                     },
                                     tileSource = downloadTileSource,
                                     useMultiThreadDownload = settingsState.downloadMultiThreadEnabled,
-                                    downloadThreadCount = settingsState.downloadThreadCount
+                                    downloadThreadCount = settingsState.downloadThreadCount,
+                                    downloadedOnly = run {
+                                        val isSatellite = downloadTileSource.id.contains("satellite", true) || downloadTileSource.id.contains("eox", true)
+                                        val policy = if (isSatellite) settingsState.satelliteCachePolicy else settingsState.cachePolicy
+                                        policy == MapCachePolicy.DISABLED || (policy == MapCachePolicy.WIFI_ONLY && networkStatus != NetworkStatus.WIFI)
+                                    }
                                 )
                             } else {
                                 SettingsScreen(
@@ -711,7 +956,11 @@ class MainActivity : AppCompatActivity() {
                                     onRemoveDownloadedArea = settingsViewModel::removeDownloadedArea,
                                     onDeduplicateDownloadedAreas = settingsViewModel::dedupeDownloadedAreas,
                                     onExportCsv = exportCsv,
+                                    onExportGeoJson = exportGeoJson,
+                                    onExportKml = exportKml,
+                                    onExportKmz = exportKmz,
                                     onExportZip = exportZip,
+                                    onShareBackupZip = shareBackupZip,
                                     onImportCsv = { importCsvLauncher.launch("text/*") },
                                     onImportZip = { importZipLauncher.launch("application/zip") },
                                     onClearCache = {
@@ -818,6 +1067,7 @@ class MainActivity : AppCompatActivity() {
                                                 }
                                                 val payload = PendingExportPayload(
                                                     points = allPointsDomain,
+                                                    kind = ExportFileKind.ZIP,
                                                     zip = true,
                                                     zipOptions = ZipExporter.ExportOptions(
                                                         includePoints = includePoints,
@@ -1139,7 +1389,7 @@ private fun MapWithListSheet(
 }
 
 private fun vibrateOnce(context: Context) {
-    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+    val vibrator = context.getSystemService(Vibrator::class.java) ?: return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
     } else {
@@ -1222,6 +1472,7 @@ fun observeNetworkStatus(context: Context): androidx.compose.runtime.State<Netwo
       return state
 }
 
+@Suppress("DEPRECATION")
 private fun resolveVpnNetworkStatus(cm: android.net.ConnectivityManager): NetworkStatus {
     val underlying = cm.allNetworks.find {
         val c = cm.getNetworkCapabilities(it)

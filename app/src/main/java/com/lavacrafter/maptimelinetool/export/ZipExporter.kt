@@ -11,6 +11,7 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.json.JSONObject
 
 object ZipExporter {
     data class ExportOptions(
@@ -43,11 +44,14 @@ object ZipExporter {
         resolvePhotoFile: (String) -> File?,
         options: ExportOptions = ExportOptions(),
         tags: List<TagRecord> = emptyList(),
-        pointTagIdsByPointId: Map<Long, List<Long>> = emptyMap()
+        pointTagIdsByPointId: Map<Long, List<Long>> = emptyMap(),
+        settingsJsonProvider: (() -> String?)? = null,
+        appVersion: String? = null
     ): ExportStats {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
+        val includeTagsInArchive = options.includePoints && options.includeTags
         val photoEntries = mutableMapOf<String, File>()
         val pointPhotoMeta = points.map { point ->
             buildPhotoMeta(
@@ -108,7 +112,7 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
-            if (options.includePoints && options.includeTags) {
+            if (includeTagsInArchive) {
                 val pointsWithIndex = points.withIndex().associate { (index, point) -> point.id to index }
                 val usedTagIds = pointTagIdsByPointId
                     .filterKeys { pointsWithIndex.containsKey(it) }
@@ -142,6 +146,33 @@ object ZipExporter {
             photoEntries.forEach { (relPath, file) ->
                 zip.putNextEntry(ZipEntry(relPath))
                 file.inputStream().buffered().use { input -> input.copyTo(zip) }
+                zip.closeEntry()
+            }
+
+            val settingsJson = settingsJsonProvider?.invoke()?.takeIf { it.isNotBlank() }
+            val manifestJson = JSONObject().apply {
+                put("backup_version", 1)
+                put("created_at_utc", sdf.format(Date()))
+                put("app_version", appVersion.orEmpty())
+                put("sections", JSONObject().apply {
+                    put("points", options.includePoints)
+                    put("tags", includeTagsInArchive)
+                    put("photos", options.includePhotos)
+                    put("settings", settingsJson != null)
+                })
+                put("counts", JSONObject().apply {
+                    put("points", if (options.includePoints) points.size else 0)
+                    put("tags", if (includeTagsInArchive) tags.size else 0)
+                    put("photos", photoEntries.size)
+                })
+            }.toString()
+            zip.putNextEntry(ZipEntry("backup_manifest.json"))
+            zip.write(manifestJson.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
+            if (settingsJson != null) {
+                zip.putNextEntry(ZipEntry("settings.json"))
+                zip.write(settingsJson.toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
             }
         }

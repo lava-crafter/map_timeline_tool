@@ -16,7 +16,7 @@ import org.osmdroid.views.overlay.mylocation.IMyLocationConsumer
 import org.osmdroid.views.overlay.mylocation.IMyLocationProvider
 
 class HeadingLocationOverlay(private val context: Context) : Overlay(), IMyLocationConsumer, IOrientationConsumer {
-    private var location: Location? = null
+    var location: Location? = null
     private var bearing: Float = 0f
     private val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2196F3")

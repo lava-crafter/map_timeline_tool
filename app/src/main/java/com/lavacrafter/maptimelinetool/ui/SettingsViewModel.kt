@@ -23,8 +23,20 @@ class SettingsViewModel(
             settingsUseCase.setMapTileSourceId(fallbackId)
         }
 
-    private val _uiState = MutableStateFlow(
-        SettingsUiState(
+    private val _uiState = MutableStateFlow(buildSettingsUiState(initialMapTileSourceId))
+    val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    fun reloadFromStore() {
+        val validMapTileSourceId = settingsUseCase.getMapTileSourceId()
+            .takeIf { sourceId -> mapTileSources.any { it.id == sourceId } }
+            ?: mapTileSources.first().id.also { fallbackId ->
+                settingsUseCase.setMapTileSourceId(fallbackId)
+            }
+        _uiState.value = buildSettingsUiState(validMapTileSourceId)
+    }
+
+    private fun buildSettingsUiState(validMapTileSourceId: String): SettingsUiState {
+        return SettingsUiState(
             followSystemTheme = settingsUseCase.getFollowSystemTheme(),
             languagePreference = settingsUseCase.getLanguagePreference().toUi(),
             timeoutSeconds = settingsUseCase.getTimeoutSeconds(),
@@ -48,10 +60,9 @@ class SettingsViewModel(
             gyroscopeEnabled = settingsUseCase.getGyroscopeEnabled(),
             magnetometerEnabled = settingsUseCase.getMagnetometerEnabled(),
             noiseEnabled = settingsUseCase.getNoiseEnabled(),
-            mapTileSourceId = initialMapTileSourceId
+            mapTileSourceId = validMapTileSourceId
         )
-    )
-    val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    }
 
     fun setDarkTheme(enabled: Boolean) {
         _uiState.update { it.copy(isDarkTheme = enabled) }

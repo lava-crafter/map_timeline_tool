@@ -14,7 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -146,6 +152,7 @@ fun MapScreen(
 
     var lastOverlaySignature by remember { mutableStateOf<List<Long>>(emptyList()) }
     var overlaysReady by remember { mutableStateOf(false) }
+    var hasAutoCentered by remember { mutableStateOf(false) }
 
     Box {
         AndroidView(
@@ -186,11 +193,27 @@ fun MapScreen(
             },
             update = { map ->
                 val targetSource = mapTileSourceById(mapTileSourceId).toOsmdroidSource(context)
-                map.setUseDataConnection(!downloadedOnly)
-                map.tileProvider.setUseDataConnection(!downloadedOnly)
                 if (map.tileProvider.tileSource.name() != targetSource.name()) {
                     map.setTileSource(targetSource)
                 }
+                // Important: setUseDataConnection must be called after setTileSource to ensure the internal provider respects it.
+                map.setUseDataConnection(!downloadedOnly)
+                map.tileProvider.setUseDataConnection(!downloadedOnly)
+
+                if (!hasAutoCentered) {
+                    if (points.isNotEmpty()) {
+                        val last = points.first()
+                        map.controller.setZoom(16.0)
+                        map.controller.setCenter(GeoPoint(last.latitude, last.longitude))
+                        hasAutoCentered = true
+                    } else if (headingOverlay.location != null) {
+                        val loc = headingOverlay.location!!
+                        map.controller.setZoom(16.0)
+                        map.controller.setCenter(GeoPoint(loc.latitude, loc.longitude))
+                        hasAutoCentered = true
+                    }
+                }
+
                 val signature = points.map { it.id }
                 if (overlaysReady && signature == lastOverlaySignature) {
                     map.invalidate()
@@ -282,7 +305,10 @@ fun MapScreen(
                 }
             }
         ) {
-            Text(stringResource(R.string.action_center))
+            Icon(
+                imageVector = Icons.Default.MyLocation,
+                contentDescription = stringResource(R.string.action_center)
+            )
         }
 
         val shouldShowZoom = when (zoomBehavior) {
@@ -305,7 +331,10 @@ fun MapScreen(
                 onMapTileSourceChange(mapTileSources[nextIndex].id)
             }
         ) {
-            Text(stringResource(R.string.action_cycle_map_layer))
+            Icon(
+                imageVector = Icons.Default.Layers,
+                contentDescription = stringResource(R.string.action_cycle_map_layer)
+            )
         }
 
         if (shouldShowZoom) {
@@ -319,13 +348,19 @@ fun MapScreen(
                     modifier = Modifier.size(44.dp),
                     onClick = { mapView?.controller?.zoomIn() }
                 ) {
-                    Text("+")
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Zoom In"
+                    )
                 }
                 FloatingActionButton(
                     modifier = Modifier.size(44.dp),
                     onClick = { mapView?.controller?.zoomOut() }
                 ) {
-                    Text("-")
+                    Icon(
+                        imageVector = Icons.Default.Remove,
+                        contentDescription = "Zoom Out"
+                    )
                 }
             }
         }

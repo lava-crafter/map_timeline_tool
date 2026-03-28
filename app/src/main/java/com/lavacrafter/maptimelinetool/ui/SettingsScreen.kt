@@ -16,12 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -34,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -100,7 +100,11 @@ fun SettingsScreen(
     onDeduplicateDownloadedAreas: () -> Unit,
     onOpenMapDownload: () -> Unit,
     onExportCsv: () -> Unit,
+    onExportGeoJson: () -> Unit,
+    onExportKml: () -> Unit,
+    onExportKmz: () -> Unit,
     onExportZip: () -> Unit,
+    onShareBackupZip: () -> Unit,
     onImportCsv: () -> Unit,
     onImportZip: () -> Unit,
     onClearCache: () -> Unit,
@@ -123,12 +127,19 @@ fun SettingsScreen(
             onFollowSystemThemeChange = onFollowSystemThemeChange,
             languagePreference = languagePreference,
             onNavigateTo = onNavigateTo,
-            onExportCsv = onExportCsv,
-            onExportZip = onExportZip,
-            onImportCsv = onImportCsv,
-            onImportZip = onImportZip,
             onClearCache = onClearCache,
             onOpenAbout = onOpenAbout
+        )
+        SettingsRoute.BackupRestore -> BackupRestoreSettings(
+            onExportCsv = onExportCsv,
+            onExportGeoJson = onExportGeoJson,
+            onExportKml = onExportKml,
+            onExportKmz = onExportKmz,
+            onExportZip = onExportZip,
+            onShareBackupZip = onShareBackupZip,
+            onImportCsv = onImportCsv,
+            onImportZip = onImportZip,
+            onBack = onNavigateBack
         )
         SettingsRoute.Language -> LanguageSettings(
             languagePreference = languagePreference,
@@ -209,10 +220,6 @@ private fun SettingsOverviewScreen(
     onFollowSystemThemeChange: (Boolean) -> Unit,
     languagePreference: LanguagePreference,
     onNavigateTo: (SettingsRoute) -> Unit,
-    onExportCsv: () -> Unit,
-    onExportZip: () -> Unit,
-    onImportCsv: () -> Unit,
-    onImportZip: () -> Unit,
     onClearCache: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
@@ -223,7 +230,7 @@ private fun SettingsOverviewScreen(
                 title = { Text(stringResource(R.string.settings_title)) },
                 actions = {
                     IconButton(onClick = { showHelp = true }) {
-                        Icon(Icons.Default.Help, contentDescription = stringResource(R.string.settings_help_title))
+                        Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = stringResource(R.string.settings_help_title))
                     }
                 }
             )
@@ -259,7 +266,6 @@ private fun SettingsOverviewScreen(
                     LanguagePreference.CHINESE_SIMPLIFIED -> "简体中文"
                     LanguagePreference.SPANISH -> "Español"
                     LanguagePreference.CHINESE_TRADITIONAL -> "繁体中文"
-                    else -> stringResource(R.string.language_follow_system)
                 },
                 onClick = { onNavigateTo(SettingsRoute.Language) }
             )
@@ -284,7 +290,7 @@ private fun SettingsOverviewScreen(
                 onClick = { onNavigateTo(SettingsRoute.Cache) }
             )
             SettingsOverviewItem(
-                title = stringResource(R.string.settings_download_title) + " " + stringResource(R.string.settings_experimental_label),
+                title = stringResource(R.string.settings_download_title),
                 description = stringResource(R.string.settings_download_desc),
                 onClick = { onNavigateTo(SettingsRoute.Download) }
             )
@@ -293,19 +299,11 @@ private fun SettingsOverviewScreen(
                 description = stringResource(R.string.settings_default_tags_desc),
                 onClick = { onNavigateTo(SettingsRoute.DefaultTags) }
             )
-
-            Button(onClick = onExportCsv, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_export_csv))
-            }
-            Button(onClick = onExportZip, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_export_zip))
-            }
-            Button(onClick = onImportCsv, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_import_csv))
-            }
-            Button(onClick = onImportZip, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_import_zip))
-            }
+            SettingsOverviewItem(
+                title = stringResource(R.string.settings_backup_restore_title),
+                description = stringResource(R.string.settings_backup_restore_desc),
+                onClick = { onNavigateTo(SettingsRoute.BackupRestore) }
+            )
             OutlinedButton(onClick = onClearCache, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.action_clear_cache))
             }
@@ -326,6 +324,52 @@ private fun SettingsOverviewScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun BackupRestoreSettings(
+    onExportCsv: () -> Unit,
+    onExportGeoJson: () -> Unit,
+    onExportKml: () -> Unit,
+    onExportKmz: () -> Unit,
+    onExportZip: () -> Unit,
+    onShareBackupZip: () -> Unit,
+    onImportCsv: () -> Unit,
+    onImportZip: () -> Unit,
+    onBack: () -> Unit
+) {
+    SettingsSubpageScaffold(
+        title = stringResource(R.string.settings_backup_restore_title),
+        tutorialText = stringResource(R.string.settings_help_backup_restore),
+        onBack = onBack
+    ) { modifier ->
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onExportCsv, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_csv))
+            }
+            Button(onClick = onExportGeoJson, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_geojson))
+            }
+            Button(onClick = onExportKml, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_kml))
+            }
+            Button(onClick = onExportKmz, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_kmz))
+            }
+            Button(onClick = onExportZip, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_export_zip))
+            }
+            Button(onClick = onShareBackupZip, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_share_backup_zip))
+            }
+            Button(onClick = onImportCsv, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_import_csv))
+            }
+            Button(onClick = onImportZip, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_import_zip))
+            }
+        }
     }
 }
 
@@ -367,7 +411,7 @@ private fun SettingsOverviewItem(title: String, description: String, onClick: ()
         Text(text = title, style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = description, style = MaterialTheme.typography.bodyMedium)
-        Divider(modifier = Modifier.padding(top = 12.dp))
+        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
     }
 }
 
@@ -666,7 +710,7 @@ private fun DownloadSettings(
     onBack: () -> Unit
 ) {
     SettingsSubpageScaffold(
-        title = stringResource(R.string.settings_download_title) + " " + stringResource(R.string.settings_experimental_label),
+        title = stringResource(R.string.settings_download_title),
         tutorialText = stringResource(R.string.settings_help_download),
         onBack = onBack
     ) { modifier ->
@@ -738,7 +782,7 @@ private fun DownloadSettings(
                             }
                         }
                     )
-                    Divider()
+                    HorizontalDivider()
                 }
                 OutlinedButton(onClick = onDeduplicateDownloadedAreas, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_deduplicate))
@@ -762,12 +806,12 @@ private fun SettingsSubpageScaffold(
                 title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { showHelp = true }) {
-                        Icon(Icons.Default.Help, contentDescription = stringResource(R.string.settings_help_title))
+                        Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = stringResource(R.string.settings_help_title))
                     }
                 }
             )
@@ -847,7 +891,7 @@ fun LanguageSettings(
                 title = { Text(stringResource(R.string.settings_language_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 }
             )
@@ -878,13 +922,13 @@ fun LanguageSettings(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onLanguagePreferenceChange(pref as LanguagePreference) }
+                        .clickable { onLanguagePreferenceChange(pref) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = languagePreference == pref,
-                        onClick = { onLanguagePreferenceChange(pref as LanguagePreference) }
+                        onClick = { onLanguagePreferenceChange(pref) }
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     if (label is Int) {

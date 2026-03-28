@@ -24,7 +24,7 @@ data class SensorSnapshot(
     val magnetometerZ: Float? = null
 )
 
-suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 500L): SensorSnapshot =
+suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 1500L): SensorSnapshot =
     suspendCancellableCoroutine { continuation ->
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         if (sensorManager == null) {
@@ -108,7 +108,7 @@ suspend fun captureSensorSnapshot(context: Context, timeoutMs: Long = 500L): Sen
             val registered = sensorManager.registerListener(
                 listener,
                 sensor,
-                SensorManager.SENSOR_DELAY_NORMAL,
+                SensorManager.SENSOR_DELAY_FASTEST,
                 callbackHandler
             )
             if (registered) {

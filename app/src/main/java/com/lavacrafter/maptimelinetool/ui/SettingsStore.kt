@@ -28,6 +28,8 @@ object SettingsStore {
     private const val KEY_GYROSCOPE_ENABLED = "gyroscope_enabled"
     private const val KEY_MAGNETOMETER_ENABLED = "magnetometer_enabled"
     private const val KEY_NOISE_ENABLED = "noise_enabled"
+    private const val SETTINGS_SCHEMA_VERSION = 1
+    private const val MAX_RECENT_TAGS = 3
 
     fun getTimeoutSeconds(context: Context): Int {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -84,7 +86,7 @@ object SettingsStore {
         val updated = getRecentTagIds(context).toMutableList().apply {
             remove(tagId)
             add(0, tagId)
-            while (size > 3) removeLast()
+            while (size > MAX_RECENT_TAGS) removeLast()
         }
         saveLongList(context, KEY_RECENT_TAGS, updated)
         return updated
@@ -349,6 +351,115 @@ object SettingsStore {
         return deduped
     }
 
+    fun exportBackupJson(context: Context): String {
+        val root = org.json.JSONObject()
+        root.put("schema_version", SETTINGS_SCHEMA_VERSION)
+        root.put(KEY_TIMEOUT, getTimeoutSeconds(context))
+        root.put(KEY_CACHE_POLICY, getCachePolicy(context).value)
+        root.put(KEY_SATELLITE_CACHE_POLICY, getSatelliteCachePolicy(context).value)
+        root.put(KEY_PINNED_TAGS, org.json.JSONArray(getPinnedTagIds(context)))
+        root.put(KEY_RECENT_TAGS, org.json.JSONArray(getRecentTagIds(context)))
+        root.put(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)
+        root.put(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)
+        root.put(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context))
+        root.put(KEY_DEFAULT_TAGS, org.json.JSONArray(getDefaultTagIds(context)))
+        root.put(KEY_MARKER_SCALE, getMarkerScale(context).toDouble())
+        root.put(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context))
+        root.put(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context))
+        root.put(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context))
+        root.put(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context))
+        root.put(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context))
+        root.put(KEY_PHOTO_COMPRESS_FORMAT, getPhotoCompressFormat(context).value)
+        root.put(KEY_PHOTO_COMPRESS_QUALITY, getPhotoCompressQuality(context))
+        root.put(KEY_PRESSURE_ENABLED, getPressureEnabled(context))
+        root.put(KEY_AMBIENT_LIGHT_ENABLED, getAmbientLightEnabled(context))
+        root.put(KEY_ACCELEROMETER_ENABLED, getAccelerometerEnabled(context))
+        root.put(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context))
+        root.put(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context))
+        root.put(KEY_NOISE_ENABLED, getNoiseEnabled(context))
+        val downloadedAreas = org.json.JSONArray()
+        getDownloadedAreas(context).forEach { area ->
+            val areaObj = org.json.JSONObject()
+            areaObj.put("north", area.north)
+            areaObj.put("south", area.south)
+            areaObj.put("east", area.east)
+            areaObj.put("west", area.west)
+            areaObj.put("minZoom", area.minZoom)
+            areaObj.put("maxZoom", area.maxZoom)
+            areaObj.put("createdAt", area.createdAt)
+            downloadedAreas.put(areaObj)
+        }
+        root.put(KEY_DOWNLOADED_AREAS, downloadedAreas)
+        return root.toString()
+    }
+
+    fun importBackupJson(context: Context, json: String): Boolean {
+        return runCatching {
+            val root = org.json.JSONObject(json)
+            if (root.has(KEY_TIMEOUT)) setTimeoutSeconds(context, root.optInt(KEY_TIMEOUT, getTimeoutSeconds(context)))
+            if (root.has(KEY_CACHE_POLICY)) setCachePolicy(context, MapCachePolicy.fromValue(root.optInt(KEY_CACHE_POLICY, getCachePolicy(context).value)))
+            if (root.has(KEY_SATELLITE_CACHE_POLICY)) {
+                setSatelliteCachePolicy(context, MapCachePolicy.fromValue(root.optInt(KEY_SATELLITE_CACHE_POLICY, getSatelliteCachePolicy(context).value)))
+            }
+            if (root.has(KEY_PINNED_TAGS)) setPinnedTagIds(context, parseLongArray(root.optJSONArray(KEY_PINNED_TAGS)))
+            if (root.has(KEY_RECENT_TAGS)) {
+                // Validate external backup payload and keep in-app recent tags limit.
+                saveLongList(context, KEY_RECENT_TAGS, parseLongArray(root.optJSONArray(KEY_RECENT_TAGS)).take(MAX_RECENT_TAGS))
+            }
+            if (root.has(KEY_ZOOM_BEHAVIOR)) {
+                setZoomButtonBehavior(context, ZoomButtonBehavior.fromValue(root.optInt(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)))
+            }
+            if (root.has(KEY_LANGUAGE_PREFERENCE)) {
+                setLanguagePreference(context, LanguagePreference.fromValue(root.optInt(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)))
+            }
+            if (root.has(KEY_FOLLOW_SYSTEM_THEME)) setFollowSystemTheme(context, root.optBoolean(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context)))
+            if (root.has(KEY_DEFAULT_TAGS)) setDefaultTagIds(context, parseLongArray(root.optJSONArray(KEY_DEFAULT_TAGS)))
+            if (root.has(KEY_MARKER_SCALE)) setMarkerScale(context, root.optDouble(KEY_MARKER_SCALE, getMarkerScale(context).toDouble()).toFloat())
+            if (root.has(KEY_MAP_TILE_SOURCE)) setMapTileSourceId(context, root.optString(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context)))
+            if (root.has(KEY_DOWNLOAD_TILE_SOURCE)) setDownloadTileSourceId(context, root.optString(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context)))
+            if (root.has(KEY_DOWNLOAD_MULTI_THREAD)) {
+                setDownloadMultiThreadEnabled(context, root.optBoolean(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context)))
+            }
+            if (root.has(KEY_DOWNLOAD_THREAD_COUNT)) {
+                setDownloadThreadCount(context, root.optInt(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context)))
+            }
+            if (root.has(KEY_PHOTO_LOSSLESS_ENABLED)) {
+                setPhotoLosslessEnabled(context, root.optBoolean(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context)))
+            }
+            if (root.has(KEY_PHOTO_COMPRESS_FORMAT)) {
+                setPhotoCompressFormat(context, PhotoCompressFormat.fromValue(root.optInt(KEY_PHOTO_COMPRESS_FORMAT, getPhotoCompressFormat(context).value)))
+            }
+            if (root.has(KEY_PHOTO_COMPRESS_QUALITY)) setPhotoCompressQuality(context, root.optInt(KEY_PHOTO_COMPRESS_QUALITY, getPhotoCompressQuality(context)))
+            if (root.has(KEY_PRESSURE_ENABLED)) setPressureEnabled(context, root.optBoolean(KEY_PRESSURE_ENABLED, getPressureEnabled(context)))
+            if (root.has(KEY_AMBIENT_LIGHT_ENABLED)) setAmbientLightEnabled(context, root.optBoolean(KEY_AMBIENT_LIGHT_ENABLED, getAmbientLightEnabled(context)))
+            if (root.has(KEY_ACCELEROMETER_ENABLED)) setAccelerometerEnabled(context, root.optBoolean(KEY_ACCELEROMETER_ENABLED, getAccelerometerEnabled(context)))
+            if (root.has(KEY_GYROSCOPE_ENABLED)) setGyroscopeEnabled(context, root.optBoolean(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context)))
+            if (root.has(KEY_MAGNETOMETER_ENABLED)) setMagnetometerEnabled(context, root.optBoolean(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context)))
+            if (root.has(KEY_NOISE_ENABLED)) setNoiseEnabled(context, root.optBoolean(KEY_NOISE_ENABLED, getNoiseEnabled(context)))
+            if (root.has(KEY_DOWNLOADED_AREAS)) {
+                val areasArray = root.optJSONArray(KEY_DOWNLOADED_AREAS) ?: org.json.JSONArray()
+                val areas = buildList {
+                    for (i in 0 until areasArray.length()) {
+                        val obj = areasArray.optJSONObject(i) ?: continue
+                        add(
+                            DownloadedArea(
+                                north = obj.optDouble("north"),
+                                south = obj.optDouble("south"),
+                                east = obj.optDouble("east"),
+                                west = obj.optDouble("west"),
+                                minZoom = obj.optInt("minZoom", 0),
+                                maxZoom = obj.optInt("maxZoom", 0),
+                                createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                }
+                saveDownloadedAreas(context, dedupeAreas(areas))
+            }
+            true
+        }.getOrDefault(false)
+    }
+
     private fun saveDownloadedAreas(context: Context, areas: List<DownloadedArea>) {
         val array = org.json.JSONArray()
         areas.forEach { area ->
@@ -408,6 +519,20 @@ object SettingsStore {
             maxZoom = maxOf(a.maxZoom, b.maxZoom),
             createdAt = minOf(a.createdAt, b.createdAt)
         )
+    }
+
+    private fun parseLongArray(array: org.json.JSONArray?): List<Long> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val value = when (val raw = array.opt(i)) {
+                    is Number -> raw.toLong()
+                    is String -> raw.toLongOrNull()
+                    else -> null
+                }
+                if (value != null) add(value)
+            }
+        }
     }
 
     private fun parseLongList(context: Context, key: String): List<Long> {
