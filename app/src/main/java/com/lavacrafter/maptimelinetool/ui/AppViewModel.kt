@@ -96,9 +96,26 @@ class AppViewModel(
     }
 
     suspend fun importZipData(importStats: ZipImporter.ImportStats) {
+        val existingPoints = repo.getAll()
+        val existingMap = existingPoints.associateBy {
+            Triple(it.timestamp, it.latitude, it.longitude)
+        }.toMutableMap()
+
         val pointIdByIndex = mutableMapOf<Int, Long>()
         importStats.points.forEachIndexed { index, point ->
-            pointIdByIndex[index] = repo.insert(point.copy(id = 0))
+            val key = Triple(point.timestamp, point.latitude, point.longitude)
+            val existing = existingMap[key]
+            val actualId = if (existing != null) {
+                val merged = point.copy(id = existing.id)
+                repo.update(merged)
+                existingMap[key] = merged
+                existing.id
+            } else {
+                val newId = repo.insert(point.copy(id = 0))
+                existingMap[key] = point.copy(id = newId)
+                newId
+            }
+            pointIdByIndex[index] = actualId
         }
 
         if (importStats.tags.isEmpty() || importStats.pointTags.isEmpty()) return

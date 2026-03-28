@@ -118,3 +118,29 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
+
+tasks.whenTaskAdded {
+    if (name.endsWith("OssLicensesTask")) {
+        doLast {
+            val variant = name.removeSuffix("OssLicensesTask").lowercase()
+            val metadataFile = project.layout.buildDirectory.file("generated/third_party_licenses/$variant/res/raw/third_party_license_metadata").get().asFile
+            if (metadataFile.exists()) {
+                val lines = metadataFile.readLines()
+                val uniqueLines = mutableListOf<String>()
+                val seenNames = mutableSetOf<String>()
+                for (line in lines) {
+                    val parts = line.split(" ", limit = 2)
+                    if (parts.size == 2) {
+                        val libName = parts[1].trim()
+                        if (seenNames.add(libName.lowercase())) {
+                            uniqueLines.add(line)
+                        }
+                    } else {
+                        uniqueLines.add(line)
+                    }
+                }
+                metadataFile.writeText(uniqueLines.joinToString("\n") + "\n")
+            }
+        }
+    }
+}

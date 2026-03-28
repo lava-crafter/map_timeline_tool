@@ -14,7 +14,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -298,7 +304,10 @@ fun MapScreen(
                 }
             }
         ) {
-            Text(stringResource(R.string.action_center))
+            Icon(
+                imageVector = Icons.Default.MyLocation,
+                contentDescription = stringResource(R.string.action_center)
+            )
         }
 
         val shouldShowZoom = when (zoomBehavior) {
@@ -321,7 +330,10 @@ fun MapScreen(
                 onMapTileSourceChange(mapTileSources[nextIndex].id)
             }
         ) {
-            Text(stringResource(R.string.action_cycle_map_layer))
+            Icon(
+                imageVector = Icons.Default.Layers,
+                contentDescription = stringResource(R.string.action_cycle_map_layer)
+            )
         }
 
         if (shouldShowZoom) {
@@ -335,13 +347,19 @@ fun MapScreen(
                     modifier = Modifier.size(44.dp),
                     onClick = { mapView?.controller?.zoomIn() }
                 ) {
-                    Text("+")
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Zoom In"
+                    )
                 }
                 FloatingActionButton(
                     modifier = Modifier.size(44.dp),
                     onClick = { mapView?.controller?.zoomOut() }
                 ) {
-                    Text("-")
+                    Icon(
+                        imageVector = Icons.Default.Remove,
+                        contentDescription = "Zoom Out"
+                    )
                 }
             }
         }

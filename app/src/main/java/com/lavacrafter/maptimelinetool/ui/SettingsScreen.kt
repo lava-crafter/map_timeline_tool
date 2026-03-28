@@ -291,7 +291,7 @@ private fun SettingsOverviewScreen(
                 onClick = { onNavigateTo(SettingsRoute.Cache) }
             )
             SettingsOverviewItem(
-                title = stringResource(R.string.settings_download_title) + " " + stringResource(R.string.settings_experimental_label),
+                title = stringResource(R.string.settings_download_title),
                 description = stringResource(R.string.settings_download_desc),
                 onClick = { onNavigateTo(SettingsRoute.Download) }
             )
@@ -711,7 +711,7 @@ private fun DownloadSettings(
     onBack: () -> Unit
 ) {
     SettingsSubpageScaffold(
-        title = stringResource(R.string.settings_download_title) + " " + stringResource(R.string.settings_experimental_label),
+        title = stringResource(R.string.settings_download_title),
         tutorialText = stringResource(R.string.settings_help_download),
         onBack = onBack
     ) { modifier ->
