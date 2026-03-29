@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Map Timeline Tool 项目主页与开发者介绍。" />
+    <title>Map Timeline Tool | Muchen Jiang</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <div class="bg-orb orb-a" aria-hidden="true"></div>
+    <div class="bg-orb orb-b" aria-hidden="true"></div>
+
+    <header class="hero shell reveal">
+        <nav class="topbar">
+            <a class="brand" href="./">Map Timeline Tool</a>
+            <div class="top-links">
+                <a href="https://github.com/muchenjiang/map_timeline_tool" target="_blank" rel="noopener noreferrer">GitHub Repo</a>
+                <a href="privacy.md">Privacy Policy</a>
+            </div>
+        </nav>
+
+        <section class="hero-grid">
+            <div>
+                <p class="eyebrow">个人主页 · GitHub Pages</p>
+                <h1>你好，我是 <span class="accent">Muchen Jiang</span></h1>
+                <p class="lede">
+                    这个页面用于介绍我的 Android 项目 <strong>Map Timeline Tool</strong>。
+                    它是一款离线优先的打点记录工具，支持地图查看、列表管理、CSV/ZIP 导入导出，以及本地数据保存。
+                </p>
+                <div class="cta-row">
+                    <a class="btn primary" href="https://github.com/muchenjiang/map_timeline_tool" target="_blank" rel="noopener noreferrer">查看源码</a>
+                    <a class="btn ghost" href="#project">项目亮点</a>
+                </div>
+            </div>
+            <div class="hero-art" aria-hidden="true">
+                <img src="assets/icon_512_flat.jpg" alt="Map Timeline Tool icon" />
+            </div>
+        </section>
+    </header>
+
+    <main class="shell">
+        <section class="panel reveal" id="project">
+            <h2>项目亮点</h2>
+            <div class="feature-grid">
+                <article class="feature-card">
+                    <h3>离线优先</h3>
+                    <p>点位数据保存在设备本地。地图瓦片支持缓存与下载，弱网环境仍可使用核心能力。</p>
+                </article>
+                <article class="feature-card">
+                    <h3>数据可迁移</h3>
+                    <p>支持 CSV、GeoJSON、KML、KMZ、ZIP 导入导出，方便与其他地图工具协同。</p>
+                </article>
+                <article class="feature-card">
+                    <h3>快速记录</h3>
+                    <p>支持通知栏快速打点、照片关联与标签管理，适合现场采集和路径回溯。</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel reveal">
+            <h2>技术栈</h2>
+            <ul class="chip-list">
+                <li>Android</li>
+                <li>Kotlin</li>
+                <li>Jetpack Compose</li>
+                <li>Room</li>
+                <li>osmdroid</li>
+                <li>OpenStreetMap</li>
+            </ul>
+        </section>
+
+        <section class="panel reveal">
+            <h2>English Snapshot</h2>
+            <p>
+                Map Timeline Tool is an offline-first Android app for manual point logging.
+                It helps capture coordinates with notes, photos, and tags, then export data for further analysis.
+            </p>
+            <p>
+                Source code: <a href="https://github.com/muchenjiang/map_timeline_tool" target="_blank" rel="noopener noreferrer">github.com/muchenjiang/map_timeline_tool</a>
+            </p>
+        </section>
+
+        <section class="panel reveal">
+            <h2>联系与链接</h2>
+            <ul class="link-list">
+                <li><a href="https://github.com/muchenjiang" target="_blank" rel="noopener noreferrer">GitHub Profile</a></li>
+                <li><a href="https://github.com/muchenjiang/map_timeline_tool" target="_blank" rel="noopener noreferrer">Map Timeline Tool Repo</a></li>
+                <li><a href="privacy.md">Privacy Policy</a></li>
+            </ul>
+        </section>
+    </main>
+
+    <footer class="shell footer reveal">
+        <p>© <span id="year"></span> Muchen Jiang. Built for GitHub Pages.</p>
+    </footer>
+
+    <script>
+        (function () {
+            var yearEl = document.getElementById("year");
+            if (yearEl) {
+                yearEl.textContent = String(new Date().getFullYear());
+            }
+        })();
+    </script>
+</body>
+</html>
