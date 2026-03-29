@@ -1196,7 +1196,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 } else {
                                     val persistedPhotoPath = preparePhotoPathForPersist(addPhotoPath)
-                                    viewModel.addPointWithTags(title, note, loc, createdAt, selectedTags, persistedPhotoPath)
+                                    viewModel.addPointWithTags(title.trim(), note.trim(), loc, createdAt, selectedTags, persistedPhotoPath)
                                     vibrateOnce(context)
                                     Toast.makeText(context, context.getString(R.string.toast_point_added), Toast.LENGTH_SHORT).show()
                                 }

@@ -68,7 +68,7 @@ fun EditPointDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSave(title, note, currentPhotoPath) }) {
+            TextButton(onClick = { onSave(title.trim().ifBlank { point.title }, note.trim(), currentPhotoPath) }) {
                 Text(stringResource(R.string.action_save))
             }
         },

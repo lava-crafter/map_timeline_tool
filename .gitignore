@@ -35,3 +35,6 @@ Thumbs.db
 
 # Local secrets
 secrets/
+
+# OSS Licenses
+/app/src/main/res/raw/third_party_*

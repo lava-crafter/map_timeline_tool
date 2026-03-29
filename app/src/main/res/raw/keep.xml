@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@layout/libraries_social_licenses_*,@layout/license_menu_activity_*,@id/license_*,@id/no_licenses_text,@string/license_*,@string/no_licenses_available,@string/oss_license_title,@string/preferences_license_summary,@raw/keep_third_party_licenses,@raw/third_party_license_metadata,@raw/third_party_licenses" />
