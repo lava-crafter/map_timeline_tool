@@ -16,9 +16,8 @@
             <a class="brand" href="./">Map Timeline Tool</a>
             <div class="top-actions">
                 <div class="language-controls">
-                    <button id="langQuickZh" class="lang-quick" type="button" aria-label="Switch to Simplified Chinese">中文</button>
                     <details class="lang-menu" id="langMenu">
-                        <summary data-i18n="languageMenu">Language</summary>
+                        <summary aria-label="Language selector" title="Language selector">文/EN</summary>
                         <div class="lang-list" role="listbox" aria-label="Language options">
                             <button type="button" data-lang="en">English</button>
                             <button type="button" data-lang="zh-CN">简体中文</button>
@@ -49,7 +48,7 @@
                 </div>
             </div>
             <div class="hero-art" aria-hidden="true">
-                <div class="hero-badge">MTT</div>
+                <img class="hero-icon" src="data:image/webp;base64,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" alt="Map Timeline Tool icon" />
             </div>
         </section>
     </header>
@@ -71,6 +70,41 @@
                     <p data-i18n="featureQuickText">Quick-add notification, photo attachments, and tag management make field collection much smoother.</p>
                 </article>
             </div>
+        </section>
+
+        <section class="panel reveal" id="feature-details">
+            <h2 data-i18n="allFunctionsTitle">All Functions</h2>
+            <ul class="detail-list">
+                <li data-i18n="allFunc1">Display marks on either normal map or satellite map.</li>
+                <li data-i18n="allFunc2">Take photos or record phone sensor data when adding points.</li>
+                <li data-i18n="allFunc3">Download selected map areas so they can be displayed offline.</li>
+                <li data-i18n="allFunc4">Create tags to sort points.</li>
+                <li data-i18n="allFunc5">Backup, restore, and share full records.</li>
+                <li data-i18n="allFunc6">Optimized for quick adding.</li>
+            </ul>
+
+            <h3 data-i18n="optimizationTitle">Optimization</h3>
+            <ul class="detail-list">
+                <li data-i18n="opt1">Auto-save a point after touching "Add".</li>
+                <li data-i18n="opt2">Also available in notifications, so you can quick-add without unlocking the phone.</li>
+                <li data-i18n="opt3">Use different colors to show the order of points in a day.</li>
+                <li data-i18n="opt4">Allow quick adding tags or applying default tags.</li>
+                <li data-i18n="opt5">Backup and restore are also available for sharing with friends, with no worries about losing records.</li>
+                <li data-i18n="opt6">Download certain map areas for offline use.</li>
+                <li data-i18n="opt7">Photo compression saves storage space.</li>
+                <li data-i18n="opt8">Stop caching maps on mobile data (if enabled).</li>
+                <li data-i18n="opt9">Add points even without any internet connection.</li>
+                <li data-i18n="opt10">No uploads, no privacy worries.</li>
+                <li data-i18n="opt11">Multiple languages supported.</li>
+            </ul>
+
+            <h3 data-i18n="advantagesTitle">Advantages</h3>
+            <ul class="detail-list">
+                <li data-i18n="adv1">Available on Android devices.</li>
+                <li data-i18n="adv2">Very lightweight and really fast.</li>
+                <li data-i18n="adv3">All features are available offline (except map loading).</li>
+                <li data-i18n="adv4">MIT open-source, free and safe, everyone can use the software.</li>
+            </ul>
         </section>
 
         <section class="panel reveal">
@@ -133,6 +167,30 @@
                     featurePortableText: "Export and import CSV, GeoJSON, KML, KMZ, and ZIP formats for easy collaboration with other tools.",
                     featureQuickTitle: "Fast Capture",
                     featureQuickText: "Quick-add notification, photo attachments, and tag management make field collection much smoother.",
+                    allFunctionsTitle: "All Functions",
+                    allFunc1: "Display marks on either normal map or satellite map.",
+                    allFunc2: "Take photos or record phone sensor data when adding points.",
+                    allFunc3: "Download selected map areas so they can be displayed offline.",
+                    allFunc4: "Create tags to sort points.",
+                    allFunc5: "Backup, restore, and share full records.",
+                    allFunc6: "Optimized for quick adding.",
+                    optimizationTitle: "Optimization",
+                    opt1: "Auto-save a point after touching \"Add\".",
+                    opt2: "Also available in notifications, so you can quick-add without unlocking the phone.",
+                    opt3: "Use different colors to show the order of points in a day.",
+                    opt4: "Allow quick adding tags or applying default tags.",
+                    opt5: "Backup and restore are also available for sharing with friends, with no worries about losing records.",
+                    opt6: "Download certain map areas for offline use.",
+                    opt7: "Photo compression saves storage space.",
+                    opt8: "Stop caching maps on mobile data (if enabled).",
+                    opt9: "Add points even without any internet connection.",
+                    opt10: "No uploads, no privacy worries.",
+                    opt11: "Multiple languages supported.",
+                    advantagesTitle: "Advantages",
+                    adv1: "Available on Android devices.",
+                    adv2: "Very lightweight and really fast.",
+                    adv3: "All features are available offline (except map loading).",
+                    adv4: "MIT open-source, free and safe, everyone can use the software.",
                     stackTitle: "Tech Stack",
                     chipAndroid: "Android",
                     chipKotlin: "Kotlin",
@@ -147,9 +205,7 @@
                     linkProfile: "GitHub Profile",
                     linkRepo: "Map Timeline Tool Repo",
                     linkPrivacy: "Privacy Policy",
-                    footerBuilt: "Built for GitHub Pages.",
-                    quickAriaToZh: "Switch to Simplified Chinese",
-                    quickAriaToEn: "Switch to English"
+                    footerBuilt: "Built for GitHub Pages."
                 },
                 "zh-CN": {
                     pageTitle: "Map Timeline Tool | Muchen Jiang",
@@ -169,6 +225,30 @@
                     featurePortableText: "支持 CSV、GeoJSON、KML、KMZ、ZIP 导入导出，方便与其他地图工具协同。",
                     featureQuickTitle: "快速记录",
                     featureQuickText: "支持通知栏快速打点、照片关联和标签管理，适合现场采集与路径回溯。",
+                    allFunctionsTitle: "全部功能",
+                    allFunc1: "可在普通地图或卫星地图上显示标记点。",
+                    allFunc2: "添加点位时可拍照或记录手机传感器数据。",
+                    allFunc3: "可下载选定地图区域以便离线显示。",
+                    allFunc4: "可创建标签对点位进行分类。",
+                    allFunc5: "支持完整记录的备份、恢复与分享。",
+                    allFunc6: "针对快速打点做了优化。",
+                    optimizationTitle: "优化点",
+                    opt1: "点击\"Add\"后自动保存点位。",
+                    opt2: "通知栏也可快速打点，无需解锁手机。",
+                    opt3: "使用不同颜色显示一天内点位顺序。",
+                    opt4: "支持快速新增标签或套用默认标签。",
+                    opt5: "支持备份与恢复，也可与好友分享，不必担心记录丢失。",
+                    opt6: "可下载指定地图区域用于离线。",
+                    opt7: "照片压缩以节省存储空间。",
+                    opt8: "可设置移动数据下不缓存地图。",
+                    opt9: "无网络连接也可新增点位。",
+                    opt10: "无上传，更安心保护隐私。",
+                    opt11: "支持多语言。",
+                    advantagesTitle: "优势",
+                    adv1: "适用于 Android 设备。",
+                    adv2: "体积轻量，运行很快。",
+                    adv3: "除地图加载外，主要功能都可离线使用。",
+                    adv4: "MIT 开源协议，免费且安全。",
                     stackTitle: "技术栈",
                     chipAndroid: "Android",
                     chipKotlin: "Kotlin",
@@ -183,9 +263,7 @@
                     linkProfile: "GitHub 主页",
                     linkRepo: "Map Timeline Tool 仓库",
                     linkPrivacy: "隐私政策",
-                    footerBuilt: "基于 GitHub Pages 构建。",
-                    quickAriaToZh: "切换到简体中文",
-                    quickAriaToEn: "切换到英文"
+                    footerBuilt: "基于 GitHub Pages 构建。"
                 },
                 "zh-TW": {
                     pageTitle: "Map Timeline Tool | Muchen Jiang",
@@ -205,6 +283,30 @@
                     featurePortableText: "支援 CSV、GeoJSON、KML、KMZ、ZIP 匯入匯出，方便與其他地圖工具協作。",
                     featureQuickTitle: "快速記錄",
                     featureQuickText: "支援通知列快速打點、照片關聯與標籤管理，適合外業採集與路徑回溯。",
+                    allFunctionsTitle: "全部功能",
+                    allFunc1: "可在一般地圖或衛星地圖上顯示標記點。",
+                    allFunc2: "新增點位時可拍照或記錄手機感測器資料。",
+                    allFunc3: "可下載選定地圖區域以便離線顯示。",
+                    allFunc4: "可建立標籤來分類點位。",
+                    allFunc5: "支援完整記錄的備份、還原與分享。",
+                    allFunc6: "針對快速打點進行優化。",
+                    optimizationTitle: "優化重點",
+                    opt1: "點擊\"Add\"後自動儲存點位。",
+                    opt2: "通知列也可快速打點，無需解鎖手機。",
+                    opt3: "用不同顏色顯示一天內點位順序。",
+                    opt4: "支援快速新增標籤或套用預設標籤。",
+                    opt5: "支援備份與還原，也可與朋友分享，不必擔心資料遺失。",
+                    opt6: "可下載指定地圖區域供離線使用。",
+                    opt7: "照片壓縮可節省儲存空間。",
+                    opt8: "可設定在行動數據下不快取地圖。",
+                    opt9: "即使沒有網路也可新增點位。",
+                    opt10: "不上傳資料，隱私更安心。",
+                    opt11: "支援多語言。",
+                    advantagesTitle: "優勢",
+                    adv1: "可在 Android 裝置上使用。",
+                    adv2: "體積輕巧、速度很快。",
+                    adv3: "除地圖載入外，主要功能皆可離線使用。",
+                    adv4: "MIT 開源授權，免費且安全。",
                     stackTitle: "技術棧",
                     chipAndroid: "Android",
                     chipKotlin: "Kotlin",
@@ -219,9 +321,7 @@
                     linkProfile: "GitHub 個人頁",
                     linkRepo: "Map Timeline Tool 儲存庫",
                     linkPrivacy: "隱私政策",
-                    footerBuilt: "以 GitHub Pages 建置。",
-                    quickAriaToZh: "切換到簡體中文",
-                    quickAriaToEn: "切換到英文"
+                    footerBuilt: "以 GitHub Pages 建置。"
                 },
                 "fr": {
                     pageTitle: "Map Timeline Tool | Muchen Jiang",
@@ -241,6 +341,30 @@
                     featurePortableText: "Importez et exportez les formats CSV, GeoJSON, KML, KMZ et ZIP pour collaborer avec d'autres outils.",
                     featureQuickTitle: "Capture rapide",
                     featureQuickText: "Ajout rapide depuis la notification, photos et etiquettes pour faciliter la collecte sur le terrain.",
+                    allFunctionsTitle: "Toutes les fonctionnalites",
+                    allFunc1: "Afficher les points sur la carte standard ou satellite.",
+                    allFunc2: "Prendre des photos ou enregistrer les donnees capteurs lors de l'ajout.",
+                    allFunc3: "Telecharger des zones de carte selectionnees pour l'affichage hors ligne.",
+                    allFunc4: "Creer des etiquettes pour trier les points.",
+                    allFunc5: "Sauvegarder, restaurer et partager les enregistrements complets.",
+                    allFunc6: "Optimise pour un ajout rapide.",
+                    optimizationTitle: "Optimisations",
+                    opt1: "Enregistrer automatiquement un point apres avoir touche \"Add\".",
+                    opt2: "Ajout rapide disponible aussi via les notifications, sans deverrouiller le telephone.",
+                    opt3: "Utiliser des couleurs differentes pour l'ordre des points sur une journee.",
+                    opt4: "Permettre l'ajout rapide d'etiquettes ou l'application d'etiquettes par defaut.",
+                    opt5: "Sauvegarde et restauration aussi utiles pour partager avec des amis, sans risque de perte.",
+                    opt6: "Telecharger certaines zones de carte pour un usage hors ligne.",
+                    opt7: "Compression photo pour economiser l'espace de stockage.",
+                    opt8: "Arreter le cache de cartes sur donnees mobiles (si active).",
+                    opt9: "Ajouter des points meme sans connexion internet.",
+                    opt10: "Aucun envoi, pas d'inquietude de confidentialite.",
+                    opt11: "Prise en charge multilingue.",
+                    advantagesTitle: "Avantages",
+                    adv1: "Disponible sur appareils Android.",
+                    adv2: "Tres leger et tres rapide.",
+                    adv3: "Toutes les fonctions sont disponibles hors ligne (sauf chargement de carte).",
+                    adv4: "Open source sous licence MIT, gratuit et sur.",
                     stackTitle: "Pile technique",
                     chipAndroid: "Android",
                     chipKotlin: "Kotlin",
@@ -255,9 +379,7 @@
                     linkProfile: "Profil GitHub",
                     linkRepo: "Depot Map Timeline Tool",
                     linkPrivacy: "Politique de confidentialite",
-                    footerBuilt: "Cree pour GitHub Pages.",
-                    quickAriaToZh: "Basculer vers le chinois simplifie",
-                    quickAriaToEn: "Basculer vers l'anglais"
+                    footerBuilt: "Cree pour GitHub Pages."
                 },
                 "es": {
                     pageTitle: "Map Timeline Tool | Muchen Jiang",
@@ -277,6 +399,30 @@
                     featurePortableText: "Importa y exporta CSV, GeoJSON, KML, KMZ y ZIP para colaborar con otras herramientas.",
                     featureQuickTitle: "Captura rapida",
                     featureQuickText: "Notificacion de registro rapido, fotos y etiquetas para mejorar el trabajo de campo.",
+                    allFunctionsTitle: "Todas las funciones",
+                    allFunc1: "Mostrar marcas en mapa normal o satelital.",
+                    allFunc2: "Tomar fotos o registrar datos de sensores al agregar puntos.",
+                    allFunc3: "Descargar zonas de mapa seleccionadas para verlas sin conexion.",
+                    allFunc4: "Crear etiquetas para ordenar puntos.",
+                    allFunc5: "Respaldar, restaurar y compartir registros completos.",
+                    allFunc6: "Optimizado para agregado rapido.",
+                    optimizationTitle: "Optimizaciones",
+                    opt1: "Guardar un punto automaticamente al tocar \"Add\".",
+                    opt2: "Tambien disponible en notificaciones para agregar rapido sin desbloquear el telefono.",
+                    opt3: "Usar diferentes colores para mostrar el orden diario de los puntos.",
+                    opt4: "Permitir agregar etiquetas rapido o aplicar etiquetas predeterminadas.",
+                    opt5: "Respaldo y restauracion tambien para compartir con amigos, sin miedo a perder registros.",
+                    opt6: "Descargar ciertas zonas de mapa para uso sin conexion.",
+                    opt7: "Compresion de fotos para ahorrar espacio.",
+                    opt8: "Detener cache de mapas con datos moviles (si se activa).",
+                    opt9: "Agregar puntos incluso sin internet.",
+                    opt10: "Sin cargas, sin preocupaciones de privacidad.",
+                    opt11: "Compatible con varios idiomas.",
+                    advantagesTitle: "Ventajas",
+                    adv1: "Disponible en dispositivos Android.",
+                    adv2: "Muy ligero y muy rapido.",
+                    adv3: "Todas las funciones disponibles sin conexion (excepto carga de mapa).",
+                    adv4: "Open source con licencia MIT, gratis y seguro.",
                     stackTitle: "Stack tecnologico",
                     chipAndroid: "Android",
                     chipKotlin: "Kotlin",
@@ -291,9 +437,7 @@
                     linkProfile: "Perfil de GitHub",
                     linkRepo: "Repositorio Map Timeline Tool",
                     linkPrivacy: "Politica de privacidad",
-                    footerBuilt: "Creado para GitHub Pages.",
-                    quickAriaToZh: "Cambiar a chino simplificado",
-                    quickAriaToEn: "Cambiar a ingles"
+                    footerBuilt: "Creado para GitHub Pages."
                 },
                 "ar": {
                     pageTitle: "Map Timeline Tool | Muchen Jiang",
@@ -313,6 +457,30 @@
                     featurePortableText: "يدعم الاستيراد والتصدير بصيغ CSV وGeoJSON وKML وKMZ وZIP للتكامل مع أدوات أخرى.",
                     featureQuickTitle: "تسجيل سريع",
                     featureQuickText: "إضافة سريعة من الإشعارات، مع ربط الصور وإدارة الوسوم لتسهيل العمل الميداني.",
+                    allFunctionsTitle: "كل الوظائف",
+                    allFunc1: "عرض العلامات على الخريطة العادية أو خريطة الأقمار الصناعية.",
+                    allFunc2: "التقاط الصور أو تسجيل بيانات حساسات الهاتف عند إضافة النقاط.",
+                    allFunc3: "تنزيل مناطق خريطة محددة لعرضها دون اتصال.",
+                    allFunc4: "إنشاء وسوم لفرز النقاط.",
+                    allFunc5: "نسخ احتياطي واستعادة ومشاركة السجلات الكاملة.",
+                    allFunc6: "محسن للإضافة السريعة.",
+                    optimizationTitle: "التحسينات",
+                    opt1: "حفظ النقطة تلقائياً بعد الضغط على \"Add\".",
+                    opt2: "متاح أيضاً عبر الإشعارات للإضافة السريعة دون فتح الهاتف.",
+                    opt3: "استخدام ألوان مختلفة لإظهار ترتيب النقاط خلال اليوم.",
+                    opt4: "إتاحة إضافة الوسوم بسرعة أو تطبيق الوسوم الافتراضية.",
+                    opt5: "النسخ الاحتياطي والاستعادة متاحان أيضاً للمشاركة مع الأصدقاء دون القلق من فقدان السجلات.",
+                    opt6: "تنزيل مناطق خريطة معينة للاستخدام دون اتصال.",
+                    opt7: "ضغط الصور لتوفير مساحة التخزين.",
+                    opt8: "إيقاف تخزين الخرائط مؤقتاً عند استخدام بيانات الجوال (عند التفعيل).",
+                    opt9: "إضافة النقاط حتى بدون اتصال بالإنترنت.",
+                    opt10: "لا رفع للبيانات، ولا قلق على الخصوصية.",
+                    opt11: "دعم لغات متعددة.",
+                    advantagesTitle: "المزايا",
+                    adv1: "متاح على أجهزة Android.",
+                    adv2: "خفيف جداً وسريع جداً.",
+                    adv3: "كل الميزات متاحة دون اتصال (باستثناء تحميل الخريطة).",
+                    adv4: "مفتوح المصدر برخصة MIT، مجاني وآمن.",
                     stackTitle: "التقنيات",
                     chipAndroid: "أندرويد",
                     chipKotlin: "كوتلن",
@@ -327,15 +495,12 @@
                     linkProfile: "ملف GitHub",
                     linkRepo: "مستودع Map Timeline Tool",
                     linkPrivacy: "سياسة الخصوصية",
-                    footerBuilt: "تم الإنشاء لـ GitHub Pages.",
-                    quickAriaToZh: "التبديل إلى الصينية المبسطة",
-                    quickAriaToEn: "التبديل إلى الإنجليزية"
+                    footerBuilt: "تم الإنشاء لـ GitHub Pages."
                 }
             };
 
             var i18nNodes = document.querySelectorAll("[data-i18n]");
             var langButtons = document.querySelectorAll(".lang-list button[data-lang]");
-            var quickButton = document.getElementById("langQuickZh");
             var langMenu = document.getElementById("langMenu");
             var metaDescription = document.querySelector("meta[name='description']");
             var currentLang = "en";
@@ -382,12 +547,6 @@
                     button.classList.toggle("is-active", button.getAttribute("data-lang") === nextLang);
                 });
 
-                if (quickButton) {
-                    var showEnglishShortcut = nextLang.indexOf("zh") === 0;
-                    quickButton.textContent = showEnglishShortcut ? "EN" : "中文";
-                    quickButton.setAttribute("aria-label", showEnglishShortcut ? dict.quickAriaToEn : dict.quickAriaToZh);
-                }
-
                 setStoredLanguage(nextLang);
             }
 
@@ -400,16 +559,6 @@
                     }
                 });
             });
-
-            if (quickButton) {
-                quickButton.addEventListener("click", function () {
-                    if (currentLang.indexOf("zh") === 0) {
-                        applyLanguage("en");
-                    } else {
-                        applyLanguage("zh-CN");
-                    }
-                });
-            }
 
             var yearEl = document.getElementById("year");
             if (yearEl) {
