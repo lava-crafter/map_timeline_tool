@@ -52,6 +52,7 @@ import org.osmdroid.tileprovider.util.SimpleRegisterReceiver
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.compass.InternalCompassOrientationProvider
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -193,7 +194,7 @@ fun MapScreen(
                     setUseDataConnection(!downloadedOnly)
                     tileProvider.setUseDataConnection(!downloadedOnly)
                     setMultiTouchControls(true)
-                    setBuiltInZoomControls(false)
+                    zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                     controller.setZoom(16.0)
                     if (points.isNotEmpty()) {
                         val last = points.first()
@@ -455,6 +456,8 @@ private class PolicyAwareNetworkCheck(context: android.content.Context) : INetwo
         return allowNetwork && delegate.getCellularDataNetworkAvailable()
     }
 
+    @Deprecated("Deprecated by osmdroid INetworkAvailablityCheck; kept for interface compatibility.")
+    @Suppress("DEPRECATION")
     override fun getRouteToPathExists(hostAddress: Int): Boolean {
         return allowNetwork && delegate.getRouteToPathExists(hostAddress)
     }

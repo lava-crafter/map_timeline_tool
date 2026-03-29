@@ -1,5 +1,6 @@
 # Gradle
 .gradle/
+.kotlin/
 /build/
 **/build/
 **/intermediates/
@@ -32,6 +33,20 @@ Thumbs.db
 
 # Kotlin
 *.kotlin_module
+
+# Local experiment artifacts
+build_result.txt
+issue*.json
+fix*.py
+patch*.kt
+patch*.kts
+sourceSets.kts
+testPom.gradle.kts
+TestOsmdroid.kt
+
+# Python cache
+__pycache__/
+*.pyc
 
 # Local secrets
 secrets/

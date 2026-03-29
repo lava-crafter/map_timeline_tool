@@ -1,4 +1,3 @@
-import sys
 import os
 
 def deduplicate(file_path):
@@ -15,9 +14,9 @@ def deduplicate(file_path):
             name = parts[1].strip()
             if name.lower() not in seen_names:
                 seen_names.add(name.lower())
-                unique_lines.add(line)
+                unique_lines.append(line)
         else:
-            unique_lines.add(line)
+            unique_lines.append(line)
             
     with open(file_path, "w") as f:
         f.writelines(unique_lines)

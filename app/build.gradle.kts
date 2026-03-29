@@ -142,9 +142,6 @@ plugins {
 
 android {
     namespace = "com.lavacrafter.maptimelinetool"
-    sourceSets {
-        getByName("main").res.srcDir(projectDir.resolve("src/main/res"))
-    }
     compileSdk = 36
 
     defaultConfig {
@@ -166,6 +163,9 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        jniLibs {
+            keepDebugSymbols += "**/libandroidx.graphics.path.so"
+        }
     }
 
     buildTypes {
