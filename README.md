@@ -52,6 +52,10 @@ Current app version: **0.1.5**
 ## Open Source & Attribution
 The app's Settings and About screens list the open-source components and attribution requirements.
 
+How the list is maintained:
+- Runtime dependency licenses are generated from `releaseRuntimeClasspath` into `app/src/main/res/raw/third_party_licenses` and `app/src/main/res/raw/third_party_license_metadata`.
+- Non-Maven attributions (for map/data providers) are maintained in `app/src/main/oss/manual_notices.csv` and merged into the same in-app OSS list.
+
 Summary:
 - AndroidX / Jetpack Compose (Material3 + material-icons-extended) / Room / ExifInterface / Material Components / Kotlin (Apache-2.0)
 - osmdroid (Apache-2.0)

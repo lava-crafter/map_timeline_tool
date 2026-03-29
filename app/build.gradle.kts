@@ -14,6 +14,13 @@ data class OssDependencyLicense(
     val licenses: List<Pair<String, String?>>
 )
 
+data class OssManualNotice(
+    val displayName: String,
+    val licenseName: String,
+    val licenseUrl: String?,
+    val notice: String?
+)
+
 fun parsePomLicenses(pomFile: File): List<Pair<String, String?>> {
     return runCatching {
         val factory = DocumentBuilderFactory.newInstance()
@@ -41,6 +48,29 @@ fun locatePomInGradleCache(gradleUserHome: File, group: String, module: String, 
     }
 }
 
+fun parseManualOssNotices(file: File): List<OssManualNotice> {
+    if (!file.exists()) return emptyList()
+
+    return file.readLines(Charsets.UTF_8).mapIndexedNotNull { index, rawLine ->
+        val line = rawLine.trim()
+        if (line.isBlank() || line.startsWith("#")) {
+            return@mapIndexedNotNull null
+        }
+
+        val parts = line.split('|', limit = 4).map { it.trim() }
+        require(parts.size == 4) {
+            "Invalid manual OSS notice format in ${file.path}:${index + 1}. Expected: displayName|licenseName|licenseUrl|notice"
+        }
+
+        OssManualNotice(
+            displayName = parts[0],
+            licenseName = parts[1],
+            licenseUrl = parts[2].ifBlank { null },
+            notice = parts[3].ifBlank { null }
+        )
+    }
+}
+
 val generateOssMenuResources by tasks.registering {
     val outputResDir = layout.buildDirectory.dir("generated/oss_menu_resources/res")
     
@@ -62,6 +92,7 @@ val generateOssMenuResources by tasks.registering {
             val licenses = pomFile?.let(::parsePomLicenses).orEmpty()
             OssDependencyLicense(group = group, name = name, version = version, licenses = licenses)
         }
+        val manualNotices = parseManualOssNotices(projectDir.resolve("src/main/oss/manual_notices.csv"))
 
         val outputDir = projectDir.resolve("src/main/res/raw")
         outputDir.mkdirs()
@@ -95,7 +126,26 @@ val generateOssMenuResources by tasks.registering {
             offset += bytes.size
         }
 
-        if (dependencies.isEmpty()) {
+        manualNotices.forEach { notice ->
+            val entryText = buildString {
+                append(notice.displayName).append('\n')
+                append(notice.licenseName)
+                if (!notice.licenseUrl.isNullOrBlank()) {
+                    append(" - ").append(notice.licenseUrl)
+                }
+                append('\n')
+                if (!notice.notice.isNullOrBlank()) {
+                    append(notice.notice).append('\n')
+                }
+                append('\n')
+            }
+            val bytes = entryText.toByteArray(Charsets.UTF_8)
+            metadataLines.add("$offset:${bytes.size} ${notice.displayName}")
+            licenseBlob.write(bytes)
+            offset += bytes.size
+        }
+
+        if (dependencies.isEmpty() && manualNotices.isEmpty()) {
             val fallbackText = "No third-party dependency metadata found.\n\n"
             val bytes = fallbackText.toByteArray(Charsets.UTF_8)
             metadataLines.add("0:${bytes.size} Open Source Licenses")
