@@ -86,7 +86,7 @@ object SettingsStore {
         val updated = getRecentTagIds(context).toMutableList().apply {
             remove(tagId)
             add(0, tagId)
-            while (size > MAX_RECENT_TAGS) removeLast()
+            while (size > MAX_RECENT_TAGS) removeAt(lastIndex)
         }
         saveLongList(context, KEY_RECENT_TAGS, updated)
         return updated
