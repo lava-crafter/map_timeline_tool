@@ -901,7 +901,12 @@ class MainActivity : AppCompatActivity() {
                                     followSystemTheme = settingsState.followSystemTheme,
                                     onFollowSystemThemeChange = settingsViewModel::setFollowSystemTheme,
                                     languagePreference = settingsState.languagePreference,
-                                    onLanguagePreferenceChange = settingsViewModel::setLanguagePreference,
+                                    onLanguagePreferenceChange = { preference ->
+                                        if (preference != settingsState.languagePreference) {
+                                            settingsViewModel.setLanguagePreference(preference)
+                                            this@MainActivity.recreate()
+                                        }
+                                    },
                                     timeoutSeconds = settingsState.timeoutSeconds,
                                     onTimeoutSecondsChange = settingsViewModel::setTimeoutSeconds,
                                     cachePolicy = settingsState.cachePolicy,
