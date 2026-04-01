@@ -104,6 +104,9 @@
     <string name="settings_download_title">ダウンロード</string>
     <string name="settings_download_desc">ダウンロード元を選び、保存済みエリアを管理します。</string>
     <string name="settings_help_download">一括ダウンロード用のタイルサーバーを選び、地図ダウンローダーを起動し、この画面から保存済みエリアを整理・重複排除できます。</string>
+    <string name="settings_backup_restore_title">バックアップと復元</string>
+    <string name="settings_backup_restore_desc">データをインポートまたはエクスポートし、完全バックアップ ZIP を共有できます。</string>
+    <string name="settings_help_backup_restore">この画面では CSV、GeoJSON、KML、KMZ、ZIP のインポートとエクスポートができます。さらに、完全な ZIP バックアップを端末内で作成し、システム共有シートから他のアプリやクラウドドライブへ送信できます。</string>
     <string name="settings_download_source_label">ダウンロード元</string>
     <string name="settings_download_multi_thread_label">マルチスレッドダウンロードを有効にする</string>
     <string name="settings_download_thread_count_label">ダウンロードスレッド数: %1$d</string>

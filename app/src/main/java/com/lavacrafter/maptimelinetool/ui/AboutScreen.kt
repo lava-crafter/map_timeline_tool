@@ -50,7 +50,7 @@ fun AboutScreen(onBack: () -> Unit) {
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = "Open Source Licenses")
+            Text(text = stringResource(R.string.settings_open_source_title))
         }
 
         Spacer(modifier = Modifier.height(24.dp))

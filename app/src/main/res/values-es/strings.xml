@@ -105,6 +105,9 @@
     <string name="settings_download_title">Descargas</string>
     <string name="settings_download_desc">Elige una fuente de descarga y administra las áreas guardadas.</string>
     <string name="settings_help_download">Selecciona un servidor de mosaicos para descargas masivas, abre el descargador del mapa y limpia o deduplica las áreas guardadas desde esta pantalla.</string>
+    <string name="settings_backup_restore_title">Copia de seguridad y restauración</string>
+    <string name="settings_backup_restore_desc">Importa o exporta datos y comparte un ZIP de copia de seguridad completa.</string>
+    <string name="settings_help_backup_restore">Usa esta pantalla para importar o exportar CSV, GeoJSON, KML, KMZ o ZIP. También puedes crear una copia ZIP completa localmente y abrir la hoja de compartir del sistema para enviarla a otras apps o a servicios en la nube.</string>
     <string name="settings_download_source_label">Fuente de descarga</string>
     <string name="settings_download_multi_thread_label">Habilitar descarga multihilo</string>
     <string name="settings_download_thread_count_label">Hilos de descarga: %1$d</string>

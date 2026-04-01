@@ -105,6 +105,9 @@
     <string name="settings_download_title">التنزيلات</string>
     <string name="settings_download_desc">اختر مصدر التنزيل وأدِر المناطق المحفوظة.</string>
     <string name="settings_help_download">اختر خادم بلاطات للتنزيلات الكبيرة، وافتح أداة تنزيل الخريطة، ونظّف أو أزل التكرار من المناطق المحفوظة من هذه الشاشة.</string>
+    <string name="settings_backup_restore_title">النسخ الاحتياطي والاستعادة</string>
+    <string name="settings_backup_restore_desc">استورد البيانات أو صدّرها وشارك ملف ZIP للنسخ الاحتياطي الكامل.</string>
+    <string name="settings_help_backup_restore">استخدم هذه الصفحة لاستيراد أو تصدير CSV وGeoJSON وKML وKMZ أو ZIP. يمكنك أيضًا إنشاء نسخة ZIP احتياطية كاملة محليًا ثم فتح ورقة المشاركة في النظام لإرسالها إلى تطبيقات أخرى أو إلى التخزين السحابي.</string>
     <string name="settings_download_source_label">مصدر التنزيل</string>
     <string name="settings_download_multi_thread_label">تمكين التنزيل متعدد الخيوط</string>
     <string name="settings_download_thread_count_label">خيوط التنزيل: %1$d</string>

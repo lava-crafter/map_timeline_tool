@@ -105,6 +105,9 @@
     <string name="settings_download_title">다운로드</string>
     <string name="settings_download_desc">다운로드 소스를 선택하고 저장된 영역을 관리합니다.</string>
     <string name="settings_help_download">대량 다운로드용 타일 서버를 선택하고, 지도 다운로더를 실행하고, 이 화면에서 저장된 영역을 정리하거나 중복 제거할 수 있습니다.</string>
+    <string name="settings_backup_restore_title">백업 및 복원</string>
+    <string name="settings_backup_restore_desc">데이터를 가져오거나 내보내고, 전체 백업 ZIP을 공유할 수 있습니다.</string>
+    <string name="settings_help_backup_restore">이 화면에서 CSV, GeoJSON, KML, KMZ, ZIP을 가져오거나 내보낼 수 있습니다. 또한 로컬에서 전체 ZIP 백업을 만들고 시스템 공유 시트를 열어 다른 앱이나 클라우드 드라이브로 보낼 수 있습니다.</string>
     <string name="settings_download_source_label">다운로드 소스</string>
     <string name="settings_download_multi_thread_label">멀티스레드 다운로드 사용</string>
     <string name="settings_download_thread_count_label">다운로드 스레드: %1$d</string>

@@ -901,7 +901,12 @@ class MainActivity : AppCompatActivity() {
                                     followSystemTheme = settingsState.followSystemTheme,
                                     onFollowSystemThemeChange = settingsViewModel::setFollowSystemTheme,
                                     languagePreference = settingsState.languagePreference,
-                                    onLanguagePreferenceChange = settingsViewModel::setLanguagePreference,
+                                    onLanguagePreferenceChange = { preference ->
+                                        if (preference != settingsState.languagePreference) {
+                                            settingsViewModel.setLanguagePreference(preference)
+                                            restartApp()
+                                        }
+                                    },
                                     timeoutSeconds = settingsState.timeoutSeconds,
                                     onTimeoutSecondsChange = settingsViewModel::setTimeoutSeconds,
                                     cachePolicy = settingsState.cachePolicy,
@@ -1369,6 +1374,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun restartApp() {
+        val restartIntent = packageManager.getLaunchIntentForPackage(packageName)
+            ?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            ?: Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+        startActivity(restartIntent)
+        finish()
     }
 }
 

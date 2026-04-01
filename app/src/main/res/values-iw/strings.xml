@@ -105,6 +105,9 @@
     <string name="settings_download_title">הורדות</string>
     <string name="settings_download_desc">בחר מקור הורדה ונהל אזורים שמורים.</string>
     <string name="settings_help_download">בחר שרת אריחים להורדות המוניות, הפעל את מוריד המפה, ונקה או הסר כפילויות מאזורים שמורים מהמסך הזה.</string>
+    <string name="settings_backup_restore_title">גיבוי ושחזור</string>
+    <string name="settings_backup_restore_desc">ייבא או ייצא נתונים, ושתף קובץ ZIP של גיבוי מלא.</string>
+    <string name="settings_help_backup_restore">השתמש במסך זה כדי לייבא או לייצא CSV,‏ GeoJSON,‏ KML,‏ KMZ או ZIP. אפשר גם ליצור מקומית גיבוי ZIP מלא ולפתוח את גיליון השיתוף של המערכת כדי לשלוח אותו לאפליקציות אחרות או לאחסון ענן.</string>
     <string name="settings_download_source_label">מקור הורדה</string>
     <string name="settings_download_multi_thread_label">הפעלת הורדה מרובת־חוטים</string>
     <string name="settings_download_thread_count_label">חוטי הורדה: %1$d</string>
