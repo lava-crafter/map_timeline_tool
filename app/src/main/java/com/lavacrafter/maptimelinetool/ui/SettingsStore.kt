@@ -115,7 +115,7 @@ object SettingsStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putInt(KEY_LANGUAGE_PREFERENCE, preference.value)
-            .apply()
+            .commit()
     }
 
     fun getFollowSystemTheme(context: Context): Boolean {
