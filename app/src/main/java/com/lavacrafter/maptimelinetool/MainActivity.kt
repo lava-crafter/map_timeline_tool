@@ -590,7 +590,7 @@ class MainActivity : AppCompatActivity() {
                     val note = newPointNote.trim()
                     val addPhotoPath = pendingAddPhotoPath
                     scope.launch {
-                        val loc = viewModel.getLastKnownLocation() ?: viewModel.getFreshLocation(2000L)
+                        val loc = viewModel.getBestEffortLocation(5000L)
                         if (loc == null) {
                             Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
                             withContext(Dispatchers.IO) {
@@ -1193,7 +1193,7 @@ class MainActivity : AppCompatActivity() {
                         onConfirm = { title, note, createdAt, selectedTags ->
                             scope.launch {
                                 val addPhotoPath = pendingAddPhotoPath
-                                val loc = viewModel.getFreshLocation(5000L)
+                                val loc = viewModel.getBestEffortLocation(5000L)
                                 if (loc == null) {
                                     Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
                                     withContext(Dispatchers.IO) {

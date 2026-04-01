@@ -26,13 +26,17 @@ class QuickAddReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val graph = context.appGraph()
-                val location = graph.locationProvider.getFreshLocation(12000L)
+                val location = graph.locationProvider.getBestEffortLocation(12000L)
                     ?: run {
                         showToast(context, context.getString(R.string.toast_location_failed))
                         return@launch
                     }
 
-                val timestamp = System.currentTimeMillis()
+                val eventTime = System.currentTimeMillis()
+                val timestamp = location.fixTimeMs
+                    ?.takeIf { it > 0L }
+                    ?.let { maxOf(eventTime, it) }
+                    ?: eventTime
                 val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
                 graph.pointWriteUseCase.addPointWithTags(
                     title = title,

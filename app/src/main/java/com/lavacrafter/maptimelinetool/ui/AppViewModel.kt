@@ -53,8 +53,9 @@ class AppViewModel(
         photoPath: String? = null
     ) {
         if (location == null) return
+        val normalizedTimestamp = normalizeTimestamp(timestamp, location)
         viewModelScope.launch {
-            pointWriteUseCase.addPointWithTags(title, note, location, timestamp, tagIds, photoPath)
+            pointWriteUseCase.addPointWithTags(title, note, location, normalizedTimestamp, tagIds, photoPath)
         }
     }
 
@@ -155,18 +156,29 @@ class AppViewModel(
 
     suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? = locationProvider.getFreshLocation(timeoutMs)
 
+    suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? = locationProvider.getBestEffortLocation(timeoutMs)
+
     fun scheduleAutoAdd(createdAt: Long, timeoutSeconds: Int) {
         autoAddJob?.cancel()
         autoAddJob = viewModelScope.launch {
             kotlinx.coroutines.delay(timeoutSeconds * 1000L)
             val timestamp = createdAt
-            val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-            val location = getFreshLocation(12000L)
+            val location = getBestEffortLocation(12000L)
             if (location != null) {
-                pointWriteUseCase.addPointWithTags(title, "", location, timestamp, emptySet())
+                val normalizedTimestamp = normalizeTimestamp(timestamp, location)
+                val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(normalizedTimestamp))
+                pointWriteUseCase.addPointWithTags(title, "", location, normalizedTimestamp, emptySet())
                 _autoAdded.tryEmit(Unit)
             }
         }
+    }
+
+    private fun normalizeTimestamp(eventTimeMs: Long, location: GeoPoint): Long {
+        val fixTime = location.fixTimeMs ?: return eventTimeMs
+        if (fixTime <= 0L) {
+            return eventTimeMs
+        }
+        return maxOf(eventTimeMs, fixTime)
     }
 
     fun cancelAutoAdd() {

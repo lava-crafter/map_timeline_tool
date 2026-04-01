@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Point
 import android.location.Location
+import android.location.LocationManager
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -84,7 +85,13 @@ fun MapScreen(
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapView: MapView? by remember { mutableStateOf(null) }
-    val locationProvider = remember { GpsMyLocationProvider(context) }
+    val locationProvider = remember {
+        GpsMyLocationProvider(context).apply {
+            clearLocationSources()
+            addLocationSource(LocationManager.GPS_PROVIDER)
+            addLocationSource(LocationManager.NETWORK_PROVIDER)
+        }
+    }
     val orientationProvider = remember { InternalCompassOrientationProvider(context) }
     val headingOverlay = remember { HeadingLocationOverlay(context) }
     val todayOrderById = remember(points) { buildTodayOrder(points) }

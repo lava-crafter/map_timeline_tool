@@ -12,9 +12,15 @@ class AndroidLocationProvider(
 
     override suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? =
         LocationUtils.getFreshLocation(context, timeoutMs)?.toGeoPoint()
+
+    override suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? =
+        LocationUtils.getBestEffortLocation(context, timeoutMs)?.toGeoPoint()
 }
 
 private fun android.location.Location.toGeoPoint(): GeoPoint = GeoPoint(
     latitude = latitude,
-    longitude = longitude
+    longitude = longitude,
+    accuracyMeters = if (hasAccuracy()) accuracy else null,
+    fixTimeMs = time.takeIf { it > 0L },
+    provider = provider
 )

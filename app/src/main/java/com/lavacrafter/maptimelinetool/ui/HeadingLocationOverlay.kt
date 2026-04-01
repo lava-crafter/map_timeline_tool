@@ -30,12 +30,18 @@ class HeadingLocationOverlay(private val context: Context) : Overlay(), IMyLocat
     override fun onLocationChanged(location: Location?, provider: IMyLocationProvider?) {
         if (location != null) {
             this.location = location
-            context.getSharedPreferences(LOCATION_PREFS, Context.MODE_PRIVATE)
+            val editor = context.getSharedPreferences(LOCATION_PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putFloat(KEY_LAT, location.latitude.toFloat())
                 .putFloat(KEY_LON, location.longitude.toFloat())
                 .putLong(KEY_TIME, location.time)
-                .apply()
+                .putString(KEY_PROVIDER, location.provider)
+            if (location.hasAccuracy()) {
+                editor.putFloat(KEY_ACCURACY, location.accuracy)
+            } else {
+                editor.remove(KEY_ACCURACY)
+            }
+            editor.apply()
         }
     }
 
@@ -76,5 +82,7 @@ class HeadingLocationOverlay(private val context: Context) : Overlay(), IMyLocat
         const val KEY_LAT = "lat"
         const val KEY_LON = "lon"
         const val KEY_TIME = "time"
+        const val KEY_ACCURACY = "accuracy"
+        const val KEY_PROVIDER = "provider"
     }
 }
