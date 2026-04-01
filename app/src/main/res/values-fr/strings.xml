@@ -105,6 +105,9 @@
     <string name="settings_download_title">Téléchargements</string>
     <string name="settings_download_desc">Choisissez une source de téléchargement et gérez les zones enregistrées.</string>
     <string name="settings_help_download">Sélectionnez un serveur de tuiles pour les téléchargements en masse, lancez le téléchargeur de carte et nettoyez ou dédupliquez les zones enregistrées depuis cet écran.</string>
+    <string name="settings_backup_restore_title">Sauvegarde et restauration</string>
+    <string name="settings_backup_restore_desc">Importez ou exportez des données, et partagez une sauvegarde ZIP complète.</string>
+    <string name="settings_help_backup_restore">Utilisez cet écran pour importer ou exporter des fichiers CSV, GeoJSON, KML, KMZ ou ZIP. Vous pouvez aussi créer localement une sauvegarde ZIP complète puis ouvrir la feuille de partage système pour l’envoyer vers d’autres applications ou des services cloud.</string>
     <string name="settings_download_source_label">Source de téléchargement</string>
     <string name="settings_download_multi_thread_label">Activer le téléchargement multithread</string>
     <string name="settings_download_thread_count_label">Threads de téléchargement : %1$d</string>

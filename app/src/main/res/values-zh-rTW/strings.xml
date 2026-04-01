@@ -105,6 +105,9 @@
     <string name="settings_download_title">下載</string>
     <string name="settings_download_desc">選擇下載來源並管理已儲存區域。</string>
     <string name="settings_help_download">可選擇批次下載的瓦片伺服器、啟動地圖下載器，並在此畫面整理或去重已儲存區域。</string>
+    <string name="settings_backup_restore_title">備份與還原</string>
+    <string name="settings_backup_restore_desc">匯入或匯出資料，並可分享完整備份 ZIP</string>
+    <string name="settings_help_backup_restore">可在本頁匯入或匯出 CSV、GeoJSON、KML、KMZ 或 ZIP。也可先在本機打包完整 ZIP 備份，再開啟系統分享，傳送到其他應用程式或雲端硬碟。</string>
     <string name="settings_download_source_label">下載來源</string>
     <string name="settings_download_multi_thread_label">啟用多執行緒下載</string>
     <string name="settings_download_thread_count_label">下載執行緒：%1$d</string>

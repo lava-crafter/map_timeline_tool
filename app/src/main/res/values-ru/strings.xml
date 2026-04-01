@@ -105,6 +105,9 @@
     <string name="settings_download_title">Загрузки</string>
     <string name="settings_download_desc">Выберите источник загрузки и управляйте сохранёнными областями.</string>
     <string name="settings_help_download">Выберите сервер тайлов для массовой загрузки, запустите загрузчик карты и очищайте или дедуплицируйте сохранённые области с этого экрана.</string>
+    <string name="settings_backup_restore_title">Резервное копирование и восстановление</string>
+    <string name="settings_backup_restore_desc">Импортируйте или экспортируйте данные и делитесь полным ZIP-архивом резервной копии.</string>
+    <string name="settings_help_backup_restore">Используйте этот экран для импорта или экспорта CSV, GeoJSON, KML, KMZ или ZIP. Также можно локально создать полный ZIP-бэкап и открыть системное меню «Поделиться», чтобы отправить его в другие приложения или облачные хранилища.</string>
     <string name="settings_download_source_label">Источник загрузки</string>
     <string name="settings_download_multi_thread_label">Включить многопоточную загрузку</string>
     <string name="settings_download_thread_count_label">Потоков загрузки: %1$d</string>
