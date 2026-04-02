@@ -6,6 +6,7 @@ import java.io.InputStreamReader
 import java.io.PushbackReader
 import java.util.Locale
 import java.util.zip.ZipInputStream
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 
 object ZipImporter {
     data class ImportedTag(
@@ -120,7 +121,7 @@ object ZipImporter {
         val nameIndex = header.indexOf("name").takeIf { it >= 0 } ?: return emptyList()
         return rows.drop(1).mapNotNull { row ->
             val legacyId = row.getOrNull(idIndex)?.trim()?.toLongOrNull() ?: return@mapNotNull null
-            val name = row.getOrNull(nameIndex)?.trim().orEmpty()
+            val name = sanitizeTagName(row.getOrNull(nameIndex)?.trim().orEmpty())
             if (name.isEmpty()) return@mapNotNull null
             ImportedTag(legacyId = legacyId, name = name)
         }

@@ -6,6 +6,7 @@ import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.model.Tag
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -49,6 +50,32 @@ class PointWriteUseCaseTest {
         kotlinx.coroutines.delay(50) // wait for async noise collection
 
         assertEquals(listOf(10L to -20f), fakeRepository.updatedNoiseDb)
+    }
+
+    @Test
+    fun `addPointWithTags sanitizes title and note before storing`() = runBlocking {
+        val fakeRepository = FakePointRepository()
+        val useCase = PointWriteUseCase(
+            repository = fakeRepository,
+            sensorSnapshotPort = object : SensorSnapshotPort {
+                override suspend fun readSnapshot(): PointSensorSnapshot = PointSensorSnapshot()
+            },
+            deletePhoto = {},
+            asyncScope = this
+        )
+
+        val timestamp = 1710000000000L
+        useCase.addPointWithTags(
+            title = "\u0000\t ",
+            note = "Line1\r\nLine2\tLine3\u0007",
+            location = GeoPoint(12.3, 45.6),
+            timestamp = timestamp,
+            tagIds = emptySet()
+        )
+
+        val inserted = fakeRepository.inserted.single()
+        assertEquals(formatPointTimestamp(timestamp), inserted.title)
+        assertEquals("Line1\nLine2 Line3", inserted.note)
     }
 }
 

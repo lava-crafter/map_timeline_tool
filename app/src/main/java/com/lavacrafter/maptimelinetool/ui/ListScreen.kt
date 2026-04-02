@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.R
 import java.text.SimpleDateFormat
@@ -51,14 +52,24 @@ fun ListScreen(
                         onLongClick = { onLongPress(p) }
                     )
                     .padding(vertical = 4.dp),
-                headlineContent = { Text(p.title) },
+                headlineContent = {
+                    Text(
+                        text = p.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 supportingContent = {
                     val detail = if (noteText.isBlank()) {
                         "${localTimeText}\n${latLonText}"
                     } else {
                         "${noteText}\n${localTimeText}\n${latLonText}"
                     }
-                    Text(detail)
+                    Text(
+                        text = detail,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 trailingContent = {
                     if (!orderText.isNullOrBlank()) {

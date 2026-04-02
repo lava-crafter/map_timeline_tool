@@ -34,9 +34,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 
 sealed interface QuickTagSlot
 
@@ -129,6 +131,8 @@ private fun QuickTagCell(
         Text(
             text = content,
             textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             color = when {
                 slot is TagSlot && isSelected -> MaterialTheme.colorScheme.primary
                 else -> MaterialTheme.colorScheme.onSurface
@@ -161,9 +165,10 @@ fun TagSelectionDialog(
             Column(modifier = Modifier.height(340.dp)) {
                 OutlinedTextField(
                     value = newTagName,
-                    onValueChange = { newTagName = it },
+                    onValueChange = { newTagName = sanitizeTagName(it) },
                     label = { Text(stringResource(R.string.label_new_tag)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = {
@@ -193,7 +198,11 @@ fun TagSelectionDialog(
                                 onCheckedChange = { onToggleTag(tag.id) }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(tag.name)
+                            Text(
+                                text = tag.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         HorizontalDivider()
                     }

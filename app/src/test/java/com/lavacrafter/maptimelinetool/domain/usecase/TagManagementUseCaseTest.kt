@@ -16,10 +16,10 @@ class TagManagementUseCaseTest {
         val fake = FakePointRepositoryGateway()
         val useCase = TagManagementUseCase(fake)
 
-        val insertedId = useCase.addTag("work")
+        val insertedId = useCase.addTag("  work\tteam\u0007 ")
 
         assertEquals(7L, insertedId)
-        assertEquals("work", fake.lastInsertedTag?.name)
+        assertEquals("work team", fake.lastInsertedTag?.name)
     }
 
     @Test
@@ -27,9 +27,20 @@ class TagManagementUseCaseTest {
         val fake = FakePointRepositoryGateway()
         val useCase = TagManagementUseCase(fake)
 
-        useCase.renameTag(Tag(id = 3, name = "old"), "new")
+        useCase.renameTag(Tag(id = 3, name = "old"), " new\nname\u0007 ")
 
-        assertEquals(Tag(id = 3, name = "new"), fake.lastUpdatedTag)
+        assertEquals(Tag(id = 3, name = "new name"), fake.lastUpdatedTag)
+    }
+
+    @Test
+    fun `addTag ignores sanitized blank input`() = runBlocking {
+        val fake = FakePointRepositoryGateway()
+        val useCase = TagManagementUseCase(fake)
+
+        val insertedId = useCase.addTag("\u0000\t ")
+
+        assertEquals(0L, insertedId)
+        assertEquals(null, fake.lastInsertedTag)
     }
 
     @Test

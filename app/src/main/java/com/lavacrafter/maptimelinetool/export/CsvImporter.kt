@@ -7,6 +7,9 @@ import java.io.PushbackReader
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 
 object CsvImporter {
     fun parseCsv(csv: String): List<Point> {
@@ -50,9 +53,10 @@ object CsvImporter {
             if (row.all { it.isBlank() }) continue
             val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull() ?: continue
             val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull() ?: continue
-            val title = row.valueOf(indexMap, "name").orEmpty()
-            val note = row.valueOf(indexMap, "description").orEmpty()
             val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), sdf)
+            val title = sanitizePointTitle(row.valueOf(indexMap, "name").orEmpty())
+                .ifBlank { formatPointTimestamp(timestamp) }
+            val note = sanitizePointNote(row.valueOf(indexMap, "description").orEmpty())
             val photoRelPath = row.valueOf(indexMap, "photo_rel_path").orEmpty().trim()
             val resolvedPhotoPath = photoRelPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
 

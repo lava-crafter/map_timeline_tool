@@ -19,6 +19,10 @@ import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
 import com.lavacrafter.maptimelinetool.export.ZipImporter
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -74,7 +78,9 @@ class AppViewModel(
     fun addTag(name: String, onResult: (Long) -> Unit = {}) {
         viewModelScope.launch {
             val id = tagManagementUseCase.addTag(name)
-            onResult(id)
+            if (id > 0L) {
+                onResult(id)
+            }
         }
     }
 
@@ -104,16 +110,20 @@ class AppViewModel(
 
         val pointIdByIndex = mutableMapOf<Int, Long>()
         importStats.points.forEachIndexed { index, point ->
-            val key = Triple(point.timestamp, point.latitude, point.longitude)
+            val normalizedPoint = point.copy(
+                title = sanitizePointTitle(point.title).ifBlank { formatPointTimestamp(point.timestamp) },
+                note = sanitizePointNote(point.note)
+            )
+            val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
             val existing = existingMap[key]
             val actualId = if (existing != null) {
-                val merged = point.copy(id = existing.id)
+                val merged = normalizedPoint.copy(id = existing.id)
                 repo.update(merged)
                 existingMap[key] = merged
                 existing.id
             } else {
-                val newId = repo.insert(point.copy(id = 0))
-                existingMap[key] = point.copy(id = newId)
+                val newId = repo.insert(normalizedPoint.copy(id = 0))
+                existingMap[key] = normalizedPoint.copy(id = newId)
                 newId
             }
             pointIdByIndex[index] = actualId
@@ -122,12 +132,14 @@ class AppViewModel(
         if (importStats.tags.isEmpty() || importStats.pointTags.isEmpty()) return
 
         val existingTags = repo.observeTags().first()
-        val existingTagByName = existingTags.associateBy { it.name.trim().lowercase(Locale.US) }.toMutableMap()
+        val existingTagByName = existingTags.associateBy { sanitizeTagName(it.name).lowercase(Locale.US) }.toMutableMap()
         val legacyTagIdToActualId = mutableMapOf<Long, Long>()
         importStats.tags.forEach { importedTag ->
-            val normalizedName = importedTag.name.trim().lowercase(Locale.US)
-            val actualId = existingTagByName[normalizedName]?.id ?: repo.insertTag(Tag(name = importedTag.name.trim()))
-            existingTagByName.putIfAbsent(normalizedName, Tag(id = actualId, name = importedTag.name.trim()))
+            val normalizedName = sanitizeTagName(importedTag.name)
+            if (normalizedName.isBlank()) return@forEach
+            val normalizedKey = normalizedName.lowercase(Locale.US)
+            val actualId = existingTagByName[normalizedKey]?.id ?: repo.insertTag(Tag(name = normalizedName))
+            existingTagByName.putIfAbsent(normalizedKey, Tag(id = actualId, name = normalizedName))
             legacyTagIdToActualId[importedTag.legacyId] = actualId
         }
 

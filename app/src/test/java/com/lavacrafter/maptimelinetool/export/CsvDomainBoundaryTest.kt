@@ -85,4 +85,16 @@ class CsvDomainBoundaryTest {
         assertNull(imported.first().accelerometerX)
         assertEquals("photos/p.jpg", imported.first().photoPath)
     }
+
+    @Test
+    fun `import csv sanitizes text fields`() {
+        val csv = "name,description,latitude,longitude,time_utc\n" +
+            "\"  Weird\tTitle\nHere\u0007  \",\"Line1\r\nLine2\tLine3\u0000\",10.0,20.0,2024-01-01T00:00:00Z"
+
+        val imported = CsvImporter.parseCsv(csv)
+
+        assertEquals(1, imported.size)
+        assertEquals("Weird Title Here", imported.first().title)
+        assertEquals("Line1\nLine2 Line3", imported.first().note)
+    }
 }

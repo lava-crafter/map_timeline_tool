@@ -2,6 +2,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.Tag
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import kotlinx.coroutines.flow.Flow
 
 class TagManagementUseCase(
@@ -9,9 +10,17 @@ class TagManagementUseCase(
 ) {
     fun observeTags(): Flow<List<Tag>> = repository.observeTags()
 
-    suspend fun addTag(name: String): Long = repository.insertTag(Tag(name = name))
+    suspend fun addTag(name: String): Long {
+        val normalizedName = sanitizeTagName(name)
+        if (normalizedName.isBlank()) return 0L
+        return repository.insertTag(Tag(name = normalizedName))
+    }
 
-    suspend fun renameTag(tag: Tag, name: String) = repository.updateTag(tag.copy(name = name))
+    suspend fun renameTag(tag: Tag, name: String) {
+        val normalizedName = sanitizeTagName(name)
+        if (normalizedName.isBlank()) return
+        repository.updateTag(tag.copy(name = normalizedName))
+    }
 
     suspend fun deleteTag(tagId: Long) = repository.deleteTag(tagId)
 

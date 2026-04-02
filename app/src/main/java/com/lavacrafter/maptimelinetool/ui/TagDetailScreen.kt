@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.PointEntity
@@ -45,7 +46,7 @@ fun TagDetailScreen(
         ) {
             Text(stringResource(R.string.action_back))
         }
-        Text(text = tag.name)
+        Text(text = tag.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { showPicker = true }) { Text(stringResource(R.string.action_add_point_to_tag)) }
         Spacer(modifier = Modifier.height(8.dp))
@@ -83,14 +84,20 @@ private fun TagPointPickerDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
         },
-        title = { Text(stringResource(R.string.tag_manage_points_title, tag.name)) },
+        title = {
+            Text(
+                text = stringResource(R.string.tag_manage_points_title, tag.name),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         text = {
             Column(modifier = Modifier.fillMaxSize()) {
                 points.forEach { point ->
                     val isChecked = selected.contains(point.id)
                     TextButton(onClick = { onToggle(point, !isChecked) }) {
                         Checkbox(checked = isChecked, onCheckedChange = { onToggle(point, it) })
-                        Text(text = point.title)
+                        Text(text = point.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

@@ -171,7 +171,7 @@ class ZipExportImportTest {
             zip.write(csv.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
             zip.putNextEntry(java.util.zip.ZipEntry("tags.csv"))
-            val tagsCsv = "\"tag_id\",\"name\"\n\"10\",\"Work\"\n"
+            val tagsCsv = "\"tag_id\",\"name\"\n\"10\",\"  Work\tTeam\u0007 \"\n"
             zip.write(tagsCsv.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
             zip.putNextEntry(java.util.zip.ZipEntry("point_tags.csv"))
@@ -182,7 +182,7 @@ class ZipExportImportTest {
 
         val imported = ZipImporter.importZip(ByteArrayInputStream(actualZip.toByteArray())) { _, _ -> null }
         assertEquals(1, imported.tags.size)
-        assertEquals("Work", imported.tags.first().name)
+        assertEquals("Work Team", imported.tags.first().name)
         assertEquals(1, imported.pointTags.size)
         assertEquals(0, imported.pointTags.first().pointIndex)
         assertEquals(10L, imported.pointTags.first().legacyTagId)

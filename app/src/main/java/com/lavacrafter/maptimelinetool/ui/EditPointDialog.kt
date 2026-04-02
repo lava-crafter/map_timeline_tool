@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,11 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -68,7 +72,7 @@ fun EditPointDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSave(title.trim().ifBlank { point.title }, note.trim(), currentPhotoPath) }) {
+            TextButton(onClick = { onSave(sanitizePointTitle(title).ifBlank { point.title }, sanitizePointNote(note), currentPhotoPath) }) {
                 Text(stringResource(R.string.action_save))
             }
         },
@@ -84,13 +88,14 @@ fun EditPointDialog(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = sanitizePointTitle(it) },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = note,
-                    onValueChange = { note = it },
+                    onValueChange = { note = sanitizePointNote(it) },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -144,8 +149,15 @@ fun EditPointDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         selectedTags.forEach { tag ->
-                            OutlinedButton(onClick = { onToggleTag(tag.id) }) {
-                                Text(tag.name)
+                            OutlinedButton(
+                                onClick = { onToggleTag(tag.id) },
+                                modifier = Modifier.widthIn(max = 180.dp)
+                            ) {
+                                Text(
+                                    text = tag.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }

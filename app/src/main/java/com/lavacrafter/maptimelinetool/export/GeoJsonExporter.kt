@@ -6,6 +6,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -137,6 +140,8 @@ object GeoJsonExporter {
             val timestampMs = properties?.optLong("timestamp_ms")
                 ?.takeIf { it > 0L }
                 ?: parseTimestamp(properties?.optString("time_utc"), sdf)
+            val normalizedTitle = sanitizePointTitle(title).ifBlank { formatPointTimestamp(timestampMs) }
+            val normalizedNote = sanitizePointNote(note)
 
             val relPhotoPath = properties?.optString("photo_rel_path")?.trim().orEmpty()
             val resolvedPhotoPath = relPhotoPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
@@ -146,8 +151,8 @@ object GeoJsonExporter {
                     timestamp = timestampMs,
                     latitude = lat,
                     longitude = lon,
-                    title = title,
-                    note = note,
+                    title = normalizedTitle,
+                    note = normalizedNote,
                     pressureHpa = properties?.optFloatOrNull("pressure_hpa"),
                     ambientLightLux = properties?.optFloatOrNull("ambient_light_lux"),
                     accelerometerX = properties?.optFloatOrNull("accelerometer_x"),

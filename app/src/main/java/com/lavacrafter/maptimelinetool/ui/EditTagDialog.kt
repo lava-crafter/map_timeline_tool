@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 
 @Composable
 fun EditTagDialog(
@@ -28,7 +29,7 @@ fun EditTagDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onRename(name) }) { Text(stringResource(R.string.action_save)) }
+            TextButton(onClick = { onRename(sanitizeTagName(name)) }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
@@ -38,9 +39,10 @@ fun EditTagDialog(
             Column(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = sanitizeTagName(it) },
                     label = { Text(stringResource(R.string.label_tag_name)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete)) }
             }

@@ -4,6 +4,11 @@ import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizeMultilineText
+import com.lavacrafter.maptimelinetool.text.sanitizeSingleLineText
+import com.lavacrafter.maptimelinetool.text.MAX_POINT_NOTE_LENGTH
+import com.lavacrafter.maptimelinetool.text.MAX_POINT_TITLE_LENGTH
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,10 +30,13 @@ class PointWriteUseCase(
         tagIds: Set<Long>,
         photoPath: String? = null
     ) {
+        val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
+            .ifBlank { formatPointTimestamp(timestamp) }
+        val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
         val id = repository.insert(
             buildPoint(
-                title = title,
-                note = note,
+                title = normalizedTitle,
+                note = normalizedNote,
                 location = location,
                 timestamp = timestamp,
                 photoPath = photoPath
@@ -46,7 +54,10 @@ class PointWriteUseCase(
     }
 
     suspend fun updatePoint(point: Point, title: String, note: String, photoPath: String?) {
-        repository.update(point.copy(title = title, note = note, photoPath = photoPath))
+        val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
+            .ifBlank { point.title }
+        val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
+        repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
         if (point.photoPath != photoPath) {
             deletePhoto(point.photoPath)
         }
@@ -64,15 +75,20 @@ class PointWriteUseCase(
         }.toMutableMap()
 
         pointsList.forEach { p ->
-            val key = Triple(p.timestamp, p.latitude, p.longitude)
+            val normalizedPoint = p.copy(
+                title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
+                    .ifBlank { formatPointTimestamp(p.timestamp) },
+                note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
+            )
+            val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
             val existing = existingMap[key]
             if (existing != null) {
-                val merged = p.copy(id = existing.id)
+                val merged = normalizedPoint.copy(id = existing.id)
                 repository.update(merged)
                 existingMap[key] = merged
             } else {
-                val newId = repository.insert(p)
-                existingMap[key] = p.copy(id = newId)
+                val newId = repository.insert(normalizedPoint)
+                existingMap[key] = normalizedPoint.copy(id = newId)
             }
         }
     }
