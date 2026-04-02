@@ -214,7 +214,7 @@ android {
         applicationId = "com.lavacrafter.maptimelinetool"
         minSdk = 24
         targetSdk = 36
-        versionCode = 15
+        versionCode = 16
         versionName = "0.1.6"
     }
 
