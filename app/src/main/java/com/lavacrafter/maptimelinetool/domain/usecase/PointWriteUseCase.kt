@@ -65,7 +65,7 @@ class PointWriteUseCase(
             asyncScope.launch {
                 val noiseDb = runCatching { collectNoiseDb() }.getOrNull()
                 repository.updateNoiseDb(id, noiseDb)
-            }
+            }.join()
         }
     }
 
