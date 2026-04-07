@@ -113,8 +113,8 @@ import com.lavacrafter.maptimelinetool.ui.downloadTileSourceById
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
+import com.lavacrafter.maptimelinetool.notification.showQuickAddNotification
 import com.lavacrafter.maptimelinetool.ui.theme.MapTimelineToolTheme
-import com.lavacrafter.maptimelinetool.notification.QuickAddService
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -465,7 +465,7 @@ class MainActivity : AppCompatActivity() {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
                     }
-                    ContextCompat.startForegroundService(context, Intent(context, QuickAddService::class.java))
+                    context.showQuickAddNotification()
                 }
 
                 LaunchedEffect(settingsState.cachePolicy, settingsState.satelliteCachePolicy, settingsState.mapTileSourceId, networkStatus) {

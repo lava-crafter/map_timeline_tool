@@ -19,13 +19,25 @@ package com.lavacrafter.maptimelinetool.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class QuickAddReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        ContextCompat.startForegroundService(
-            context,
-            Intent(context, QuickAddService::class.java).setAction(ACTION_QUICK_ADD)
-        )
+        if (intent.action != ACTION_QUICK_ADD) {
+            return
+        }
+
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                appContext.performQuickAdd()
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 }
