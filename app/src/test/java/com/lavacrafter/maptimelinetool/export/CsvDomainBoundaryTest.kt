@@ -51,6 +51,7 @@ class CsvDomainBoundaryTest {
         val lines = csv.lineSequence().toList()
         assertTrue(lines.first().contains("pressure_hpa"))
         assertTrue(lines.first().contains("photo_rel_path"))
+        assertTrue(lines.first().contains("location_accuracy_meters"))
         assertTrue(lines[1].contains("\"photos/a.jpg\""))
     }
 
@@ -71,6 +72,9 @@ class CsvDomainBoundaryTest {
                     timestamp = 1710000000000L,
                     latitude = 11.1,
                     longitude = 22.2,
+                    locationAccuracyMeters = 12f,
+                    locationFixTimeMs = 1710000005000L,
+                    locationProvider = "network",
                     title = "New",
                     note = "Line1\nLine2",
                     pressureHpa = 1001.5f,
@@ -82,6 +86,9 @@ class CsvDomainBoundaryTest {
 
         assertEquals(1, imported.size)
         assertEquals("New", imported.first().title)
+        assertEquals(12f, imported.first().locationAccuracyMeters ?: 0f, 0.001f)
+        assertEquals(1710000005000L, imported.first().locationFixTimeMs)
+        assertEquals("network", imported.first().locationProvider)
         assertEquals(1001.5f, imported.first().pressureHpa ?: 0f, 0.001f)
         assertEquals("photos/new.jpg", imported.first().photoPath)
         assertEquals("Line1\nLine2", imported.first().note)

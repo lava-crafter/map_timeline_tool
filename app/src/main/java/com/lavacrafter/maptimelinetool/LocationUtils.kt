@@ -101,7 +101,8 @@ object LocationUtils {
         context: Context,
         timeoutMs: Long,
         maxAgeMs: Long = MAX_POINT_LOCATION_AGE_MS,
-        maxAccuracyMeters: Float = MAX_POINT_ACCURACY_METERS
+        maxAccuracyMeters: Float = MAX_POINT_ACCURACY_METERS,
+        requireAccuracy: Boolean = false
     ): Location? {
         val fresh = withTimeoutOrNull(timeoutMs) {
             try {
@@ -112,8 +113,23 @@ object LocationUtils {
         } ?: return null
 
         return fresh.takeIf {
-            isLocationAcceptable(it, System.currentTimeMillis(), maxAgeMs, maxAccuracyMeters)
+            isLocationAcceptable(it, System.currentTimeMillis(), maxAgeMs, maxAccuracyMeters, requireAccuracy)
         }?.also { cacheLocation(context, it) }
+    }
+
+    suspend fun getPreciseLocation(
+        context: Context,
+        timeoutMs: Long,
+        maxAgeMs: Long = MAX_POINT_LOCATION_AGE_MS,
+        maxAccuracyMeters: Float = MAX_POINT_ACCURACY_METERS
+    ): Location? {
+        return getFreshLocation(
+            context = context,
+            timeoutMs = timeoutMs,
+            maxAgeMs = maxAgeMs,
+            maxAccuracyMeters = maxAccuracyMeters,
+            requireAccuracy = true
+        )
     }
 
     suspend fun getBestEffortLocation(
@@ -189,7 +205,8 @@ object LocationUtils {
         location: Location,
         nowMs: Long,
         maxAgeMs: Long,
-        maxAccuracyMeters: Float
+        maxAccuracyMeters: Float,
+        requireAccuracy: Boolean = false
     ): Boolean {
         if (location.latitude.isNaN() || location.longitude.isNaN()) {
             return false
@@ -198,6 +215,10 @@ object LocationUtils {
         val fixTime = location.time.takeIf { it > 0L } ?: return false
         val ageMs = (nowMs - fixTime).coerceAtLeast(0L)
         if (ageMs > maxAgeMs) {
+            return false
+        }
+
+        if (requireAccuracy && !location.hasAccuracy()) {
             return false
         }
 

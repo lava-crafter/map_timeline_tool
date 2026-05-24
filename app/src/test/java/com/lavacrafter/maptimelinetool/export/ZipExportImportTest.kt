@@ -142,6 +142,9 @@ class ZipExportImportTest {
             timestamp = 1710000000000L,
             latitude = 1.2,
             longitude = 3.4,
+            locationAccuracyMeters = 6.5f,
+            locationFixTimeMs = 1709999999000L,
+            locationProvider = "gps",
             title = "P",
             note = "N",
             gyroscopeX = 9.9f
@@ -164,8 +167,31 @@ class ZipExportImportTest {
 
         assertEquals(1, imported.points.size)
         assertEquals(9.9f, imported.points.first().gyroscopeX ?: 0f, 0.001f)
+        assertEquals(6.5f, imported.points.first().locationAccuracyMeters ?: 0f, 0.001f)
+        assertEquals(1709999999000L, imported.points.first().locationFixTimeMs)
+        assertEquals("gps", imported.points.first().locationProvider)
         assertEquals("stored/photos/p.jpg", imported.points.first().photoPath)
         assertEquals(1, imported.importedPhotoCount)
+    }
+
+    @Test
+    fun `kml export includes location metadata`() {
+        val point = Point(
+            timestamp = 1710000000000L,
+            latitude = 1.2,
+            longitude = 3.4,
+            locationAccuracyMeters = 18f,
+            locationFixTimeMs = 1709999998000L,
+            locationProvider = "cached_overlay",
+            title = "P",
+            note = "N"
+        )
+
+        val kml = KmlExporter.buildKml(listOf(point))
+
+        assertTrue(kml.contains("Location provider: cached_overlay"))
+        assertTrue(kml.contains("Accuracy(m): 18.0"))
+        assertTrue(kml.contains("Fix time(ms): 1709999998000"))
     }
 
     @Test

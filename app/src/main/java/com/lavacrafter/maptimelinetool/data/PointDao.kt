@@ -19,6 +19,7 @@ package com.lavacrafter.maptimelinetool.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -56,7 +57,7 @@ interface PointDao {
     @Query("DELETE FROM tags WHERE id = :tagId")
     suspend fun deleteTag(tagId: Long)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPointTag(crossRef: PointTagCrossRef)
 
     @Query("DELETE FROM point_tags WHERE pointId = :pointId AND tagId = :tagId")

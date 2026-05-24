@@ -69,6 +69,9 @@ object GeoJsonExporter {
                 put("longitude", point.longitude)
                 put("timestamp_ms", point.timestamp)
                 put("time_utc", sdf.format(Date(point.timestamp)))
+                point.locationAccuracyMeters?.let { put("location_accuracy_meters", it) }
+                point.locationFixTimeMs?.let { put("location_fix_time_ms", it) }
+                point.locationProvider?.takeIf { it.isNotBlank() }?.let { put("location_provider", it) }
 
                 val photoRelPath = photoRelPathResolver(point)?.trim().orEmpty()
                 if (photoRelPath.isNotEmpty()) {
@@ -167,6 +170,9 @@ object GeoJsonExporter {
                     timestamp = timestampMs,
                     latitude = lat,
                     longitude = lon,
+                    locationAccuracyMeters = properties?.optFloatOrNull("location_accuracy_meters"),
+                    locationFixTimeMs = properties?.optLongOrNull("location_fix_time_ms"),
+                    locationProvider = properties?.optStringOrNull("location_provider"),
                     title = normalizedTitle,
                     note = normalizedNote,
                     pressureHpa = properties?.optFloatOrNull("pressure_hpa"),
@@ -200,6 +206,20 @@ object GeoJsonExporter {
         if (!has(key) || isNull(key)) return null
         val parsed = optDouble(key, Double.NaN)
         return parsed.takeIf { it.isFinite() }
+    }
+
+    private fun JSONObject.optLongOrNull(key: String): Long? {
+        if (!has(key) || isNull(key)) return null
+        return when (val value = opt(key)) {
+            is Number -> value.toLong()
+            is String -> value.trim().toLongOrNull()
+            else -> null
+        }
+    }
+
+    private fun JSONObject.optStringOrNull(key: String): String? {
+        if (!has(key) || isNull(key)) return null
+        return optString(key).trim().takeIf { it.isNotEmpty() }
     }
 
     private fun JSONObject.optFloatOrNull(key: String): Float? {

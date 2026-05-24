@@ -26,6 +26,9 @@ class AndroidLocationProvider(
     override fun getLastKnownLocation(): GeoPoint? =
         LocationUtils.getLastKnownLocation(context)?.toGeoPoint()
 
+    override suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint? =
+        LocationUtils.getPreciseLocation(context, timeoutMs)?.toGeoPoint()
+
     override suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? =
         LocationUtils.getFreshLocation(context, timeoutMs)?.toGeoPoint()
 

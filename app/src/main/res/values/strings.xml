@@ -36,6 +36,7 @@
     <string name="action_add_point_to_tag">Add points</string>
     <string name="toast_no_points">No points to export</string>
     <string name="toast_location_failed">Unable to get location. Check permissions/location services.</string>
+    <string name="toast_precise_location_failed">Unable to get a fresh precise location. Move to a clearer area and try again.</string>
     <string name="toast_permission_denied">Location permission denied</string>
     <string name="export_chooser_title">Export CSV</string>
     <string name="toast_export_failed">Export failed</string>
@@ -58,6 +59,12 @@
     <string name="label_auto_save_paused">Auto save paused (%1$d s)</string>
     <string name="label_tag_name">Tag name</string>
     <string name="label_sensor_data">Sensor data</string>
+    <string name="label_location_quality">Location quality</string>
+    <string name="label_location_quality_summary">%1$s · %2$s · fixed %3$s before save</string>
+    <string name="label_location_accuracy">±%1$.0f m</string>
+    <string name="label_location_accuracy_unknown">accuracy unknown</string>
+    <string name="label_location_fix_age_unknown">unknown time</string>
+    <string name="label_location_provider_unknown">Unknown provider</string>
     <string name="label_sensor_none">No sensor data recorded</string>
     <string name="label_sensor_pressure">Barometer: %1$.2f hPa</string>
     <string name="label_sensor_light">Ambient light: %1$.2f lx</string>

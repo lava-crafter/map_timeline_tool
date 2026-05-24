@@ -20,6 +20,7 @@ import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 
 interface LocationProvider {
     fun getLastKnownLocation(): GeoPoint?
+    suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint?
     suspend fun getFreshLocation(timeoutMs: Long): GeoPoint?
     suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint?
 }

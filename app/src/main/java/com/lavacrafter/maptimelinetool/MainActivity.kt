@@ -407,6 +407,7 @@ class MainActivity : AppCompatActivity() {
                 val importZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
+                        val importedPhotoPaths = mutableListOf<String>()
                         runCatching {
                             val imported = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
@@ -416,7 +417,7 @@ class MainActivity : AppCompatActivity() {
                                             val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
                                             val importedPhotoFile = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
                                             importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
-                                            toStoredPhotoPath(importedPhotoFile)
+                                            toStoredPhotoPath(importedPhotoFile).also { importedPhotoPaths += it }
                                         }.getOrNull()
                                     }
                                 } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0, null)
@@ -431,6 +432,9 @@ class MainActivity : AppCompatActivity() {
                             }
                             Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
                         }.onFailure {
+                            scope.launch(Dispatchers.IO) {
+                                importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
+                            }
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -606,9 +610,9 @@ class MainActivity : AppCompatActivity() {
                     val note = newPointNote.trim()
                     val addPhotoPath = pendingAddPhotoPath
                     scope.launch {
-                        val loc = viewModel.getBestEffortLocation(5000L)
+                        val loc = viewModel.getPreciseLocation(5000L)
                         if (loc == null) {
-                            Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.toast_precise_location_failed), Toast.LENGTH_SHORT).show()
                             withContext(Dispatchers.IO) {
                                 deletePointPhotoFile(context, addPhotoPath)
                             }
@@ -1209,9 +1213,9 @@ class MainActivity : AppCompatActivity() {
                         onConfirm = { title, note, createdAt, selectedTags ->
                             scope.launch {
                                 val addPhotoPath = pendingAddPhotoPath
-                                val loc = viewModel.getBestEffortLocation(5000L)
+                                val loc = viewModel.getPreciseLocation(5000L)
                                 if (loc == null) {
-                                    Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.toast_precise_location_failed), Toast.LENGTH_SHORT).show()
                                     withContext(Dispatchers.IO) {
                                         deletePointPhotoFile(context, addPhotoPath)
                                     }

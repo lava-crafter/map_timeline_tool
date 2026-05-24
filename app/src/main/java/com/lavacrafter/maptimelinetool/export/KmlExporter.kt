@@ -69,6 +69,11 @@ object KmlExporter {
                     descriptionLines.add("Tags: ${tags.joinToString(", ")}")
                 }
 
+                val locationQuality = buildLocationQualityDescription(point)
+                if (locationQuality != null) {
+                    descriptionLines.add(locationQuality)
+                }
+
                 val photoPath = photoRelPathResolver(point)?.trim().orEmpty()
                 if (photoPath.isNotEmpty()) {
                     descriptionLines.add("Photo: $photoPath")
@@ -113,5 +118,13 @@ object KmlExporter {
             .replace(">", "&gt;")
             .replace("\"", "&quot;")
             .replace("'", "&apos;")
+    }
+
+    private fun buildLocationQualityDescription(point: Point): String? {
+        val parts = mutableListOf<String>()
+        point.locationProvider?.takeIf { it.isNotBlank() }?.let { parts += "Location provider: $it" }
+        point.locationAccuracyMeters?.let { parts += "Accuracy(m): $it" }
+        point.locationFixTimeMs?.let { parts += "Fix time(ms): $it" }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" | ")
     }
 }

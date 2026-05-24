@@ -254,6 +254,7 @@ fun EditPointDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(stringResource(R.string.label_lat_lon, point.latitude, point.longitude))
+                LocationQualityText(point)
                 SensorReadingText(
                     value = point.pressureHpa,
                     formatRes = R.string.label_sensor_pressure
@@ -303,6 +304,13 @@ private fun SensorReadingText(value: Float?, formatRes: Int) {
 }
 
 @Composable
+private fun LocationQualityText(point: PointEntity) {
+    val summary = point.buildLocationQualitySummary() ?: return
+    Text(stringResource(R.string.label_location_quality))
+    Text(summary)
+}
+
+@Composable
 private fun SensorVectorText(x: Float?, y: Float?, z: Float?, formatRes: Int) {
     if (x == null || y == null || z == null) return
     Text(stringResource(formatRes, x, y, z))
@@ -315,6 +323,59 @@ private fun PointEntity.hasSensorData(): Boolean =
         (gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null) ||
         (magnetometerX != null && magnetometerY != null && magnetometerZ != null) ||
         noiseDb != null
+
+@Composable
+private fun PointEntity.buildLocationQualitySummary(): String? {
+    val providerText = locationProvider
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let(::formatLocationProvider)
+        ?: stringResource(R.string.label_location_provider_unknown)
+    val accuracyText = locationAccuracyMeters
+        ?.let { stringResource(R.string.label_location_accuracy, it) }
+        ?: stringResource(R.string.label_location_accuracy_unknown)
+    val ageText = formatLocationFixAge(timestamp, locationFixTimeMs)
+
+    if (locationProvider.isNullOrBlank() && locationAccuracyMeters == null && ageText == null) {
+        return null
+    }
+
+    return stringResource(
+        R.string.label_location_quality_summary,
+        providerText,
+        accuracyText,
+        ageText ?: stringResource(R.string.label_location_fix_age_unknown)
+    )
+}
+
+private fun formatLocationProvider(provider: String): String {
+    return when (provider.trim().lowercase(Locale.US)) {
+        "gps" -> "GPS"
+        "network" -> "Network"
+        "fused" -> "Fused"
+        "cached_overlay" -> "Cached overlay"
+        else -> provider
+        .split('_', '-', ' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { part ->
+            part.lowercase(Locale.US).replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase(Locale.US) else ch.toString()
+            }
+        }
+    }
+}
+
+private fun formatLocationFixAge(savedAtMs: Long, fixTimeMs: Long?): String? {
+    val fixTime = fixTimeMs?.takeIf { it > 0L } ?: return null
+    val deltaMs = (savedAtMs - fixTime).coerceAtLeast(0L)
+    val seconds = deltaMs / 1000L
+    return when {
+        seconds < 60L -> "${seconds}s"
+        seconds < 3600L -> "${seconds / 60L}m"
+        seconds < 86400L -> "${seconds / 3600L}h"
+        else -> "${seconds / 86400L}d"
+    }
+}
 
 private fun formatPhotoFileSize(bytes: Long): String {
     if (bytes < 1024) return "${bytes}B"

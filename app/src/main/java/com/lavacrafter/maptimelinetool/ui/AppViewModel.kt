@@ -182,6 +182,8 @@ class AppViewModel(
 
     fun getLastKnownLocation(): GeoPoint? = locationProvider.getLastKnownLocation()
 
+    suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint? = locationProvider.getPreciseLocation(timeoutMs)
+
     suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? = locationProvider.getFreshLocation(timeoutMs)
 
     suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? = locationProvider.getBestEffortLocation(timeoutMs)

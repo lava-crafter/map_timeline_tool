@@ -50,7 +50,7 @@ class PointWriteUseCaseTest {
         useCase.addPointWithTags(
             title = "title",
             note = "note",
-            location = GeoPoint(12.3, 45.6),
+            location = GeoPoint(12.3, 45.6, accuracyMeters = 7.5f, fixTimeMs = 1200L, provider = "gps"),
             timestamp = 1234L,
             tagIds = setOf(2L, 3L),
             photoPath = "/tmp/p.jpg"
@@ -59,6 +59,9 @@ class PointWriteUseCaseTest {
         val inserted = fakeRepository.inserted.single()
         assertEquals(12.3, inserted.latitude, 0.0)
         assertEquals(45.6, inserted.longitude, 0.0)
+        assertEquals(7.5f, inserted.locationAccuracyMeters)
+        assertEquals(1200L, inserted.locationFixTimeMs)
+        assertEquals("gps", inserted.locationProvider)
         assertEquals(1000f, inserted.pressureHpa)
         assertEquals(1f, inserted.accelerometerX)
         assertEquals(setOf(2L, 3L), fakeRepository.insertedTags.map { it.second }.toSet())

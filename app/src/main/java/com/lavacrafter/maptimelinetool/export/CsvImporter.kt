@@ -81,6 +81,9 @@ object CsvImporter {
                     timestamp = timestamp,
                     latitude = lat,
                     longitude = lon,
+                    locationAccuracyMeters = row.valueOf(indexMap, "location_accuracy_meters").toFiniteFloatOrNull(),
+                    locationFixTimeMs = row.valueOf(indexMap, "location_fix_time_ms").toFiniteLongOrNull(),
+                    locationProvider = row.valueOf(indexMap, "location_provider").toTrimmedOrNull(),
                     title = title,
                     note = note,
                     pressureHpa = row.valueOf(indexMap, "pressure_hpa").toFiniteFloatOrNull(),
@@ -119,6 +122,14 @@ object CsvImporter {
     private fun String?.toFiniteFloatOrNull(): Float? {
         val parsed = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull() ?: return null
         return parsed.takeIf { it.isFinite() }
+    }
+
+    private fun String?.toFiniteLongOrNull(): Long? {
+        return this?.trim()?.takeIf { it.isNotEmpty() }?.toLongOrNull()
+    }
+
+    private fun String?.toTrimmedOrNull(): String? {
+        return this?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun readCsvRecord(reader: PushbackReader): List<String>? {

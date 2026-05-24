@@ -50,6 +50,9 @@ class PointSaveTest {
             timestamp = 1000L,
             latitude = 1.0,
             longitude = 1.0,
+            locationAccuracyMeters = 9f,
+            locationFixTimeMs = 900L,
+            locationProvider = "gps",
             title = "My Point",
             note = "My Note"
         )
@@ -57,10 +60,16 @@ class PointSaveTest {
         val loaded = db.pointDao().getAll().first { it.id == id }
         assertEquals("My Point", loaded.title)
         assertEquals("My Note", loaded.note)
+        assertEquals(9f, loaded.locationAccuracyMeters)
+        assertEquals(900L, loaded.locationFixTimeMs)
+        assertEquals("gps", loaded.locationProvider)
         
         db.pointDao().update(loaded.copy(title = "New Name", note = "New Note"))
         val updated = db.pointDao().getAll().first { it.id == id }
         assertEquals("New Name", updated.title)
         assertEquals("New Note", updated.note)
+        assertEquals(9f, updated.locationAccuracyMeters)
+        assertEquals(900L, updated.locationFixTimeMs)
+        assertEquals("gps", updated.locationProvider)
     }
 }
