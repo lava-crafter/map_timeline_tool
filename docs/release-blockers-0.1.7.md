@@ -4,7 +4,9 @@ Target: one final maintenance release before feature freeze.
 
 Branch baseline: `precise_location`
 
-This document replaces the earlier broader release-blocker plan. The project is no longer aiming for major expansion or large architecture cleanup. The goal is to safely stabilize the production app with minimal-risk changes.
+Review status: updated after latest implementation review on 2026-05-23.
+
+This document is now a short remaining-work checklist. Most original P0 implementation work has landed. The project should not expand scope beyond the remaining data-safety and release-verification items below.
 
 ## Final maintenance philosophy
 
@@ -17,193 +19,117 @@ For this release:
 
 The app should avoid large risky rewrites during this pass.
 
-## Final release goals
+## Current implementation status
 
-The release is complete when:
+Implemented or mostly implemented:
 
-1. current production users can upgrade safely,
-2. saved points preserve location-quality metadata,
-3. backups preserve important data,
-4. the app does not silently pretend stale/cached locations are precise,
-5. obvious import/export data-loss issues are fixed,
-6. release notes and README honestly describe backup and accuracy behavior.
+- `Point` and `PointEntity` now include location metadata fields.
+- Room database is bumped to version 7 with a 6→7 migration.
+- Domain/entity mappers preserve location metadata.
+- `PointWriteUseCase.buildPoint()` persists accuracy, fix time, and provider.
+- CSV export/import preserves location metadata.
+- GeoJSON export/import preserves location metadata.
+- ZIP backup uses the updated CSV schema and carries location metadata.
+- `getPreciseLocation()` exists and requires accuracy.
+- Manual add countdown path uses precise location instead of stale best-effort fallback.
+- Edit point UI displays a simple location-quality summary.
+- Point-tag relations use a composite key and conflict-ignore insertion.
 
-After this release, the project should enter low-frequency maintenance mode.
+Remaining work should stay small and focused.
 
-## Priority 0 (must complete)
+## Remaining Priority 0 items
 
-## P0.1 Persist precise location metadata
+## P0.1 Fix ZIP manifest tag count
 
 ### Problem
 
-`GeoPoint` now contains:
+ZIP export writes only the tags that are actually referenced by exported points, but the manifest may still report the original full `tags.size`.
 
-- `accuracyMeters`
-- `fixTimeMs`
-- `provider`
+### Required fix
 
-But saved points still discard this information.
+Track the actual number of tags written to `tags.csv` and use that value in `backup_manifest.json`.
 
-### Required changes
-
-### Domain model
-
-Update `Point.kt`:
+Suggested shape:
 
 ```kotlin
-val locationAccuracyMeters: Float? = null
-val locationFixTimeMs: Long? = null
-val locationProvider: String? = null
-```
+var exportedTagCount = 0
 
-### Room entity
-
-Update `PointEntity.kt` with matching fields.
-
-### Database migration
-
-Increase DB version to 7.
-
-Add migration:
-
-```kotlin
-private val MIGRATION_6_7 = object : Migration(6, 7) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE points ADD COLUMN locationAccuracyMeters REAL")
-        db.execSQL("ALTER TABLE points ADD COLUMN locationFixTimeMs INTEGER")
-        db.execSQL("ALTER TABLE points ADD COLUMN locationProvider TEXT")
-    }
+if (includeTagsInArchive) {
+    val filteredTags = tags.filter { usedTagIds.contains(it.id) }
+    exportedTagCount = filteredTags.size
+    ...
 }
+
+val manifestJson = buildBackupManifestJson(
+    ...
+    tagCount = if (includeTagsInArchive) exportedTagCount else 0,
+    ...
+)
 ```
 
-### Mapper layer
+This is not a data-loss bug, but it makes the backup manifest inaccurate and should be fixed before release.
 
-Update:
+## P0.2 Confirm production database version
 
-- `PointEntity.toDomain()`
-- `Point.toEntity()`
+### Required manual check
 
-### Point creation
+Confirm the app-store build's Room database version.
 
-Update `PointWriteUseCase.buildPoint()`:
+If the production build is version 6, the new 6→7 migration is enough.
 
-```kotlin
-locationAccuracyMeters = location.accuracyMeters,
-locationFixTimeMs = location.fixTimeMs,
-locationProvider = location.provider,
-```
+If the production build is version 1 or 2, the app still needs missing migrations or a documented unsupported-upgrade policy.
 
-### Export/import
+Do not spend time supporting unreleased development schemas unless they were actually shipped to users.
 
-Update:
+## P0.3 Upgrade test from current app-store build
 
-- ZIP backup/import
-- CSV export/import if practical
-- GeoJSON export
-- KML/KMZ export if practical
+### Required test
 
-Do not redesign the entire backup system. Only ensure the final-version backup preserves final-version data.
+1. Install the current app-store build.
+2. Create points with tags and photos.
+3. Export a ZIP backup.
+4. Upgrade to the `precise_location` final build.
+5. Confirm points, tags, photos remain.
+6. Create a new point.
+7. Confirm the new point stores accuracy, provider, and fix time.
 
-### Required tests
+This is more important than broad historical migration testing.
 
-- Upgrade from current production build.
-- Save/load round-trip.
-- ZIP backup/import round-trip.
+## P0.4 ZIP backup/import round-trip test
 
-## P0.2 Manual precise vs best-effort location
+### Required test
 
-### Goal
+1. Export ZIP from the final build.
+2. Install a clean copy of the app.
+3. Import the ZIP.
+4. Confirm points, tags, photos, and location metadata survive.
+5. Import the same ZIP again.
+6. Confirm repeated import does not crash or duplicate point-tag relations.
 
-Do not silently save stale/cached locations as if they were precise manual points.
+## P0.5 Verify manual add entry points
 
-### Required behavior
+### Required check
 
-### Manual precise add
+Every user-facing manual "add current point" path should use `getPreciseLocation()` or equivalent precise behavior.
 
-- Prefer fresh accurate location.
-- Reject locations without accuracy.
-- Reject stale fallback.
-- Show a clear retry/error message on failure.
+Best-effort location is acceptable only for quick/background behavior where stale fallback is expected and metadata is saved.
 
-### Quick add / auto add
+## P0.6 Review location fix-age wording
 
-- Best-effort behavior is acceptable.
-- Save provider/accuracy/fix time metadata.
+### Reason
 
-### Recommended minimal implementation
+The app currently normalizes saved timestamp using location fix time. This may make displayed fix age appear as `0s` in many cases.
 
-Keep it simple:
+### Required decision
 
-```kotlin
-suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint?
-suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint?
-```
+Either:
 
-Do not build a large policy engine during this maintenance pass.
+- keep the current timestamp normalization and use conservative wording such as `fix age near save`, or
+- preserve the original user event time and calculate `savedAt - fixTimeMs` literally.
 
-## P0.3 Reject no-accuracy locations for precise mode
+Do not do a large data-model redesign for this release.
 
-### Problem
-
-Current logic accepts locations without accuracy.
-
-### Required change
-
-For manual precise location:
-
-```kotlin
-if (!location.hasAccuracy()) return false
-```
-
-Background/best-effort flows may still allow them if metadata is preserved.
-
-## P0.4 Minimal UI location-quality display
-
-### Goal
-
-Users should know whether a point is trustworthy.
-
-### Required UI
-
-Display simple metadata somewhere practical:
-
-```text
-GPS · ±12 m · fixed 3 s before save
-Network · ±85 m · fixed 12 s before save
-Cached overlay · accuracy unknown · fixed 2 h ago
-```
-
-### Explicitly not required
-
-- accuracy circles,
-- advanced map overlays,
-- custom marker rendering.
-
-## P0.5 Production upgrade safety
-
-### Production reality
-
-The app-store build is effectively the only production schema.
-
-### Required action
-
-- Guarantee migration from the current app-store build to the final maintenance release.
-- If old unreleased/dev schemas are unsupported, document that clearly instead of spending large effort on them.
-
-## P0.6 Backup/import safety
-
-### Required fixes
-
-- Avoid obvious orphan-photo problems during failed ZIP import.
-- Ensure repeated imports do not duplicate point-tag relations or crash.
-
-### Minimal acceptable approach
-
-- Best-effort temp cleanup is acceptable.
-- `OnConflictStrategy.IGNORE` is acceptable.
-- Avoid invasive large refactors.
-
-## Priority 1 (recommended but optional)
+## Priority 1 items
 
 ## P1.1 README and release-note updates
 
@@ -212,7 +138,7 @@ README should include:
 - backup recommendation,
 - location-accuracy disclaimer,
 - note about GPS/network/device dependency,
-- note that old pre-release builds may not be supported.
+- note that old pre-release builds may not be supported if that is the chosen policy.
 
 Suggested text:
 
@@ -220,20 +146,17 @@ Suggested text:
 This app is provided as-is. Please export or back up your data regularly, especially before updating. Location accuracy depends on device sensors, GPS/network availability, and Android location services.
 ```
 
-### Release notes
+Release notes:
 
 ```text
 This update improves location quality recording and backup compatibility. Please export a backup before updating if you have important saved points.
 ```
 
-## P1.2 Minimal dependency review
+## P1.2 Keep ZIP import rollback best-effort
 
-Do not perform broad dependency upgrades immediately before release.
+The current import flow cleans up photos on failure, but database import is still not a full transaction. That is acceptable for this final maintenance release if repeated-import tests pass.
 
-Only:
-
-- check for obvious security/compatibility issues,
-- update dependencies if necessary for Android/app-store compatibility.
+Do not start a large repository transaction refactor unless tests reveal real breakage.
 
 ## Explicitly not required for this final release
 
@@ -245,26 +168,23 @@ The following should not block release:
 - full domain/UI separation,
 - stable UUID redesign,
 - rich accuracy visualization,
-- new major features.
+- new major features,
+- full support for old unreleased development schemas.
 
 The project should prefer stable maintenance over ideal architecture.
 
-## Final testing checklist
+## Final publish checklist
 
 Before publishing:
 
-1. Install current app-store build.
-2. Create points with tags and photos.
-3. Export ZIP backup.
-4. Upgrade to final maintenance build.
-5. Confirm points/tags/photos remain.
-6. Confirm new points preserve accuracy/provider/fix time.
-7. Export ZIP and import into a clean install.
-8. Confirm imported points preserve metadata.
-9. Test manual precise-location failure path.
-10. Test quick add / auto add if still enabled.
-11. Test permission-denied path.
-12. Test CSV/GeoJSON/KML/KMZ export for crashes.
+1. Fix ZIP manifest tag count.
+2. Confirm production DB version.
+3. Run production-build upgrade test.
+4. Run ZIP backup/import/repeated-import test.
+5. Confirm manual add paths use precise location.
+6. Decide fix-age wording.
+7. Confirm CSV/GeoJSON/KML/KMZ export does not crash.
+8. Update README/release notes.
 
 ## Post-release policy
 
