@@ -31,9 +31,13 @@ Implemented or mostly implemented:
 - GeoJSON export/import preserves location metadata.
 - ZIP backup uses the updated CSV schema and carries location metadata.
 - `getPreciseLocation()` exists and requires accuracy.
-- Manual add countdown path uses precise location instead of stale best-effort fallback.
+- Manual in-app add countdown path uses precise location instead of stale best-effort fallback.
 - Edit point UI displays a simple location-quality summary.
 - Point-tag relations use a composite key and conflict-ignore insertion.
+
+Known gap after review:
+
+- Notification quick add currently calls `getBestEffortLocation()`. This should be changed to precise/current location behavior because the notification action means "record my current position now" to the user.
 
 Remaining work should stay small and focused.
 
@@ -69,7 +73,35 @@ val manifestJson = buildBackupManifestJson(
 
 This is not a data-loss bug, but it makes the backup manifest inaccurate and should be fixed before release.
 
-## P0.2 Confirm production database version
+## P0.2 Fix notification quick add location policy
+
+### Problem
+
+The notification quick-add action is user-facing and means "save my current location now". It should not silently use stale last-known or cached fallback location.
+
+Current implementation uses `getBestEffortLocation()`, which may use last-known or stale fallback location.
+
+### Required fix
+
+Change notification quick add to use precise/current acquisition, matching the in-app manual add path:
+
+```kotlin
+val location = graph.locationProvider.getPreciseLocation(QUICK_ADD_LOCATION_TIMEOUT_MS)
+```
+
+or an equivalent precise flow that:
+
+- requires a fresh/recent location,
+- requires accuracy,
+- rejects stale fallback,
+- shows failure if no acceptable location is available,
+- still saves accuracy, provider, and fix time.
+
+### Expected behavior
+
+If notification quick add cannot obtain an accurate current location, it should fail clearly instead of saving an old point.
+
+## P0.3 Confirm production database version
 
 ### Required manual check
 
@@ -81,7 +113,7 @@ If the production build is version 1 or 2, the app still needs missing migration
 
 Do not spend time supporting unreleased development schemas unless they were actually shipped to users.
 
-## P0.3 Upgrade test from current app-store build
+## P0.4 Upgrade test from current app-store build
 
 ### Required test
 
@@ -92,10 +124,12 @@ Do not spend time supporting unreleased development schemas unless they were act
 5. Confirm points, tags, photos remain.
 6. Create a new point.
 7. Confirm the new point stores accuracy, provider, and fix time.
+8. Use notification quick add.
+9. Confirm notification quick add also stores an accurate current location with metadata.
 
 This is more important than broad historical migration testing.
 
-## P0.4 ZIP backup/import round-trip test
+## P0.5 ZIP backup/import round-trip test
 
 ### Required test
 
@@ -106,15 +140,20 @@ This is more important than broad historical migration testing.
 5. Import the same ZIP again.
 6. Confirm repeated import does not crash or duplicate point-tag relations.
 
-## P0.5 Verify manual add entry points
+## P0.6 Verify all current-location entry points
 
 ### Required check
 
-Every user-facing manual "add current point" path should use `getPreciseLocation()` or equivalent precise behavior.
+Every user-facing "add current point" path should use `getPreciseLocation()` or equivalent precise behavior.
 
-Best-effort location is acceptable only for quick/background behavior where stale fallback is expected and metadata is saved.
+This includes:
 
-## P0.6 Review location fix-age wording
+- in-app manual add,
+- notification quick add.
+
+Best-effort location is acceptable only for non-saving map camera centering or explicitly background/best-effort behavior where stale fallback is expected and metadata is saved.
+
+## P0.7 Review location fix-age wording
 
 ### Reason
 
@@ -178,13 +217,14 @@ The project should prefer stable maintenance over ideal architecture.
 Before publishing:
 
 1. Fix ZIP manifest tag count.
-2. Confirm production DB version.
-3. Run production-build upgrade test.
-4. Run ZIP backup/import/repeated-import test.
-5. Confirm manual add paths use precise location.
-6. Decide fix-age wording.
-7. Confirm CSV/GeoJSON/KML/KMZ export does not crash.
-8. Update README/release notes.
+2. Change notification quick add to precise location.
+3. Confirm production DB version.
+4. Run production-build upgrade test.
+5. Run ZIP backup/import/repeated-import test.
+6. Confirm all current-location saving paths use precise location.
+7. Decide fix-age wording.
+8. Confirm CSV/GeoJSON/KML/KMZ export does not crash.
+9. Update README/release notes.
 
 ## Post-release policy
 
