@@ -1,26 +1,36 @@
-# Release Blockers and Fast-Track Plan for 0.1.7
+# Final Maintenance Release Plan (0.1.7)
 
-Target: small-scale testing and promotion to production channel.
+Target: one final maintenance release before feature freeze.
 
 Branch baseline: `precise_location`
 
-This document focuses only on the highest-priority work required before wider release. The goal is not perfect architecture, but a reliable and trustworthy location recording app that will not silently lose, corrupt, or misrepresent user location data.
+This document replaces the earlier broader release-blocker plan. The project is no longer aiming for major expansion or large architecture cleanup. The goal is to safely stabilize the production app with minimal-risk changes.
 
-## Release philosophy
+## Final maintenance philosophy
 
-For this release, correctness and trustworthiness are more important than feature count.
+For this release:
 
-A point that clearly says:
+- data safety matters more than architecture purity,
+- truthful location metadata matters more than visual polish,
+- stable upgrades matter more than new features,
+- avoiding regressions matters more than refactoring.
 
-```text
-Network · ±82 m · fixed 8 s ago
-```
+The app should avoid large risky rewrites during this pass.
 
-is better than a point that looks precise but silently came from an old cached location.
+## Final release goals
 
-The app must never mislead users about point quality.
+The release is complete when:
 
-## Priority 0 (must complete before wider release)
+1. current production users can upgrade safely,
+2. saved points preserve location-quality metadata,
+3. backups preserve important data,
+4. the app does not silently pretend stale/cached locations are precise,
+5. obvious import/export data-loss issues are fixed,
+6. release notes and README honestly describe backup and accuracy behavior.
+
+After this release, the project should enter low-frequency maintenance mode.
+
+## Priority 0 (must complete)
 
 ## P0.1 Persist precise location metadata
 
@@ -87,337 +97,180 @@ locationProvider = location.provider,
 
 Update:
 
-- CSV export/import
 - ZIP backup/import
+- CSV export/import if practical
 - GeoJSON export
-- KML/KMZ export
+- KML/KMZ export if practical
 
-The app must preserve precision metadata through backup/restore.
+Do not redesign the entire backup system. Only ensure the final-version backup preserves final-version data.
 
 ### Required tests
 
-- Room migration 6→7.
-- Point save/load round-trip.
+- Upgrade from current production build.
+- Save/load round-trip.
 - ZIP backup/import round-trip.
-- CSV round-trip.
 
-## P0.2 Separate manual precise location from best-effort location
+## P0.2 Manual precise vs best-effort location
 
-### Problem
+### Goal
 
-`getBestEffortLocation()` is currently used for auto-add and may return stale fallback locations.
-
-This is acceptable for automatic background behavior, but not for a user pressing a manual "save precise location" action.
+Do not silently save stale/cached locations as if they were precise manual points.
 
 ### Required behavior
 
-### Manual precise point
+### Manual precise add
 
-Policy:
-
-- Try fresh location first.
-- Reject stale fallback.
+- Prefer fresh accurate location.
 - Reject locations without accuracy.
-- If no acceptable location is available, show an error or retry prompt.
+- Reject stale fallback.
+- Show a clear retry/error message on failure.
 
-### Best-effort quick add
+### Quick add / auto add
 
-Policy:
+- Best-effort behavior is acceptable.
+- Save provider/accuracy/fix time metadata.
 
-- Allow recent last-known.
-- Allow stale fallback only if clearly marked.
-- Save provider/accuracy/fix time.
+### Recommended minimal implementation
 
-### Implementation suggestion
-
-Add separate methods:
+Keep it simple:
 
 ```kotlin
 suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint?
 suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint?
 ```
 
-or add explicit policy objects.
-
-### Required UI behavior
-
-If precise acquisition fails:
-
-```text
-Unable to obtain a recent accurate location.
-Try again outdoors or enable GPS.
-```
-
-Do not silently save a stale fallback point.
+Do not build a large policy engine during this maintenance pass.
 
 ## P0.3 Reject no-accuracy locations for precise mode
 
 ### Problem
 
-Current logic accepts locations with no accuracy field.
+Current logic accepts locations without accuracy.
 
 ### Required change
 
-For precise/manual point creation:
+For manual precise location:
 
 ```kotlin
 if (!location.hasAccuracy()) return false
 ```
 
-Best-effort/background modes may still allow them, but the UI and exports must preserve that fact.
+Background/best-effort flows may still allow them if metadata is preserved.
 
-## P0.4 Display location quality in UI
+## P0.4 Minimal UI location-quality display
 
-### Problem
+### Goal
 
-Once metadata is persisted, users still need to see it.
+Users should know whether a point is trustworthy.
 
-### Required minimum UI
+### Required UI
 
-Every point detail/edit screen should display:
-
-```text
-Provider: GPS
-Accuracy: ±12 m
-Fix age: 3 s before save
-```
-
-Fallback example:
+Display simple metadata somewhere practical:
 
 ```text
-Provider: cached_overlay
-Accuracy: unknown
-Fix age: 2 h before save
+GPS · ±12 m · fixed 3 s before save
+Network · ±85 m · fixed 12 s before save
+Cached overlay · accuracy unknown · fixed 2 h ago
 ```
 
-### Optional but recommended
+### Explicitly not required
 
-- Warning icon for stale points.
-- Marker style differences.
-- Accuracy circle.
+- accuracy circles,
+- advanced map overlays,
+- custom marker rendering.
 
-## P0.5 Migration compatibility
+## P0.5 Production upgrade safety
 
-### Problem
+### Production reality
 
-Current DB only defines migrations:
-
-- 3→4
-- 4→5
-- 5→6
-
-Older upgrade paths are unclear.
+The app-store build is effectively the only production schema.
 
 ### Required action
 
-Decide one of:
+- Guarantee migration from the current app-store build to the final maintenance release.
+- If old unreleased/dev schemas are unsupported, document that clearly instead of spending large effort on them.
 
-### Option A — support all historical versions
+## P0.6 Backup/import safety
 
-Add missing migrations.
+### Required fixes
 
-### Option B — unsupported legacy versions
+- Avoid obvious orphan-photo problems during failed ZIP import.
+- Ensure repeated imports do not duplicate point-tag relations or crash.
 
-Document clearly:
+### Minimal acceptable approach
 
-```text
-Versions before X are considered unsupported pre-release builds.
-```
+- Best-effort temp cleanup is acceptable.
+- `OnConflictStrategy.IGNORE` is acceptable.
+- Avoid invasive large refactors.
 
-If using option B:
+## Priority 1 (recommended but optional)
 
-- State it in release notes.
-- State it in README.
-- State it in testing docs.
+## P1.1 README and release-note updates
 
-## P0.6 ZIP import safety
+README should include:
 
-### Problem
+- backup recommendation,
+- location-accuracy disclaimer,
+- note about GPS/network/device dependency,
+- note that old pre-release builds may not be supported.
 
-Imported photos may survive failed imports.
-
-### Required behavior
-
-- Extract imported photos into temp directory.
-- Commit DB transaction first.
-- Move photos only after success.
-- Delete temp files on failure.
-
-### Required tests
-
-- Simulated import failure leaves no orphaned files.
-
-## P0.7 Point-tag duplicate safety
-
-### Required checks
-
-Ensure:
-
-```kotlin
-@Entity(primaryKeys = ["pointId", "tagId"])
-```
-
-and:
-
-```kotlin
-@Insert(onConflict = OnConflictStrategy.IGNORE)
-```
-
-Repeated imports must not duplicate relationships or crash.
-
-## Priority 1 (strongly recommended before production)
-
-## P1.1 Add stable point UUID
-
-Current deduplication uses:
+Suggested text:
 
 ```text
-(timestamp, latitude, longitude)
+This app is provided as-is. Please export or back up your data regularly, especially before updating. Location accuracy depends on device sensors, GPS/network availability, and Android location services.
 ```
 
-This is not reliable long-term.
-
-Recommended:
-
-```kotlin
-val uuid: String
-```
-
-Generate on point creation and preserve across backup/import.
-
-## P1.2 Improve release/testing documentation
-
-Update:
-
-- README.md
-- docs/architecture.md
-- docs/backup-format.md
-- docs/testing.md
-- docs/release-checklist.md
-
-## P1.3 Dependency version management
-
-### Add version catalog
-
-Move versions into:
+### Release notes
 
 ```text
-gradle/libs.versions.toml
+This update improves location quality recording and backup compatibility. Please export a backup before updating if you have important saved points.
 ```
 
-### Add dependency update workflow
+## P1.2 Minimal dependency review
 
-Suggested plugin:
+Do not perform broad dependency upgrades immediately before release.
 
-```kotlin
-plugins {
-    id("com.github.ben-manes.versions") version "0.52.0"
-}
-```
+Only:
 
-Run:
+- check for obvious security/compatibility issues,
+- update dependencies if necessary for Android/app-store compatibility.
 
-```bash
-./gradlew dependencyUpdates
-```
+## Explicitly not required for this final release
 
-before release builds.
+The following should not block release:
 
-## Priority 2 (can happen after wider testing)
+- splitting `MainActivity.kt`,
+- large architecture refactors,
+- version-catalog migration,
+- full domain/UI separation,
+- stable UUID redesign,
+- rich accuracy visualization,
+- new major features.
 
-## P2.1 MainActivity split
+The project should prefer stable maintenance over ideal architecture.
 
-The app should eventually split:
+## Final testing checklist
 
-- permissions,
-- import/export,
-- location policy,
-- photo management,
-- dialogs,
-- navigation,
-- map behavior
+Before publishing:
 
-into separate controllers/state holders.
+1. Install current app-store build.
+2. Create points with tags and photos.
+3. Export ZIP backup.
+4. Upgrade to final maintenance build.
+5. Confirm points/tags/photos remain.
+6. Confirm new points preserve accuracy/provider/fix time.
+7. Export ZIP and import into a clean install.
+8. Confirm imported points preserve metadata.
+9. Test manual precise-location failure path.
+10. Test quick add / auto add if still enabled.
+11. Test permission-denied path.
+12. Test CSV/GeoJSON/KML/KMZ export for crashes.
 
-This is important for maintainability but should not block the first stable release.
+## Post-release policy
 
-## P2.2 Rich map accuracy visualization
+After this release:
 
-Possible future additions:
-
-- accuracy circles,
-- low-confidence markers,
-- provider-specific marker icons,
-- stale point overlays.
-
-## P2.3 Full domain/UI separation
-
-Eventually stop exposing Room entities directly to UI.
-
-## Small-scale testing checklist
-
-Before opening testing to external users:
-
-### Manual location tests
-
-- Outdoor GPS test.
-- Indoor network location test.
-- GPS disabled test.
-- Airplane mode test.
-- Cold-start location test.
-- Android 13+ notification permission flow.
-- Permission denied flow.
-
-### Backup tests
-
-- ZIP export/import.
-- CSV export/import.
-- GeoJSON export.
-- KML/KMZ export.
-- Repeated import.
-- Backup compatibility with old backups.
-
-### Upgrade tests
-
-- Fresh install.
-- Upgrade from current production version.
-- Upgrade with existing photos.
-- Upgrade with tags.
-
-### Failure tests
-
-- Import interrupted.
-- Storage full.
-- Permission revoked during use.
-- Missing photo file.
-
-## Suggested release order
-
-### Release candidate 1
-
-Must include:
-
-- persisted location metadata,
-- migration 6→7,
-- manual precise vs best-effort split,
-- no-accuracy rejection for precise mode,
-- UI quality display,
-- export/import metadata preservation.
-
-### Small-scale testing
-
-Collect:
-
-- real-world GPS accuracy reports,
-- battery usage,
-- indoor behavior,
-- stale point reports,
-- import/export compatibility reports.
-
-### Production release
-
-Only after:
-
-- migration verified,
-- backup verified,
-- no silent stale point behavior remains.
+- stop adding major features,
+- only fix crashes, data-loss issues, or Android/app-store compatibility problems,
+- avoid large refactors unless required for compatibility,
+- treat the project as stable low-frequency maintenance software.
