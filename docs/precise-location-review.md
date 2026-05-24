@@ -1,25 +1,60 @@
-# Precise Location Branch Review
+# Final Maintenance Review for Precise Location
 
 Branch reviewed: `precise_location`
 
 Date: 2026-05-23
 
-This document reviews the current state of the `precise_location` branch as a full product/code review, not only as a diff against `main`. It focuses on the app's core purpose: reliably recording map timeline points with enough metadata to make those points trustworthy later.
+This document replaces the earlier broad architecture-focused review. The project goal is now **final maintenance and stabilization**, not long-term feature expansion. The app has already been in production for about two months with a small user base, and the current app-store build is effectively the only production version. Therefore, this review prioritizes the current production upgrade path, data safety, and truthful location recording.
+
+## Maintenance decision
+
+The project should enter feature freeze after one final maintenance release.
+
+The final maintenance release should only fix issues that affect:
+
+1. user data safety,
+2. production-version upgrade safety,
+3. backup/export correctness,
+4. location trustworthiness,
+5. app-store/release documentation.
+
+It should **not** spend more work on large architecture cleanup, `MainActivity` splitting, full domain/UI separation, or new feature development unless a change is directly required for the items above.
 
 ## Executive summary
 
-The branch improves the previous location behavior in an important way: fresh location acquisition no longer silently falls back to an old cached location, and `GeoPoint` now carries `accuracyMeters`, `fixTimeMs`, and `provider` during the location acquisition step.
+The `precise_location` branch has already improved location acquisition:
 
-However, the implementation is still incomplete for a production release. The new precision metadata is not persisted into `Point`, `PointEntity`, backup/export formats, or the UI. As a result, the app can temporarily know whether a point is precise, but that information is lost as soon as the point is saved.
+- Fresh location acquisition no longer silently falls back to an old cached location.
+- `GeoPoint` carries `accuracyMeters`, `fixTimeMs`, and `provider` during acquisition.
+- Current-location fixes are filtered by age and accuracy.
 
-The most important production blockers are:
+The remaining critical problem is that the new precision metadata is not persisted into saved points. The app can know that a location was GPS/network/cached and how accurate it was, but that information is lost once the point is stored.
 
-1. Location quality metadata is not stored in the database.
-2. Manual precise point creation and best-effort/background point creation are not clearly separated.
-3. The database migration chain is still incomplete for older app versions.
-4. ZIP import/export and point-tag restore still need stronger data-safety guarantees.
-5. `MainActivity.kt` remains too large and mixes UI, permissions, import/export, photos, location flow, and app-level orchestration.
-6. Existing documentation should be updated to reflect the current architecture, data model, release policy, and backup format.
+For a final maintenance release, this is the highest-value fix because it directly affects whether users can trust saved map points.
+
+## Release scope
+
+### In scope for the final maintenance release
+
+- Persist location metadata: accuracy, fix time, provider.
+- Add the migration needed by the current production version.
+- Preserve location metadata in ZIP/CSV/GeoJSON/KML/KMZ export/import where practical.
+- Make manual precise location different from best-effort/background location.
+- Avoid silently saving stale/cached locations as if they were precise.
+- Add minimal UI text showing location quality.
+- Fix obvious backup/import data-safety issues.
+- Update README and release notes.
+
+### Out of scope
+
+- Splitting `MainActivity.kt`.
+- Large architecture refactors.
+- Full domain/UI separation.
+- New major features.
+- Rich map accuracy circles.
+- Full dependency/version-catalog migration.
+- Support for old pre-release schemas that were never in the app store.
+- Perfect long-term backup schema redesign.
 
 ## Core feature review
 
@@ -27,18 +62,18 @@ The most important production blockers are:
 
 Current status:
 
-- `LocationUtils.getFreshLocation()` now validates fix age and accuracy before accepting a fresh point.
+- `LocationUtils.getFreshLocation()` validates fix age and accuracy before accepting a fresh point.
 - `GeoPoint` includes `accuracyMeters`, `fixTimeMs`, and `provider`.
 - `AndroidLocationProvider` maps Android `Location` metadata into `GeoPoint`.
 
-Remaining issue:
+Remaining release blocker:
 
 - `PointWriteUseCase.buildPoint()` only writes latitude and longitude into the domain point.
 - `Point` has no location quality fields.
 - `PointEntity` has no location quality fields.
 - Therefore, saved points cannot show or export accuracy, provider, or fix age.
 
-Required model:
+Final-release requirement:
 
 ```kotlin
 data class Point(
@@ -53,15 +88,7 @@ data class Point(
 )
 ```
 
-The database entity should mirror the same fields:
-
-```kotlin
-val locationAccuracyMeters: Float? = null
-val locationFixTimeMs: Long? = null
-val locationProvider: String? = null
-```
-
-The mapper must preserve these fields both ways.
+`PointEntity` should mirror the same fields, and the mapper must preserve them both ways.
 
 ### Fresh location policy
 
@@ -72,66 +99,41 @@ Current status:
 
 Remaining issue:
 
-- A location without `accuracy` currently passes the `isLocationAcceptable()` check because the code only rejects locations where `hasAccuracy()` is true and `accuracy > maxAccuracyMeters`.
-- For precise manual point creation, locations without accuracy should normally be rejected.
+- Locations without `accuracy` currently pass the acceptability check because the code only rejects locations where `hasAccuracy()` is true and `accuracy > maxAccuracyMeters`.
 
-Recommended policy split:
+Final-release requirement:
 
-| Use case | Fresh required | Last-known allowed | Stale/cached allowed | No-accuracy location |
-|---|---:|---:|---:|---:|
-| Manual precise point | Yes | Only if very recent | No | Reject |
-| Quick add / auto add | Prefer fresh | Yes | Only with metadata | Allow only with visible warning/metadata |
-| Map initial camera | No | Yes | Yes | Accept |
+- For manual precise point creation, reject locations without accuracy.
+- For best-effort/background point creation, a no-accuracy location may be allowed only if metadata is preserved and the UI/export does not pretend that it is precise.
 
-The location API should make this explicit instead of hiding behavior inside one `getBestEffortLocation()` method.
+### Manual precise vs best-effort location
 
-### Best-effort location
-
-Current status:
-
-`getBestEffortLocation()` currently does:
-
-1. acceptable last-known location,
-2. fresh location,
-3. stale last-known fallback.
-
-Problem:
-
-- This can choose a 30-minute-old acceptable last-known location before trying fresh location.
-- This is reasonable for fast background operations, but not for a user-facing precise manual point.
-
-Recommendation:
-
-Create separate policies:
+For the final maintenance release, avoid complex policy architecture. A simple split is enough:
 
 ```kotlin
-sealed class PointLocationPolicy {
-    data object ManualPrecise : PointLocationPolicy()
-    data object QuickAddBestEffort : PointLocationPolicy()
-    data object MapCameraBestEffort : PointLocationPolicy()
-}
+suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint?
+suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint?
 ```
 
-or use explicit parameters:
+Recommended behavior:
 
-```kotlin
-LocationRequestPolicy(
-    freshTimeoutMs = 8000,
-    maxFreshAgeMs = 15000,
-    maxFreshAccuracyMeters = 100f,
-    allowRecentLastKnown = true,
-    maxRecentLastKnownAgeMs = 30000,
-    allowStaleFallback = false,
-    allowCachedOverlay = false,
-    requireAccuracy = true
-)
+| Flow | Behavior |
+|---|---|
+| Manual precise add | Fresh or very recent accurate location only. No stale fallback. |
+| Quick add / auto add | Best-effort allowed, but metadata must be saved. |
+| Map camera centering | Cached/last-known is fine because it does not create user data. |
+
+If precise manual acquisition fails, show a clear message instead of silently saving a stale point:
+
+```text
+Unable to obtain a recent accurate location. Try again outdoors or enable GPS.
 ```
 
-### UI trust indicators
+### Minimal UI trust indicators
 
-The UI should display location trust information for every point once the metadata is persisted.
+Do not build complex map overlays for this release. Just show location quality in point detail/edit/list where practical.
 
-Minimum display:
+Minimum display examples:
 
 ```text
 GPS · ±12 m · fixed 3 s before save
@@ -139,17 +141,7 @@ Network · ±85 m · fixed 12 s before save
 Cached overlay · accuracy unknown · fixed 2 h ago
 ```
 
-For low-quality or fallback points, the UI should show a warning icon or secondary text. This is more important than visual polish because users need to know whether a point is trustworthy.
-
-### Map marker accuracy
-
-The current marker model appears to treat all points equally. After persisting accuracy, the map should optionally render an accuracy circle or at least distinguish low-quality points.
-
-Suggested behavior:
-
-- `accuracy <= 25m`: normal marker.
-- `25m < accuracy <= 100m`: normal marker with secondary accuracy text.
-- `accuracy > 100m` or null: warning marker or muted style.
+This is enough for the final maintenance release. Accuracy circles and special marker styles can be left out.
 
 ## Data safety review
 
@@ -159,20 +151,21 @@ Current status:
 
 - Database version is 6.
 - Migrations exist for 3→4, 4→5, and 5→6.
-- Migrations for 1→2 and 2→3 are not present.
+- Migrations for 1→2 and 2→3 are missing.
 
-Risk:
+Production reality:
 
-- Users upgrading from old versions can hit migration failures.
-- For a location/timeline app, destructive migration is dangerous because points are user data.
+- The app-store version is effectively the only production version.
+- There are likely very few users.
+- It is not worth spending the final maintenance budget supporting every old development schema if those builds were not publicly shipped.
 
-Required before formal release:
+Final-release requirement:
 
-1. Add missing migrations for old versions, or explicitly document that pre-release data is unsupported.
-2. Add migration tests for all supported paths.
-3. When adding location metadata fields, bump database to version 7 and add a 6→7 migration.
+- Guarantee migration from the current app-store version to the final maintenance version.
+- Add a safe migration for location metadata, likely 6→7.
+- If older pre-release versions are not supported, document that clearly.
 
-Suggested new migration:
+Suggested migration:
 
 ```kotlin
 private val MIGRATION_6_7 = object : Migration(6, 7) {
@@ -186,258 +179,137 @@ private val MIGRATION_6_7 = object : Migration(6, 7) {
 
 ### Backup/import/export consistency
 
-The app supports ZIP backup, CSV, GeoJSON, KML/KMZ, and photo export. This is valuable, but it also means every new field needs a clear compatibility rule.
-
 When adding location quality fields:
 
-- ZIP `points.csv` or backup point payload must include the new fields.
-- CSV export should include accuracy/fix time/provider.
-- GeoJSON should include these as properties.
-- KML/KMZ should include them in extended data or description.
-- Importers should tolerate missing fields for older backups.
+- ZIP backup should include the new fields.
+- CSV export should include the new fields if possible.
+- CSV import should tolerate missing fields from older exports.
+- GeoJSON should include the new fields as properties.
+- KML/KMZ should include them in description or extended data.
+
+This does not need to be a perfect long-term schema redesign. The goal is that final-version backups preserve final-version data.
 
 ### ZIP import photo safety
 
-Current risk from previous review:
+Previous risk:
 
-- ZIP import saves photos before the database import fully succeeds.
+- ZIP import may save photos before the database import fully succeeds.
 - A failed import can leave orphaned photo files.
 
-Recommendation:
+Final-release recommendation:
 
-- Extract imported photos into a temp import directory first.
-- Import database records in a transaction.
-- Move photos into the final photo directory only after DB success.
-- On failure, delete the temp directory.
+- Prefer temp extraction and cleanup if simple.
+- If full transactional import is too invasive, at least add best-effort cleanup on failure and document the behavior.
 
 ### Point-tag import safety
 
-Current risk from previous review:
+Final-release requirement:
 
-- Point-tag pairs may be duplicated across repeated imports if the DB constraint or DAO conflict strategy is not strict.
-
-Recommendation:
-
-- Ensure `PointTagCrossRef` has composite primary key `(pointId, tagId)`.
-- Change insert to `@Insert(onConflict = OnConflictStrategy.IGNORE)`.
-- Add tests for repeated ZIP import.
+- Ensure repeated imports do not crash or duplicate point-tag relationships.
+- Use a composite primary key and/or `OnConflictStrategy.IGNORE`.
 
 ### Deduplication model
 
-Current point import deduplication uses `(timestamp, latitude, longitude)`.
+A stable point UUID would be better long-term, but it is not mandatory for this final maintenance release unless repeated import bugs are otherwise hard to fix.
 
-Problem:
+For final maintenance:
 
-- This can incorrectly merge points created at the same time and coordinates.
-- It cannot robustly track the same point across devices or backups.
+- Keep current `(timestamp, latitude, longitude)` deduplication if it works well enough.
+- Do not introduce UUID unless it is low-risk.
 
-Recommendation:
+## Source management review
 
-- Add a stable `uuid` field to points before the backup format is considered stable.
-- Use `uuid` as the primary import/export identity.
-- Keep `(timestamp, latitude, longitude)` only as legacy fallback.
+### MainActivity
 
-## Source management and architecture review
+`MainActivity.kt` is large and mixes many responsibilities. That is a real maintainability issue, but it is **not a final-release blocker**.
 
-### MainActivity is overgrown
+Do not split `MainActivity` during this final maintenance pass unless a very small extraction is needed to safely fix data or location behavior.
 
-`MainActivity.kt` currently acts as the central coordinator for too many responsibilities:
+Reason:
 
-- Navigation state.
-- Runtime permissions.
-- Quick add service startup.
-- Location acquisition entry points.
-- CSV/GeoJSON/KML/KMZ/ZIP export launchers.
-- CSV/ZIP import launchers.
-- Photo capture and compression/deletion.
-- Settings restore.
-- Map cache cleanup.
-- Dialog state for add/edit/export/import.
-- Back handlers.
-
-This makes regressions more likely. Location policy changes should not require editing a huge Activity file.
-
-Recommended split:
-
-- `MainRoute.kt` or `AppScaffold.kt`: high-level screen composition only.
-- `LocationPointController.kt`: manual/quick/auto point creation flows.
-- `ExportController.kt`: export option state and document launchers.
-- `ImportController.kt`: import launchers and result handling.
-- `PhotoCaptureController.kt`: photo capture, compression, final path management.
-- `PermissionController.kt`: permission state and request order.
-- `PointEditorState.kt`: add/edit dialog state.
-- `MapCacheController.kt`: cache clearing/download operations.
+- The app is already in production.
+- The feature set is nearly complete.
+- Large refactors create regression risk.
+- The goal is stable final maintenance, not long-term expansion.
 
 ### Domain/entity separation
 
-The README architecture says the app is moving toward domain-first architecture, but UI still observes `PointEntity` through `AppViewModel.points`.
+Room entities leaking into UI is not ideal, but it should not block the final release.
 
-Recommendation:
-
-- Keep Room entities internal to the data layer.
-- UI should observe `PointUiModel` or domain `Point`.
-- Mappers should live at clear boundaries.
-
-### Location policy ownership
-
-Location policy should not be hardcoded in multiple UI paths. It should live in one domain/usecase layer.
-
-Suggested objects:
-
-- `AcquirePointLocationUseCase`
-- `PointLocationPolicy`
-- `LocationQuality`
-- `LocationAcquisitionResult`
-
-Example:
-
-```kotlin
-data class LocationAcquisitionResult(
-    val point: GeoPoint?,
-    val quality: LocationQuality,
-    val failureReason: LocationFailureReason? = null
-)
-```
-
-This lets UI show meaningful messages instead of silently returning `null`.
+Only touch model boundaries where required to persist location metadata.
 
 ### Dependency management
 
-Current dependencies are declared directly in `app/build.gradle.kts`.
+A full version-catalog migration is not required for this final maintenance pass.
 
-Recommendation:
+Recommended minimal action:
 
-- Move versions to `gradle/libs.versions.toml`.
-- Add Gradle Versions Plugin or another dependency update workflow.
-- Track Android Gradle Plugin, Kotlin, Compose compiler/plugin, AndroidX, Room, osmdroid, and Google Play Services versions together.
+- Run a dependency update check manually.
+- Only update dependencies if there is a clear compatibility/security reason.
+- Do not do broad dependency upgrades immediately before the final release unless testing time is available.
 
-Suggested plugin:
-
-```kotlin
-plugins {
-    id("com.github.ben-manes.versions") version "0.52.0"
-}
-```
-
-Then run:
-
-```bash
-./gradlew dependencyUpdates
-```
-
-## Documentation update review
-
-The repository documentation should be updated before small-scale testing.
+## Documentation updates required
 
 ### README.md
 
-Needed updates:
+Update README to include:
 
-- Ensure English and Chinese version numbers match.
-- Add a short explanation of location accuracy behavior.
-- Explain when the app uses fresh GPS/network/fused location versus best-effort fallback.
-- Explain that low-accuracy/fallback points may be marked in the UI once implemented.
-- Add backup/export compatibility notes.
+- Current version number in all languages.
+- Backup recommendation.
+- Location accuracy disclaimer.
+- Note that accuracy depends on GPS/network/device/Android services.
+- Note that pre-release/dev builds may not have guaranteed migration support if that is the chosen policy.
 
-### docs/architecture.md
-
-Needed updates:
-
-- Add location data flow:
+Suggested text:
 
 ```text
-permission → provider selection → fresh/current location → quality validation → point creation policy → persisted point → export/backup
+This app is provided as-is. Please export or back up your data regularly, especially before updating. Location accuracy depends on device sensors, GPS/network availability, and Android location services.
 ```
 
-- Document `LocationProvider`, `AcquirePointLocationUseCase`, and the difference between domain `GeoPoint`, persisted `Point`, and UI model.
-- Document where runtime permissions are handled and where business policy is handled.
+### Release notes / app-store changelog
 
-### docs/data-model.md or new docs/location-data-model.md
+Add:
 
-Add a dedicated data model document if one does not exist.
+```text
+This update improves location quality recording and backup compatibility. Please export a backup before updating if you have important saved points.
+```
 
-Required content:
+### Existing docs
 
-- Point fields.
-- Location metadata fields.
-- Semantics of timestamp vs location fix time.
-- Accuracy units.
-- Provider values.
-- Import/export compatibility.
-- Migration policy.
+Only update docs that help maintain or release the final version:
 
-### docs/backup-format.md
+- location data fields,
+- backup/export format,
+- production upgrade policy,
+- final testing checklist.
 
-Needed updates:
+Do not spend time writing large architecture documents that will not guide future work.
 
-- ZIP manifest schema.
-- Points schema.
-- Tags schema.
-- Point-tag schema.
-- Photos layout.
-- New location metadata fields.
-- Backward compatibility rules for old backups.
-- Failure/rollback expectations.
+## Final testing checklist
 
-### docs/release-checklist.md
+Before publishing:
 
-Add or update release checklist:
+1. Install current app-store build.
+2. Create points with tags and photos.
+3. Export ZIP backup.
+4. Upgrade to final maintenance build.
+5. Confirm points, tags, photos remain.
+6. Confirm new points store accuracy/fix time/provider.
+7. Export ZIP and import it into a clean install.
+8. Confirm imported points preserve location metadata.
+9. Test manual precise location failure path.
+10. Test quick add / auto add if still enabled.
+11. Test permission denied path.
+12. Test CSV/GeoJSON/KML/KMZ export does not crash.
 
-- Migration tests pass.
-- Backup round-trip tests pass.
-- CSV import/export round-trip tests pass.
-- Manual location test on real device.
-- Indoor/network location test.
-- Airplane mode/offline map test.
-- Permission denied test.
-- Android 13+ notification permission test.
-- Fresh install test.
-- Upgrade install test.
+## Final recommendation
 
-### docs/testing.md
+Proceed with one final maintenance release. Do not continue adding features after that unless required by Android/app-store policy or a data-loss/crash issue.
 
-Needed tests:
+The release is ready when:
 
-- Location freshness policy tests.
-- Accuracy rejection tests.
-- No-accuracy rejection tests.
-- Stale fallback tests.
-- Room migration tests.
-- ZIP repeated import tests.
-- ZIP photo rollback tests.
-- Export schema compatibility tests.
-
-## Release risk assessment
-
-### Do not push to formal channel until fixed
-
-- Location metadata persistence.
-- Manual precise vs best-effort location behavior.
-- Room migration for new fields.
-- Backup/export compatibility for new fields.
-
-### Acceptable for small internal test after fixed
-
-- UI may be simple as long as accuracy/provider/fix time are visible somewhere.
-- Dependency versions can be updated after the location model lands, as long as no known security issue is present.
-- MainActivity split can be postponed if tests cover critical flows.
-
-### Should not block small test, but should be tracked
-
-- Full architecture split.
-- Stable point UUID.
-- Version catalog migration.
-- Rich map accuracy circle rendering.
-
-## Recommended implementation order
-
-1. Persist location metadata in `Point`, `PointEntity`, mappers, and Room migration.
-2. Update `PointWriteUseCase.buildPoint()` to copy metadata from `GeoPoint`.
-3. Split manual precise and best-effort location policies.
-4. Reject no-accuracy locations for precise manual point creation.
-5. Show location quality in point detail/list/edit UI.
-6. Update CSV/GeoJSON/KML/KMZ/ZIP export and import schemas.
-7. Add tests for location policy and migration.
-8. Fix ZIP import photo rollback and point-tag conflict handling.
-9. Update README and docs.
-10. Run small-scale real-device testing.
+- user points do not silently lose location quality metadata,
+- current production users can upgrade safely,
+- backups preserve the data users need,
+- the app does not pretend stale or inaccurate locations are precise,
+- README/release notes honestly describe backup and accuracy limitations.
