@@ -35,9 +35,10 @@ Implemented or mostly implemented:
 - Edit point UI displays a simple location-quality summary.
 - Point-tag relations use a composite key and conflict-ignore insertion.
 
-Known gap after review:
+Known gaps after review:
 
 - Notification quick add currently calls `getBestEffortLocation()`. This should be changed to precise/current location behavior because the notification action means "record my current position now" to the user.
+- Noise capture can be confusing or appear missing because it is recorded after point insertion and the edit dialog may hold a stale `PointEntity` snapshot. Noise is also dBFS, not calibrated dB SPL, so UI wording must stay explicit.
 
 Remaining work should stay small and focused.
 
@@ -101,7 +102,36 @@ or an equivalent precise flow that:
 
 If notification quick add cannot obtain an accurate current location, it should fail clearly instead of saving an old point.
 
-## P0.3 Confirm production database version
+## P0.3 Fix noise capture/display reliability
+
+### Problems
+
+Noise capture currently has several sources of confusing behavior:
+
+1. Noise is captured after the point is inserted, then written back through `updateNoiseDb()`.
+2. If the user opens the edit dialog immediately, the dialog may keep the old `PointEntity` snapshot and continue showing "not recorded" until it is closed and reopened.
+3. Capture can legitimately return null when microphone permission is missing, the mic is busy, `AudioRecord` fails, or no usable samples are read.
+4. The stored value is dBFS, not calibrated real-world dB SPL. The UI should not imply calibrated environmental decibels.
+
+### Required fixes
+
+- Ensure the edit/detail UI refreshes after `noiseDb` is written. Minimal acceptable options:
+  - reopen/reload the selected point after point updates, or
+  - derive the displayed editing point from `pointsState` by `editingPoint.id`, or
+  - show a clear "noise capture pending/unavailable" state instead of permanently showing stale data.
+- Keep UI wording explicit as `Noise (dBFS)`, not generic `Noise dB`.
+- Add a small test/manual checklist for:
+  - noise setting off,
+  - noise setting on without microphone permission,
+  - noise setting on with permission,
+  - immediate open-after-save behavior,
+  - reopening the point after the 3-second capture window.
+
+### Non-goal
+
+Do not attempt calibrated SPL measurement in this maintenance release. Phone microphones are not calibrated sound-level meters.
+
+## P0.4 Confirm production database version
 
 ### Required manual check
 
@@ -113,7 +143,7 @@ If the production build is version 1 or 2, the app still needs missing migration
 
 Do not spend time supporting unreleased development schemas unless they were actually shipped to users.
 
-## P0.4 Upgrade test from current app-store build
+## P0.5 Upgrade test from current app-store build
 
 ### Required test
 
@@ -126,21 +156,22 @@ Do not spend time supporting unreleased development schemas unless they were act
 7. Confirm the new point stores accuracy, provider, and fix time.
 8. Use notification quick add.
 9. Confirm notification quick add also stores an accurate current location with metadata.
+10. If noise capture is enabled, confirm noise either records correctly or clearly shows unavailable/pending.
 
 This is more important than broad historical migration testing.
 
-## P0.5 ZIP backup/import round-trip test
+## P0.6 ZIP backup/import round-trip test
 
 ### Required test
 
 1. Export ZIP from the final build.
 2. Install a clean copy of the app.
 3. Import the ZIP.
-4. Confirm points, tags, photos, and location metadata survive.
+4. Confirm points, tags, photos, location metadata, and noise values survive.
 5. Import the same ZIP again.
 6. Confirm repeated import does not crash or duplicate point-tag relations.
 
-## P0.6 Verify all current-location entry points
+## P0.7 Verify all current-location entry points
 
 ### Required check
 
@@ -153,7 +184,7 @@ This includes:
 
 Best-effort location is acceptable only for non-saving map camera centering or explicitly background/best-effort behavior where stale fallback is expected and metadata is saved.
 
-## P0.7 Review location fix-age wording
+## P0.8 Review location fix-age wording
 
 ### Reason
 
@@ -177,18 +208,19 @@ README should include:
 - backup recommendation,
 - location-accuracy disclaimer,
 - note about GPS/network/device dependency,
+- note that noise capture uses microphone permission and stores approximate dBFS, not calibrated sound level,
 - note that old pre-release builds may not be supported if that is the chosen policy.
 
 Suggested text:
 
 ```text
-This app is provided as-is. Please export or back up your data regularly, especially before updating. Location accuracy depends on device sensors, GPS/network availability, and Android location services.
+This app is provided as-is. Please export or back up your data regularly, especially before updating. Location accuracy depends on device sensors, GPS/network availability, and Android location services. Noise capture uses the device microphone and records approximate dBFS values, not calibrated sound-level readings.
 ```
 
 Release notes:
 
 ```text
-This update improves location quality recording and backup compatibility. Please export a backup before updating if you have important saved points.
+This update improves location quality recording, noise metadata reliability, and backup compatibility. Please export a backup before updating if you have important saved points.
 ```
 
 ## P1.2 Keep ZIP import rollback best-effort
@@ -207,6 +239,7 @@ The following should not block release:
 - full domain/UI separation,
 - stable UUID redesign,
 - rich accuracy visualization,
+- calibrated sound-level-meter behavior,
 - new major features,
 - full support for old unreleased development schemas.
 
@@ -218,13 +251,14 @@ Before publishing:
 
 1. Fix ZIP manifest tag count.
 2. Change notification quick add to precise location.
-3. Confirm production DB version.
-4. Run production-build upgrade test.
-5. Run ZIP backup/import/repeated-import test.
-6. Confirm all current-location saving paths use precise location.
-7. Decide fix-age wording.
-8. Confirm CSV/GeoJSON/KML/KMZ export does not crash.
-9. Update README/release notes.
+3. Fix or clarify noise capture/display reliability.
+4. Confirm production DB version.
+5. Run production-build upgrade test.
+6. Run ZIP backup/import/repeated-import test.
+7. Confirm all current-location saving paths use precise location.
+8. Decide fix-age wording.
+9. Confirm CSV/GeoJSON/KML/KMZ export does not crash.
+10. Update README/release notes.
 
 ## Post-release policy
 
