@@ -130,6 +130,7 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
+            var exportedTagCount = 0
             if (includeTagsInArchive) {
                 val pointsWithIndex = points.withIndex().associate { (index, point) -> point.id to index }
                 val usedTagIds = pointTagIdsByPointId
@@ -138,6 +139,7 @@ object ZipExporter {
                     .flatten()
                     .toSet()
                 val filteredTags = tags.filter { usedTagIds.contains(it.id) }
+                exportedTagCount = filteredTags.size
 
                 zip.putNextEntry(ZipEntry("tags.csv"))
                 val tagWriter = OutputStreamWriter(zip, Charsets.UTF_8)
@@ -176,7 +178,7 @@ object ZipExporter {
                 includePhotos = options.includePhotos,
                 includeSettings = settingsJson != null,
                 pointCount = if (options.includePoints) points.size else 0,
-                tagCount = if (includeTagsInArchive) tags.size else 0,
+                tagCount = if (includeTagsInArchive) exportedTagCount else 0,
                 photoCount = photoEntries.size
             )
             zip.putNextEntry(ZipEntry("backup_manifest.json"))

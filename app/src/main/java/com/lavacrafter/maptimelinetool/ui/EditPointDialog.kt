@@ -71,8 +71,8 @@ fun EditPointDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var title by remember(point) { mutableStateOf(point.title) }
-    var note by remember(point) { mutableStateOf(point.note) }
+    var title by remember(point.id) { mutableStateOf(point.title) }
+    var note by remember(point.id) { mutableStateOf(point.note) }
 
     val selectedTags = remember(tags, selectedTagIds) {
         tags.filter { selectedTagIds.contains(it.id) }

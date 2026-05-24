@@ -91,7 +91,7 @@ object KmlExporter {
                     point.magnetometerX?.let { descriptionLines.add("MagX: $it") }
                     point.magnetometerY?.let { descriptionLines.add("MagY: $it") }
                     point.magnetometerZ?.let { descriptionLines.add("MagZ: $it") }
-                    point.noiseDb?.let { descriptionLines.add("Noise(dB): $it") }
+                    point.noiseDb?.let { descriptionLines.add("Noise(dBFS): $it") }
                 }
 
                 appendLine("    <Placemark>")

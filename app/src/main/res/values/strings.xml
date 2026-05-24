@@ -60,7 +60,7 @@
     <string name="label_tag_name">Tag name</string>
     <string name="label_sensor_data">Sensor data</string>
     <string name="label_location_quality">Location quality</string>
-    <string name="label_location_quality_summary">%1$s · %2$s · fixed %3$s before save</string>
+    <string name="label_location_quality_summary">%1$s · %2$s · fix age near save: %3$s</string>
     <string name="label_location_accuracy">±%1$.0f m</string>
     <string name="label_location_accuracy_unknown">accuracy unknown</string>
     <string name="label_location_fix_age_unknown">unknown time</string>
@@ -72,7 +72,7 @@
     <string name="label_sensor_gyroscope">Gyroscope: X %1$.3f, Y %2$.3f, Z %3$.3f rad/s</string>
     <string name="label_sensor_magnetometer">Magnetometer: X %1$.3f, Y %2$.3f, Z %3$.3f μT</string>
     <string name="label_sensor_noise">Noise (dBFS): %1$.2f dB</string>
-    <string name="label_sensor_noise_unavailable">Noise (dBFS): not recorded</string>
+    <string name="label_sensor_noise_unavailable">Noise (dBFS): not recorded yet or unavailable</string>
     <string name="label_sensor_readable">Quick sensor insights</string>
     <string name="label_sensor_altitude">Estimated altitude: %1$.1f m</string>
     <string name="label_sensor_light_level">Ambient light level: %1$s</string>
@@ -105,7 +105,7 @@
     <string name="settings_sensor_magnetometer">Magnetometer</string>
     <string name="settings_sensor_noise">Noise (3s dBFS)</string>
     <string name="settings_noise_collect_label">Collect 3-second noise</string>
-    <string name="settings_noise_collect_desc">Requires microphone permission. Captured asynchronously after point save.</string>
+    <string name="settings_noise_collect_desc">Requires microphone permission. Captured asynchronously after point save as approximate dBFS, not calibrated SPL.</string>
     <string name="settings_map_operations_title">Map operations</string>
     <string name="settings_map_operations_desc">Adjust the timeout, zoom controls, and marker size.</string>
     <string name="settings_help_map_operations">Set how long a queued point waits before auto-saved, when the zoom controls appear, and how large markers should be. Tap Done when you understand the behavior.</string>

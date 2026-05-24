@@ -64,13 +64,13 @@ internal suspend fun Context.performQuickAdd() {
 
     val graph = appGraph()
     val location = try {
-        graph.locationProvider.getBestEffortLocation(QUICK_ADD_LOCATION_TIMEOUT_MS)
+        graph.locationProvider.getPreciseLocation(QUICK_ADD_LOCATION_TIMEOUT_MS)
     } catch (_: Exception) {
         null
     }
 
     if (location == null) {
-        showToast(getString(R.string.toast_location_failed))
+        showToast(getString(R.string.toast_precise_location_failed))
         return
     }
 
@@ -93,7 +93,7 @@ internal suspend fun Context.performQuickAdd() {
         vibrateOnce()
         showQuickAddResultNotification()
     } catch (_: Exception) {
-        showToast(getString(R.string.toast_location_failed))
+        showToast(getString(R.string.toast_precise_location_failed))
     }
 }
 

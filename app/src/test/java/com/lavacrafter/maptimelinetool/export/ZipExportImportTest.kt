@@ -100,6 +100,45 @@ class ZipExportImportTest {
     }
 
     @Test
+    fun `zip export manifest reports filtered tag count`() {
+        val point = Point(
+            id = 10L,
+            timestamp = 1710000000000L,
+            latitude = 10.0,
+            longitude = 20.0,
+            title = "A",
+            note = "B"
+        )
+        val output = ByteArrayOutputStream()
+
+        ZipExporter.export(
+            points = listOf(point),
+            outputStream = output,
+            resolvePhotoFile = { null },
+            options = ZipExporter.ExportOptions(includePoints = true, includeTags = true, includePhotos = false),
+            tags = listOf(
+                ZipExporter.TagRecord(id = 100L, name = "Office"),
+                ZipExporter.TagRecord(id = 200L, name = "Unused")
+            ),
+            pointTagIdsByPointId = mapOf(10L to listOf(100L))
+        )
+
+        var manifestJson: String? = null
+        java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == "backup_manifest.json") {
+                    manifestJson = zip.readBytes().toString(Charsets.UTF_8)
+                }
+                zip.closeEntry()
+            }
+        }
+
+        val manifest = manifestJson ?: error("manifest missing")
+        assertTrue(manifest.contains("\"counts\":{\"points\":1,\"tags\":1,\"photos\":0}"))
+    }
+
+    @Test
     fun `zip export with include tags false only writes points and photos`() {
         val tempDir = createTempDirectory("zip-export-no-tags-test").toFile()
         val photo = File(tempDir, "a.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }

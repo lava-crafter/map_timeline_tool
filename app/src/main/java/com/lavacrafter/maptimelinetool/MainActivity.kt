@@ -631,6 +631,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 val pointsState = viewModel.points.collectAsState().value
+                LaunchedEffect(pointsState, editingPoint?.id) {
+                    val editingPointId = editingPoint?.id ?: return@LaunchedEffect
+                    val latestPoint = pointsState.firstOrNull { it.id == editingPointId } ?: return@LaunchedEffect
+                    if (latestPoint != editingPoint) {
+                        editingPoint = latestPoint
+                    }
+                }
                 LaunchedEffect(pendingExportSelection, pointsState) {
                     val sel = pendingExportSelection ?: return@LaunchedEffect
                     val pointsToExport = when (sel.kind) {
@@ -1269,7 +1276,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
 
-                LaunchedEffect(editingPoint) {
+                LaunchedEffect(editingPoint?.id) {
                     editingPoint?.let { point ->
                         editingPointTagIds = viewModel.getTagIdsForPoint(point.id).toSet()
                         editingPointPhotoPath = point.photoPath
