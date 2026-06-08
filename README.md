@@ -6,6 +6,9 @@ Map Timeline Tool is a small Android app for manually logging points. It works o
 
 Current app version: **0.1.7**
 
+=======
+https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
+
 ## Features
 - One-tap point logging — saves timestamp, latitude/longitude, title, optional note, and location-quality metadata when available.
 - Map view (osmdroid + OSM tiles) — markers show details; today's points are color-coded by order.
