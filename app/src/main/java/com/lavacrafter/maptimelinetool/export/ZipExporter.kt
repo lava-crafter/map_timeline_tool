@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
@@ -11,7 +27,6 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import org.json.JSONObject
 
 object ZipExporter {
     data class ExportOptions(
@@ -89,6 +104,9 @@ object ZipExporter {
                             point.latitude.toString(),
                             point.longitude.toString(),
                             sdf.format(Date(point.timestamp)),
+                            point.locationAccuracyMeters?.toString().orEmpty(),
+                            point.locationFixTimeMs?.toString().orEmpty(),
+                            point.locationProvider.orEmpty(),
                             sensorPressure,
                             sensorLight,
                             sensorAccelX,
@@ -112,6 +130,7 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
+            var exportedTagCount = 0
             if (includeTagsInArchive) {
                 val pointsWithIndex = points.withIndex().associate { (index, point) -> point.id to index }
                 val usedTagIds = pointTagIdsByPointId
@@ -120,6 +139,7 @@ object ZipExporter {
                     .flatten()
                     .toSet()
                 val filteredTags = tags.filter { usedTagIds.contains(it.id) }
+                exportedTagCount = filteredTags.size
 
                 zip.putNextEntry(ZipEntry("tags.csv"))
                 val tagWriter = OutputStreamWriter(zip, Charsets.UTF_8)
@@ -150,22 +170,17 @@ object ZipExporter {
             }
 
             val settingsJson = settingsJsonProvider?.invoke()?.takeIf { it.isNotBlank() }
-            val manifestJson = JSONObject().apply {
-                put("backup_version", 1)
-                put("created_at_utc", sdf.format(Date()))
-                put("app_version", appVersion.orEmpty())
-                put("sections", JSONObject().apply {
-                    put("points", options.includePoints)
-                    put("tags", includeTagsInArchive)
-                    put("photos", options.includePhotos)
-                    put("settings", settingsJson != null)
-                })
-                put("counts", JSONObject().apply {
-                    put("points", if (options.includePoints) points.size else 0)
-                    put("tags", if (includeTagsInArchive) tags.size else 0)
-                    put("photos", photoEntries.size)
-                })
-            }.toString()
+            val manifestJson = buildBackupManifestJson(
+                createdAtUtc = sdf.format(Date()),
+                appVersion = appVersion.orEmpty(),
+                includePoints = options.includePoints,
+                includeTags = includeTagsInArchive,
+                includePhotos = options.includePhotos,
+                includeSettings = settingsJson != null,
+                pointCount = if (options.includePoints) points.size else 0,
+                tagCount = if (includeTagsInArchive) exportedTagCount else 0,
+                photoCount = photoEntries.size
+            )
             zip.putNextEntry(ZipEntry("backup_manifest.json"))
             zip.write(manifestJson.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
@@ -242,5 +257,59 @@ object ZipExporter {
             }
         }
         return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+    }
+
+    private fun buildBackupManifestJson(
+        createdAtUtc: String,
+        appVersion: String,
+        includePoints: Boolean,
+        includeTags: Boolean,
+        includePhotos: Boolean,
+        includeSettings: Boolean,
+        pointCount: Int,
+        tagCount: Int,
+        photoCount: Int
+    ): String {
+        return buildString {
+            append('{')
+            append("\"backup_version\":1,")
+            append("\"created_at_utc\":\"").append(jsonEscape(createdAtUtc)).append("\",")
+            append("\"app_version\":\"").append(jsonEscape(appVersion)).append("\",")
+            append("\"sections\":{")
+            append("\"points\":").append(includePoints).append(',')
+            append("\"tags\":").append(includeTags).append(',')
+            append("\"photos\":").append(includePhotos).append(',')
+            append("\"settings\":").append(includeSettings)
+            append("},\"counts\":{")
+            append("\"points\":").append(pointCount).append(',')
+            append("\"tags\":").append(tagCount).append(',')
+            append("\"photos\":").append(photoCount)
+            append("}}");
+        }
+    }
+
+    private fun jsonEscape(value: String): String {
+        if (value.isEmpty()) return value
+        val builder = StringBuilder(value.length + 8)
+        value.forEach { ch ->
+            when (ch) {
+                '"' -> builder.append("\\\"")
+                '\\' -> builder.append("\\\\")
+                '\b' -> builder.append("\\b")
+                '\u000C' -> builder.append("\\f")
+                '\n' -> builder.append("\\n")
+                '\r' -> builder.append("\\r")
+                '\t' -> builder.append("\\t")
+                else -> {
+                    if (ch < ' ') {
+                        builder.append("\\u")
+                        builder.append(ch.code.toString(16).padStart(4, '0'))
+                    } else {
+                        builder.append(ch)
+                    }
+                }
+            }
+        }
+        return builder.toString()
     }
 }

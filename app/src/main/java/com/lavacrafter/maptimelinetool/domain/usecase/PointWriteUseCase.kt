@@ -1,9 +1,30 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizeMultilineText
+import com.lavacrafter.maptimelinetool.text.sanitizeSingleLineText
+import com.lavacrafter.maptimelinetool.text.MAX_POINT_NOTE_LENGTH
+import com.lavacrafter.maptimelinetool.text.MAX_POINT_TITLE_LENGTH
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,10 +46,13 @@ class PointWriteUseCase(
         tagIds: Set<Long>,
         photoPath: String? = null
     ) {
+        val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
+            .ifBlank { formatPointTimestamp(timestamp) }
+        val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
         val id = repository.insert(
             buildPoint(
-                title = title,
-                note = note,
+                title = normalizedTitle,
+                note = normalizedNote,
                 location = location,
                 timestamp = timestamp,
                 photoPath = photoPath
@@ -41,12 +65,15 @@ class PointWriteUseCase(
             asyncScope.launch {
                 val noiseDb = runCatching { collectNoiseDb() }.getOrNull()
                 repository.updateNoiseDb(id, noiseDb)
-            }
+            }.join()
         }
     }
 
     suspend fun updatePoint(point: Point, title: String, note: String, photoPath: String?) {
-        repository.update(point.copy(title = title, note = note, photoPath = photoPath))
+        val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
+            .ifBlank { point.title }
+        val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
+        repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
         if (point.photoPath != photoPath) {
             deletePhoto(point.photoPath)
         }
@@ -64,15 +91,20 @@ class PointWriteUseCase(
         }.toMutableMap()
 
         pointsList.forEach { p ->
-            val key = Triple(p.timestamp, p.latitude, p.longitude)
+            val normalizedPoint = p.copy(
+                title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
+                    .ifBlank { formatPointTimestamp(p.timestamp) },
+                note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
+            )
+            val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
             val existing = existingMap[key]
             if (existing != null) {
-                val merged = p.copy(id = existing.id)
+                val merged = normalizedPoint.copy(id = existing.id)
                 repository.update(merged)
                 existingMap[key] = merged
             } else {
-                val newId = repository.insert(p)
-                existingMap[key] = p.copy(id = newId)
+                val newId = repository.insert(normalizedPoint)
+                existingMap[key] = normalizedPoint.copy(id = newId)
             }
         }
     }
@@ -89,6 +121,9 @@ class PointWriteUseCase(
             timestamp = timestamp,
             latitude = location.latitude,
             longitude = location.longitude,
+            locationAccuracyMeters = location.accuracyMeters,
+            locationFixTimeMs = location.fixTimeMs,
+            locationProvider = location.provider,
             title = title,
             note = note,
             pressureHpa = sensorSnapshot.pressureHpa,

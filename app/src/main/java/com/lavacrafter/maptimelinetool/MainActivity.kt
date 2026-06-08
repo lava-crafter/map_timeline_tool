@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool
 
 import android.Manifest
@@ -97,8 +113,8 @@ import com.lavacrafter.maptimelinetool.ui.downloadTileSourceById
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
+import com.lavacrafter.maptimelinetool.notification.showQuickAddNotification
 import com.lavacrafter.maptimelinetool.ui.theme.MapTimelineToolTheme
-import com.lavacrafter.maptimelinetool.notification.QuickAddService
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -391,6 +407,7 @@ class MainActivity : AppCompatActivity() {
                 val importZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
+                        val importedPhotoPaths = mutableListOf<String>()
                         runCatching {
                             val imported = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
@@ -400,7 +417,7 @@ class MainActivity : AppCompatActivity() {
                                             val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
                                             val importedPhotoFile = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
                                             importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
-                                            toStoredPhotoPath(importedPhotoFile)
+                                            toStoredPhotoPath(importedPhotoFile).also { importedPhotoPaths += it }
                                         }.getOrNull()
                                     }
                                 } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0, null)
@@ -415,6 +432,9 @@ class MainActivity : AppCompatActivity() {
                             }
                             Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
                         }.onFailure {
+                            scope.launch(Dispatchers.IO) {
+                                importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
+                            }
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -449,7 +469,7 @@ class MainActivity : AppCompatActivity() {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
                     }
-                    startService(Intent(context, QuickAddService::class.java))
+                    context.showQuickAddNotification()
                 }
 
                 LaunchedEffect(settingsState.cachePolicy, settingsState.satelliteCachePolicy, settingsState.mapTileSourceId, networkStatus) {
@@ -590,9 +610,9 @@ class MainActivity : AppCompatActivity() {
                     val note = newPointNote.trim()
                     val addPhotoPath = pendingAddPhotoPath
                     scope.launch {
-                        val loc = viewModel.getLastKnownLocation() ?: viewModel.getFreshLocation(2000L)
+                        val loc = viewModel.getPreciseLocation(5000L)
                         if (loc == null) {
-                            Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.toast_precise_location_failed), Toast.LENGTH_SHORT).show()
                             withContext(Dispatchers.IO) {
                                 deletePointPhotoFile(context, addPhotoPath)
                             }
@@ -611,6 +631,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 val pointsState = viewModel.points.collectAsState().value
+                LaunchedEffect(pointsState, editingPoint?.id) {
+                    val editingPointId = editingPoint?.id ?: return@LaunchedEffect
+                    val latestPoint = pointsState.firstOrNull { it.id == editingPointId } ?: return@LaunchedEffect
+                    if (latestPoint != editingPoint) {
+                        editingPoint = latestPoint
+                    }
+                }
                 LaunchedEffect(pendingExportSelection, pointsState) {
                     val sel = pendingExportSelection ?: return@LaunchedEffect
                     val pointsToExport = when (sel.kind) {
@@ -1193,9 +1220,9 @@ class MainActivity : AppCompatActivity() {
                         onConfirm = { title, note, createdAt, selectedTags ->
                             scope.launch {
                                 val addPhotoPath = pendingAddPhotoPath
-                                val loc = viewModel.getFreshLocation(5000L)
+                                val loc = viewModel.getPreciseLocation(5000L)
                                 if (loc == null) {
-                                    Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.toast_precise_location_failed), Toast.LENGTH_SHORT).show()
                                     withContext(Dispatchers.IO) {
                                         deletePointPhotoFile(context, addPhotoPath)
                                     }
@@ -1249,7 +1276,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
 
-                LaunchedEffect(editingPoint) {
+                LaunchedEffect(editingPoint?.id) {
                     editingPoint?.let { point ->
                         editingPointTagIds = viewModel.getTagIdsForPoint(point.id).toSet()
                         editingPointPhotoPath = point.photoPath

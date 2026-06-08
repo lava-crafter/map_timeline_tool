@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
@@ -6,6 +22,7 @@ import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.model.Tag
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -33,7 +50,7 @@ class PointWriteUseCaseTest {
         useCase.addPointWithTags(
             title = "title",
             note = "note",
-            location = GeoPoint(12.3, 45.6),
+            location = GeoPoint(12.3, 45.6, accuracyMeters = 7.5f, fixTimeMs = 1200L, provider = "gps"),
             timestamp = 1234L,
             tagIds = setOf(2L, 3L),
             photoPath = "/tmp/p.jpg"
@@ -42,13 +59,39 @@ class PointWriteUseCaseTest {
         val inserted = fakeRepository.inserted.single()
         assertEquals(12.3, inserted.latitude, 0.0)
         assertEquals(45.6, inserted.longitude, 0.0)
+        assertEquals(7.5f, inserted.locationAccuracyMeters)
+        assertEquals(1200L, inserted.locationFixTimeMs)
+        assertEquals("gps", inserted.locationProvider)
         assertEquals(1000f, inserted.pressureHpa)
         assertEquals(1f, inserted.accelerometerX)
         assertEquals(setOf(2L, 3L), fakeRepository.insertedTags.map { it.second }.toSet())
-        
-        kotlinx.coroutines.delay(50) // wait for async noise collection
-
         assertEquals(listOf(10L to -20f), fakeRepository.updatedNoiseDb)
+    }
+
+    @Test
+    fun `addPointWithTags sanitizes title and note before storing`() = runBlocking {
+        val fakeRepository = FakePointRepository()
+        val useCase = PointWriteUseCase(
+            repository = fakeRepository,
+            sensorSnapshotPort = object : SensorSnapshotPort {
+                override suspend fun readSnapshot(): PointSensorSnapshot = PointSensorSnapshot()
+            },
+            deletePhoto = {},
+            asyncScope = this
+        )
+
+        val timestamp = 1710000000000L
+        useCase.addPointWithTags(
+            title = "\u0000\t ",
+            note = "Line1\r\nLine2\tLine3\u0007",
+            location = GeoPoint(12.3, 45.6),
+            timestamp = timestamp,
+            tagIds = emptySet()
+        )
+
+        val inserted = fakeRepository.inserted.single()
+        assertEquals(formatPointTimestamp(timestamp), inserted.title)
+        assertEquals("Line1\nLine2 Line3", inserted.note)
     }
 }
 

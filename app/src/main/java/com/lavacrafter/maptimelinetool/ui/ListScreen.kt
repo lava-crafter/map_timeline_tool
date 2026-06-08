@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -18,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.R
 import java.text.SimpleDateFormat
@@ -51,14 +68,24 @@ fun ListScreen(
                         onLongClick = { onLongPress(p) }
                     )
                     .padding(vertical = 4.dp),
-                headlineContent = { Text(p.title) },
+                headlineContent = {
+                    Text(
+                        text = p.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 supportingContent = {
                     val detail = if (noteText.isBlank()) {
                         "${localTimeText}\n${latLonText}"
                     } else {
                         "${noteText}\n${localTimeText}\n${latLonText}"
                     }
-                    Text(detail)
+                    Text(
+                        text = detail,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 trailingContent = {
                     if (!orderText.isNullOrBlank()) {

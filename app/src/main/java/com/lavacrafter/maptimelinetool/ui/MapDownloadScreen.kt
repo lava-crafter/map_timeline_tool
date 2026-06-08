@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.ui
 
 import android.os.Handler
@@ -35,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.activity.compose.BackHandler
@@ -52,6 +69,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lavacrafter.maptimelinetool.LocationUtils
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.ui.DownloadTileSource
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.cachemanager.CacheManager
 import org.osmdroid.util.BoundingBox
@@ -70,6 +88,7 @@ fun MapDownloadScreen(
     downloadedOnly: Boolean
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var mapView: MapView? by remember { mutableStateOf(null) }
     var cacheManagerRef: CacheManager? by remember { mutableStateOf(null) }
     var minZoom by remember { mutableStateOf(8) }
@@ -197,10 +216,12 @@ fun MapDownloadScreen(
                         .size(44.dp),
                     onClick = {
                         val map = mapView ?: return@FloatingActionButton
-                        val loc = LocationUtils.getLastKnownLocation(context)
-                        if (loc == null) {
-                            Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
-                        } else {
+                        scope.launch {
+                            val loc = LocationUtils.getBestEffortLocation(context, 5_000L)
+                            if (loc == null) {
+                                Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
                             map.controller.setZoom(15.0)
                             map.controller.setCenter(GeoPoint(loc.latitude, loc.longitude))
                         }

@@ -136,7 +136,7 @@
     <string name="about_ai_text">הפרויקט פותח בעזרת כלי בינה מלאכותית.</string>
     <string name="about_version">גרסה: %1$s</string>
     <string name="about_project_license_title">רישיון האפליקציה</string>
-    <string name="about_project_license_summary">Map Timeline Tool מפורסמת כקוד פתוח תחת רישיון MIT.</string>
+    <string name="about_project_license_summary">Map Timeline Tool מפורסמת כקוד פתוח תחת רישיון Apache-2.0.</string>
     <string name="tag_lock">נעיצה</string>
     <string name="tag_unlock">שחרור נעיצה</string>
     <string name="tag_pin_limit_message">ניתן לנעוץ עד שלוש תגיות.</string>

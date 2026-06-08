@@ -136,7 +136,7 @@
     <string name="about_ai_text">Este projeto foi desenvolvido com ajuda de ferramentas de IA.</string>
     <string name="about_version">Versão: %1$s</string>
     <string name="about_project_license_title">Licença do app</string>
-    <string name="about_project_license_summary">Map Timeline Tool é publicado como código aberto sob a licença MIT.</string>
+    <string name="about_project_license_summary">Map Timeline Tool é publicado como código aberto sob a licença Apache-2.0.</string>
     <string name="tag_lock">Fixar</string>
     <string name="tag_unlock">Desafixar</string>
     <string name="tag_pin_limit_message">Você pode fixar até três tags.</string>

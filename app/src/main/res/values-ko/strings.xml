@@ -136,7 +136,7 @@
     <string name="about_ai_text">이 프로젝트는 AI 도구의 도움으로 개발되었습니다.</string>
     <string name="about_version">버전: %1$s</string>
     <string name="about_project_license_title">앱 라이선스</string>
-    <string name="about_project_license_summary">Map Timeline Tool은 MIT License로 오픈소스로 공개됩니다.</string>
+    <string name="about_project_license_summary">Map Timeline Tool은 Apache-2.0 라이선스로 오픈소스로 공개됩니다.</string>
     <string name="tag_lock">고정</string>
     <string name="tag_unlock">고정 해제</string>
     <string name="tag_pin_limit_message">태그는 최대 세 개까지 고정할 수 있습니다.</string>

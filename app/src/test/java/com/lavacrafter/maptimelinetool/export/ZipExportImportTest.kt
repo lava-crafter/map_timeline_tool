@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
@@ -84,6 +100,45 @@ class ZipExportImportTest {
     }
 
     @Test
+    fun `zip export manifest reports filtered tag count`() {
+        val point = Point(
+            id = 10L,
+            timestamp = 1710000000000L,
+            latitude = 10.0,
+            longitude = 20.0,
+            title = "A",
+            note = "B"
+        )
+        val output = ByteArrayOutputStream()
+
+        ZipExporter.export(
+            points = listOf(point),
+            outputStream = output,
+            resolvePhotoFile = { null },
+            options = ZipExporter.ExportOptions(includePoints = true, includeTags = true, includePhotos = false),
+            tags = listOf(
+                ZipExporter.TagRecord(id = 100L, name = "Office"),
+                ZipExporter.TagRecord(id = 200L, name = "Unused")
+            ),
+            pointTagIdsByPointId = mapOf(10L to listOf(100L))
+        )
+
+        var manifestJson: String? = null
+        java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == "backup_manifest.json") {
+                    manifestJson = zip.readBytes().toString(Charsets.UTF_8)
+                }
+                zip.closeEntry()
+            }
+        }
+
+        val manifest = manifestJson ?: error("manifest missing")
+        assertTrue(manifest.contains("\"counts\":{\"points\":1,\"tags\":1,\"photos\":0}"))
+    }
+
+    @Test
     fun `zip export with include tags false only writes points and photos`() {
         val tempDir = createTempDirectory("zip-export-no-tags-test").toFile()
         val photo = File(tempDir, "a.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
@@ -126,6 +181,9 @@ class ZipExportImportTest {
             timestamp = 1710000000000L,
             latitude = 1.2,
             longitude = 3.4,
+            locationAccuracyMeters = 6.5f,
+            locationFixTimeMs = 1709999999000L,
+            locationProvider = "gps",
             title = "P",
             note = "N",
             gyroscopeX = 9.9f
@@ -148,8 +206,31 @@ class ZipExportImportTest {
 
         assertEquals(1, imported.points.size)
         assertEquals(9.9f, imported.points.first().gyroscopeX ?: 0f, 0.001f)
+        assertEquals(6.5f, imported.points.first().locationAccuracyMeters ?: 0f, 0.001f)
+        assertEquals(1709999999000L, imported.points.first().locationFixTimeMs)
+        assertEquals("gps", imported.points.first().locationProvider)
         assertEquals("stored/photos/p.jpg", imported.points.first().photoPath)
         assertEquals(1, imported.importedPhotoCount)
+    }
+
+    @Test
+    fun `kml export includes location metadata`() {
+        val point = Point(
+            timestamp = 1710000000000L,
+            latitude = 1.2,
+            longitude = 3.4,
+            locationAccuracyMeters = 18f,
+            locationFixTimeMs = 1709999998000L,
+            locationProvider = "cached_overlay",
+            title = "P",
+            note = "N"
+        )
+
+        val kml = KmlExporter.buildKml(listOf(point))
+
+        assertTrue(kml.contains("Location provider: cached_overlay"))
+        assertTrue(kml.contains("Accuracy(m): 18.0"))
+        assertTrue(kml.contains("Fix time(ms): 1709999998000"))
     }
 
     @Test
@@ -171,7 +252,7 @@ class ZipExportImportTest {
             zip.write(csv.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
             zip.putNextEntry(java.util.zip.ZipEntry("tags.csv"))
-            val tagsCsv = "\"tag_id\",\"name\"\n\"10\",\"Work\"\n"
+            val tagsCsv = "\"tag_id\",\"name\"\n\"10\",\"  Work\tTeam\u0007 \"\n"
             zip.write(tagsCsv.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
             zip.putNextEntry(java.util.zip.ZipEntry("point_tags.csv"))
@@ -182,7 +263,7 @@ class ZipExportImportTest {
 
         val imported = ZipImporter.importZip(ByteArrayInputStream(actualZip.toByteArray())) { _, _ -> null }
         assertEquals(1, imported.tags.size)
-        assertEquals("Work", imported.tags.first().name)
+        assertEquals("Work Team", imported.tags.first().name)
         assertEquals(1, imported.pointTags.size)
         assertEquals(0, imported.pointTags.first().pointIndex)
         assertEquals(10L, imported.pointTags.first().legacyTagId)

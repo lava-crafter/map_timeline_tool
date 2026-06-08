@@ -135,7 +135,7 @@
     <string name="about_ai_text">このプロジェクトはAIツールの支援を受けて開発されました。</string>
     <string name="about_version">バージョン: %1$s</string>
     <string name="about_project_license_title">アプリのライセンス</string>
-    <string name="about_project_license_summary">Map Timeline Tool は MIT License の下でオープンソースとして公開されています。</string>
+    <string name="about_project_license_summary">Map Timeline Tool は Apache-2.0 ライセンスの下でオープンソースとして公開されています。</string>
     <string name="tag_lock">固定</string>
     <string name="tag_unlock">固定解除</string>
     <string name="tag_pin_limit_message">固定できるタグは最大3件です。</string>

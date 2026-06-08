@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
@@ -6,6 +22,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -50,6 +69,9 @@ object GeoJsonExporter {
                 put("longitude", point.longitude)
                 put("timestamp_ms", point.timestamp)
                 put("time_utc", sdf.format(Date(point.timestamp)))
+                point.locationAccuracyMeters?.let { put("location_accuracy_meters", it) }
+                point.locationFixTimeMs?.let { put("location_fix_time_ms", it) }
+                point.locationProvider?.takeIf { it.isNotBlank() }?.let { put("location_provider", it) }
 
                 val photoRelPath = photoRelPathResolver(point)?.trim().orEmpty()
                 if (photoRelPath.isNotEmpty()) {
@@ -137,6 +159,8 @@ object GeoJsonExporter {
             val timestampMs = properties?.optLong("timestamp_ms")
                 ?.takeIf { it > 0L }
                 ?: parseTimestamp(properties?.optString("time_utc"), sdf)
+            val normalizedTitle = sanitizePointTitle(title).ifBlank { formatPointTimestamp(timestampMs) }
+            val normalizedNote = sanitizePointNote(note)
 
             val relPhotoPath = properties?.optString("photo_rel_path")?.trim().orEmpty()
             val resolvedPhotoPath = relPhotoPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
@@ -146,8 +170,11 @@ object GeoJsonExporter {
                     timestamp = timestampMs,
                     latitude = lat,
                     longitude = lon,
-                    title = title,
-                    note = note,
+                    locationAccuracyMeters = properties?.optFloatOrNull("location_accuracy_meters"),
+                    locationFixTimeMs = properties?.optLongOrNull("location_fix_time_ms"),
+                    locationProvider = properties?.optStringOrNull("location_provider"),
+                    title = normalizedTitle,
+                    note = normalizedNote,
                     pressureHpa = properties?.optFloatOrNull("pressure_hpa"),
                     ambientLightLux = properties?.optFloatOrNull("ambient_light_lux"),
                     accelerometerX = properties?.optFloatOrNull("accelerometer_x"),
@@ -179,6 +206,20 @@ object GeoJsonExporter {
         if (!has(key) || isNull(key)) return null
         val parsed = optDouble(key, Double.NaN)
         return parsed.takeIf { it.isFinite() }
+    }
+
+    private fun JSONObject.optLongOrNull(key: String): Long? {
+        if (!has(key) || isNull(key)) return null
+        return when (val value = opt(key)) {
+            is Number -> value.toLong()
+            is String -> value.trim().toLongOrNull()
+            else -> null
+        }
+    }
+
+    private fun JSONObject.optStringOrNull(key: String): String? {
+        if (!has(key) || isNull(key)) return null
+        return optString(key).trim().takeIf { it.isNotEmpty() }
     }
 
     private fun JSONObject.optFloatOrNull(key: String): Float? {

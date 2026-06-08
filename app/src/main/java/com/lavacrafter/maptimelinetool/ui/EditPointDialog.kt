@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,11 +43,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -51,8 +71,8 @@ fun EditPointDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var title by remember(point) { mutableStateOf(point.title) }
-    var note by remember(point) { mutableStateOf(point.note) }
+    var title by remember(point.id) { mutableStateOf(point.title) }
+    var note by remember(point.id) { mutableStateOf(point.note) }
 
     val selectedTags = remember(tags, selectedTagIds) {
         tags.filter { selectedTagIds.contains(it.id) }
@@ -68,7 +88,7 @@ fun EditPointDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSave(title.trim().ifBlank { point.title }, note.trim(), currentPhotoPath) }) {
+            TextButton(onClick = { onSave(sanitizePointTitle(title).ifBlank { point.title }, sanitizePointNote(note), currentPhotoPath) }) {
                 Text(stringResource(R.string.action_save))
             }
         },
@@ -84,13 +104,14 @@ fun EditPointDialog(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = sanitizePointTitle(it) },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = note,
-                    onValueChange = { note = it },
+                    onValueChange = { note = sanitizePointNote(it) },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -144,8 +165,15 @@ fun EditPointDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         selectedTags.forEach { tag ->
-                            OutlinedButton(onClick = { onToggleTag(tag.id) }) {
-                                Text(tag.name)
+                            OutlinedButton(
+                                onClick = { onToggleTag(tag.id) },
+                                modifier = Modifier.widthIn(max = 180.dp)
+                            ) {
+                                Text(
+                                    text = tag.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
@@ -226,6 +254,7 @@ fun EditPointDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(stringResource(R.string.label_lat_lon, point.latitude, point.longitude))
+                LocationQualityText(point)
                 SensorReadingText(
                     value = point.pressureHpa,
                     formatRes = R.string.label_sensor_pressure
@@ -275,6 +304,13 @@ private fun SensorReadingText(value: Float?, formatRes: Int) {
 }
 
 @Composable
+private fun LocationQualityText(point: PointEntity) {
+    val summary = point.buildLocationQualitySummary() ?: return
+    Text(stringResource(R.string.label_location_quality))
+    Text(summary)
+}
+
+@Composable
 private fun SensorVectorText(x: Float?, y: Float?, z: Float?, formatRes: Int) {
     if (x == null || y == null || z == null) return
     Text(stringResource(formatRes, x, y, z))
@@ -287,6 +323,59 @@ private fun PointEntity.hasSensorData(): Boolean =
         (gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null) ||
         (magnetometerX != null && magnetometerY != null && magnetometerZ != null) ||
         noiseDb != null
+
+@Composable
+private fun PointEntity.buildLocationQualitySummary(): String? {
+    val providerText = locationProvider
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let(::formatLocationProvider)
+        ?: stringResource(R.string.label_location_provider_unknown)
+    val accuracyText = locationAccuracyMeters
+        ?.let { stringResource(R.string.label_location_accuracy, it) }
+        ?: stringResource(R.string.label_location_accuracy_unknown)
+    val ageText = formatLocationFixAge(timestamp, locationFixTimeMs)
+
+    if (locationProvider.isNullOrBlank() && locationAccuracyMeters == null && ageText == null) {
+        return null
+    }
+
+    return stringResource(
+        R.string.label_location_quality_summary,
+        providerText,
+        accuracyText,
+        ageText ?: stringResource(R.string.label_location_fix_age_unknown)
+    )
+}
+
+private fun formatLocationProvider(provider: String): String {
+    return when (provider.trim().lowercase(Locale.US)) {
+        "gps" -> "GPS"
+        "network" -> "Network"
+        "fused" -> "Fused"
+        "cached_overlay" -> "Cached overlay"
+        else -> provider
+        .split('_', '-', ' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { part ->
+            part.lowercase(Locale.US).replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase(Locale.US) else ch.toString()
+            }
+        }
+    }
+}
+
+private fun formatLocationFixAge(savedAtMs: Long, fixTimeMs: Long?): String? {
+    val fixTime = fixTimeMs?.takeIf { it > 0L } ?: return null
+    val deltaMs = (savedAtMs - fixTime).coerceAtLeast(0L)
+    val seconds = deltaMs / 1000L
+    return when {
+        seconds < 60L -> "${seconds}s"
+        seconds < 3600L -> "${seconds / 60L}m"
+        seconds < 86400L -> "${seconds / 3600L}h"
+        else -> "${seconds / 86400L}d"
+    }
+}
 
 private fun formatPhotoFileSize(bytes: Long): String {
     if (bytes < 1024) return "${bytes}B"

@@ -1,7 +1,24 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool
 
 import android.app.Application
 import android.content.Context
+import android.hardware.Sensor
 import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.SettingsRepository
@@ -55,19 +72,34 @@ class AppGraph(
     val sensorSnapshotPort: SensorSnapshotPort by lazy {
         object : SensorSnapshotPort {
             override suspend fun readSnapshot(): PointSensorSnapshot {
-                val raw = com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot(app)
+                val pressureEnabled = settingsManagementUseCase.getPressureEnabled()
+                val ambientLightEnabled = settingsManagementUseCase.getAmbientLightEnabled()
+                val accelerometerEnabled = settingsManagementUseCase.getAccelerometerEnabled()
+                val gyroscopeEnabled = settingsManagementUseCase.getGyroscopeEnabled()
+                val magnetometerEnabled = settingsManagementUseCase.getMagnetometerEnabled()
+                val requestedSensorTypes = buildSet {
+                    if (pressureEnabled) add(Sensor.TYPE_PRESSURE)
+                    if (ambientLightEnabled) add(Sensor.TYPE_LIGHT)
+                    if (accelerometerEnabled) add(Sensor.TYPE_ACCELEROMETER)
+                    if (gyroscopeEnabled) add(Sensor.TYPE_GYROSCOPE)
+                    if (magnetometerEnabled) add(Sensor.TYPE_MAGNETIC_FIELD)
+                }
+                val raw = com.lavacrafter.maptimelinetool.sensor.captureSensorSnapshot(
+                    app,
+                    requestedSensorTypes = requestedSensorTypes
+                )
                 return PointSensorSnapshot(
-                    pressureHpa = if (settingsManagementUseCase.getPressureEnabled()) raw.pressureHpa else null,
-                    ambientLightLux = if (settingsManagementUseCase.getAmbientLightEnabled()) raw.ambientLightLux else null,
-                    accelerometerX = if (settingsManagementUseCase.getAccelerometerEnabled()) raw.accelerometerX else null,
-                    accelerometerY = if (settingsManagementUseCase.getAccelerometerEnabled()) raw.accelerometerY else null,
-                    accelerometerZ = if (settingsManagementUseCase.getAccelerometerEnabled()) raw.accelerometerZ else null,
-                    gyroscopeX = if (settingsManagementUseCase.getGyroscopeEnabled()) raw.gyroscopeX else null,
-                    gyroscopeY = if (settingsManagementUseCase.getGyroscopeEnabled()) raw.gyroscopeY else null,
-                    gyroscopeZ = if (settingsManagementUseCase.getGyroscopeEnabled()) raw.gyroscopeZ else null,
-                    magnetometerX = if (settingsManagementUseCase.getMagnetometerEnabled()) raw.magnetometerX else null,
-                    magnetometerY = if (settingsManagementUseCase.getMagnetometerEnabled()) raw.magnetometerY else null,
-                    magnetometerZ = if (settingsManagementUseCase.getMagnetometerEnabled()) raw.magnetometerZ else null
+                    pressureHpa = if (pressureEnabled) raw.pressureHpa else null,
+                    ambientLightLux = if (ambientLightEnabled) raw.ambientLightLux else null,
+                    accelerometerX = if (accelerometerEnabled) raw.accelerometerX else null,
+                    accelerometerY = if (accelerometerEnabled) raw.accelerometerY else null,
+                    accelerometerZ = if (accelerometerEnabled) raw.accelerometerZ else null,
+                    gyroscopeX = if (gyroscopeEnabled) raw.gyroscopeX else null,
+                    gyroscopeY = if (gyroscopeEnabled) raw.gyroscopeY else null,
+                    gyroscopeZ = if (gyroscopeEnabled) raw.gyroscopeZ else null,
+                    magnetometerX = if (magnetometerEnabled) raw.magnetometerX else null,
+                    magnetometerY = if (magnetometerEnabled) raw.magnetometerY else null,
+                    magnetometerZ = if (magnetometerEnabled) raw.magnetometerZ else null
                 )
             }
         }

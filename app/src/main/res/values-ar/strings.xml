@@ -136,7 +136,7 @@
     <string name="about_ai_text">تم تطوير هذا المشروع بمساعدة أدوات الذكاء الاصطناعي.</string>
     <string name="about_version">الإصدار: %1$s</string>
     <string name="about_project_license_title">ترخيص التطبيق</string>
-    <string name="about_project_license_summary">Map Timeline Tool منشور كمصدر مفتوح تحت ترخيص MIT.</string>
+    <string name="about_project_license_summary">Map Timeline Tool منشور كمصدر مفتوح تحت ترخيص Apache-2.0.</string>
     <string name="tag_lock">تثبيت</string>
     <string name="tag_unlock">إلغاء التثبيت</string>
     <string name="tag_pin_limit_message">يمكنك تثبيت حتى ثلاثة وسوم.</string>

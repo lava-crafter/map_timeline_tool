@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
@@ -35,6 +51,7 @@ class CsvDomainBoundaryTest {
         val lines = csv.lineSequence().toList()
         assertTrue(lines.first().contains("pressure_hpa"))
         assertTrue(lines.first().contains("photo_rel_path"))
+        assertTrue(lines.first().contains("location_accuracy_meters"))
         assertTrue(lines[1].contains("\"photos/a.jpg\""))
     }
 
@@ -55,6 +72,9 @@ class CsvDomainBoundaryTest {
                     timestamp = 1710000000000L,
                     latitude = 11.1,
                     longitude = 22.2,
+                    locationAccuracyMeters = 12f,
+                    locationFixTimeMs = 1710000005000L,
+                    locationProvider = "network",
                     title = "New",
                     note = "Line1\nLine2",
                     pressureHpa = 1001.5f,
@@ -66,6 +86,9 @@ class CsvDomainBoundaryTest {
 
         assertEquals(1, imported.size)
         assertEquals("New", imported.first().title)
+        assertEquals(12f, imported.first().locationAccuracyMeters ?: 0f, 0.001f)
+        assertEquals(1710000005000L, imported.first().locationFixTimeMs)
+        assertEquals("network", imported.first().locationProvider)
         assertEquals(1001.5f, imported.first().pressureHpa ?: 0f, 0.001f)
         assertEquals("photos/new.jpg", imported.first().photoPath)
         assertEquals("Line1\nLine2", imported.first().note)
@@ -84,5 +107,17 @@ class CsvDomainBoundaryTest {
         assertNull(imported.first().ambientLightLux)
         assertNull(imported.first().accelerometerX)
         assertEquals("photos/p.jpg", imported.first().photoPath)
+    }
+
+    @Test
+    fun `import csv sanitizes text fields`() {
+        val csv = "name,description,latitude,longitude,time_utc\n" +
+            "\"  Weird\tTitle\nHere\u0007  \",\"Line1\r\nLine2\tLine3\u0000\",10.0,20.0,2024-01-01T00:00:00Z"
+
+        val imported = CsvImporter.parseCsv(csv)
+
+        assertEquals(1, imported.size)
+        assertEquals("Weird Title Here", imported.first().title)
+        assertEquals("Line1\nLine2 Line3", imported.first().note)
     }
 }

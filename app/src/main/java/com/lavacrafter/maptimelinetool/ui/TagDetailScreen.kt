@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.ui
 
 import androidx.compose.foundation.layout.Column
@@ -18,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.PointEntity
@@ -45,7 +62,7 @@ fun TagDetailScreen(
         ) {
             Text(stringResource(R.string.action_back))
         }
-        Text(text = tag.name)
+        Text(text = tag.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { showPicker = true }) { Text(stringResource(R.string.action_add_point_to_tag)) }
         Spacer(modifier = Modifier.height(8.dp))
@@ -83,14 +100,20 @@ private fun TagPointPickerDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) }
         },
-        title = { Text(stringResource(R.string.tag_manage_points_title, tag.name)) },
+        title = {
+            Text(
+                text = stringResource(R.string.tag_manage_points_title, tag.name),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         text = {
             Column(modifier = Modifier.fillMaxSize()) {
                 points.forEach { point ->
                     val isChecked = selected.contains(point.id)
                     TextButton(onClick = { onToggle(point, !isChecked) }) {
                         Checkbox(checked = isChecked, onCheckedChange = { onToggle(point, it) })
-                        Text(text = point.title)
+                        Text(text = point.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

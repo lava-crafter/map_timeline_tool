@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.SettingsDownloadedArea
@@ -79,6 +95,7 @@ class SettingsManagementUseCaseTest {
 private class FakeSettingsGateway : SettingsManagementGateway {
     private var timeoutSeconds: Int = 20
     private var cachePolicy: SettingsMapCachePolicy = SettingsMapCachePolicy.WIFI_ONLY
+    private var satelliteCachePolicy: SettingsMapCachePolicy = SettingsMapCachePolicy.WIFI_ONLY
     private var pinnedTagIds: List<Long> = emptyList()
     private var recentTagIds: List<Long> = emptyList()
     private var zoomBehavior: SettingsZoomButtonBehavior = SettingsZoomButtonBehavior.HIDE
@@ -86,6 +103,7 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     private var followSystemTheme: Boolean = true
     private var defaultTagIds: List<Long> = emptyList()
     private var markerScale: Float = 1f
+    private var mapTileSourceId: String = "osm"
     private var downloadTileSourceId: String = "osm"
     private var downloadMultiThreadEnabled: Boolean = false
     private var downloadThreadCount: Int = 4
@@ -110,6 +128,11 @@ private class FakeSettingsGateway : SettingsManagementGateway {
         cachePolicy = policy
     }
 
+    override fun getSatelliteCachePolicy(): SettingsMapCachePolicy = satelliteCachePolicy
+    override fun setSatelliteCachePolicy(policy: SettingsMapCachePolicy) {
+        satelliteCachePolicy = policy
+    }
+
     override fun getPinnedTagIds(): List<Long> = pinnedTagIds
     override fun setPinnedTagIds(tagIds: List<Long>) {
         pinnedTagIds = tagIds
@@ -127,6 +150,9 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     }
 
     override fun getLanguagePreference(): SettingsLanguagePreference = languagePreference
+    override fun setLanguagePreference(preference: SettingsLanguagePreference) {
+        languagePreference = preference
+    }
 
     override fun getFollowSystemTheme(): Boolean = followSystemTheme
     override fun setFollowSystemTheme(enabled: Boolean) {
@@ -141,6 +167,11 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     override fun getMarkerScale(): Float = markerScale
     override fun setMarkerScale(scale: Float) {
         markerScale = scale
+    }
+
+    override fun getMapTileSourceId(): String = mapTileSourceId
+    override fun setMapTileSourceId(sourceId: String) {
+        mapTileSourceId = sourceId
     }
 
     override fun getDownloadTileSourceId(): String = downloadTileSourceId

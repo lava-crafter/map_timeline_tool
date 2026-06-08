@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
@@ -7,6 +23,9 @@ import java.io.PushbackReader
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 
 object CsvImporter {
     fun parseCsv(csv: String): List<Point> {
@@ -50,9 +69,10 @@ object CsvImporter {
             if (row.all { it.isBlank() }) continue
             val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull() ?: continue
             val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull() ?: continue
-            val title = row.valueOf(indexMap, "name").orEmpty()
-            val note = row.valueOf(indexMap, "description").orEmpty()
             val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), sdf)
+            val title = sanitizePointTitle(row.valueOf(indexMap, "name").orEmpty())
+                .ifBlank { formatPointTimestamp(timestamp) }
+            val note = sanitizePointNote(row.valueOf(indexMap, "description").orEmpty())
             val photoRelPath = row.valueOf(indexMap, "photo_rel_path").orEmpty().trim()
             val resolvedPhotoPath = photoRelPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
 
@@ -61,6 +81,9 @@ object CsvImporter {
                     timestamp = timestamp,
                     latitude = lat,
                     longitude = lon,
+                    locationAccuracyMeters = row.valueOf(indexMap, "location_accuracy_meters").toFiniteFloatOrNull(),
+                    locationFixTimeMs = row.valueOf(indexMap, "location_fix_time_ms").toFiniteLongOrNull(),
+                    locationProvider = row.valueOf(indexMap, "location_provider").toTrimmedOrNull(),
                     title = title,
                     note = note,
                     pressureHpa = row.valueOf(indexMap, "pressure_hpa").toFiniteFloatOrNull(),
@@ -99,6 +122,14 @@ object CsvImporter {
     private fun String?.toFiniteFloatOrNull(): Float? {
         val parsed = this?.trim()?.takeIf { it.isNotEmpty() }?.toFloatOrNull() ?: return null
         return parsed.takeIf { it.isFinite() }
+    }
+
+    private fun String?.toFiniteLongOrNull(): Long? {
+        return this?.trim()?.takeIf { it.isNotEmpty() }?.toLongOrNull()
+    }
+
+    private fun String?.toTrimmedOrNull(): String? {
+        return this?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun readCsvRecord(reader: PushbackReader): List<String>? {

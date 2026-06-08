@@ -1,3 +1,19 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package com.lavacrafter.maptimelinetool.ui
 
 import android.annotation.SuppressLint
@@ -6,7 +22,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Point
-import android.location.Location
+import android.location.LocationManager
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,9 +56,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.lavacrafter.maptimelinetool.LocationUtils
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.modules.IFilesystemCache
 import org.osmdroid.tileprovider.modules.INetworkAvailablityCheck
@@ -83,10 +102,18 @@ fun MapScreen(
     val context = LocalContext.current
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     var mapView: MapView? by remember { mutableStateOf(null) }
-    val locationProvider = remember { GpsMyLocationProvider(context) }
+    val locationProvider = remember {
+        GpsMyLocationProvider(context).apply {
+            clearLocationSources()
+            addLocationSource(LocationManager.GPS_PROVIDER)
+            addLocationSource(LocationManager.NETWORK_PROVIDER)
+        }
+    }
     val orientationProvider = remember { InternalCompassOrientationProvider(context) }
     val headingOverlay = remember { HeadingLocationOverlay(context) }
+    headingOverlay.invalidateMap = { mapView?.postInvalidateOnAnimation() }
     val todayOrderById = remember(points) { buildTodayOrder(points) }
     var interactionToken by remember { mutableStateOf(0) }
     var showZoomTransient by remember { mutableStateOf(false) }
@@ -151,15 +178,7 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(isActive, mapView) {
-        if (!isActive) return@LaunchedEffect
-        while (isActive) {
-            mapView?.postInvalidate()
-            delay(1000L)
-        }
-    }
-
-    var lastOverlaySignature by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var lastOverlaySignature by remember { mutableStateOf<MapOverlaySignature?>(null) }
     var overlaysReady by remember { mutableStateOf(false) }
     var hasAutoCentered by remember { mutableStateOf(false) }
     var policyNetworkCheck by remember { mutableStateOf<PolicyAwareNetworkCheck?>(null) }
@@ -222,6 +241,8 @@ fun MapScreen(
                 map.onDetach()
                 policyNetworkCheck = null
                 policyFilesystemCache = null
+                headingOverlay.invalidateMap = null
+                mapView = null
             },
             update = { map ->
                 val targetSource = mapTileSourceById(mapTileSourceId).toOsmdroidSource(context)
@@ -253,9 +274,12 @@ fun MapScreen(
                     }
                 }
 
-                val signature = points.map { it.id }
+                val signature = MapOverlaySignature(
+                    selectedPointId = selectedPointId,
+                    markerScale = markerScale,
+                    points = points.map { it.toOverlaySignature() }
+                )
                 if (overlaysReady && signature == lastOverlaySignature) {
-                    map.invalidate()
                     return@AndroidView
                 }
                 map.overlays.clear()
@@ -331,16 +355,14 @@ fun MapScreen(
                 .padding(16.dp),
             onClick = {
                 val map = mapView ?: return@FloatingActionButton
-                val cached = readCachedLocation(context)
-                if (cached == null) {
-                    Toast.makeText(context, context.getString(R.string.toast_location_loading), Toast.LENGTH_SHORT).show()
-                }
-                val targetLocation = cached?.let { GeoPoint(it.latitude, it.longitude) }
-                val targetPoint = selectedPointId?.let { id -> points.find { it.id == id } } ?: points.firstOrNull()
-                val target = targetLocation ?: targetPoint?.let { GeoPoint(it.latitude, it.longitude) }
-                target?.let {
-                    map.controller.setZoom(16.0)
-                    map.controller.setCenter(it)
+                        scope.launch {
+                            val location = LocationUtils.getBestEffortLocation(context, 5_000L)
+                            if (location == null) {
+                                Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                            map.controller.setZoom(16.0)
+                            map.controller.setCenter(GeoPoint(location.latitude, location.longitude))
                 }
             }
         ) {
@@ -406,6 +428,52 @@ fun MapScreen(
     }
 
 }
+
+private data class MapOverlaySignature(
+    val selectedPointId: Long?,
+    val markerScale: Float,
+    val points: List<PointOverlaySignature>
+)
+
+private data class PointOverlaySignature(
+    val id: Long,
+    val latitude: Double,
+    val longitude: Double,
+    val timestamp: Long,
+    val title: String,
+    val note: String,
+    val pressureHpa: Float?,
+    val ambientLightLux: Float?,
+    val accelerometerX: Float?,
+    val accelerometerY: Float?,
+    val accelerometerZ: Float?,
+    val gyroscopeX: Float?,
+    val gyroscopeY: Float?,
+    val gyroscopeZ: Float?,
+    val magnetometerX: Float?,
+    val magnetometerY: Float?,
+    val magnetometerZ: Float?
+)
+
+private fun PointEntity.toOverlaySignature(): PointOverlaySignature = PointOverlaySignature(
+    id = id,
+    latitude = latitude,
+    longitude = longitude,
+    timestamp = timestamp,
+    title = title,
+    note = note,
+    pressureHpa = pressureHpa,
+    ambientLightLux = ambientLightLux,
+    accelerometerX = accelerometerX,
+    accelerometerY = accelerometerY,
+    accelerometerZ = accelerometerZ,
+    gyroscopeX = gyroscopeX,
+    gyroscopeY = gyroscopeY,
+    gyroscopeZ = gyroscopeZ,
+    magnetometerX = magnetometerX,
+    magnetometerY = magnetometerY,
+    magnetometerZ = magnetometerZ
+)
 
 private fun createCounterIcon(
     context: android.content.Context,
@@ -518,18 +586,6 @@ private val INFO_WINDOW_BACKGROUND_COLOR = Color.parseColor("#FCFCFC")
 private fun spectrumColor(order: Int): Int {
     val index = (order - 1).coerceAtLeast(0) % SPECTRUM_COLORS.size
     return SPECTRUM_COLORS[index]
-}
-
-private fun readCachedLocation(context: android.content.Context): Location? {
-    val prefs = context.getSharedPreferences(HeadingLocationOverlay.LOCATION_PREFS, android.content.Context.MODE_PRIVATE)
-    if (!prefs.contains(HeadingLocationOverlay.KEY_LAT) || !prefs.contains(HeadingLocationOverlay.KEY_LON)) {
-        return null
-    }
-    return Location("cached").apply {
-        latitude = prefs.getFloat(HeadingLocationOverlay.KEY_LAT, 0f).toDouble()
-        longitude = prefs.getFloat(HeadingLocationOverlay.KEY_LON, 0f).toDouble()
-        time = prefs.getLong(HeadingLocationOverlay.KEY_TIME, System.currentTimeMillis())
-    }
 }
 
 private fun findNearestPoint(map: MapView, points: List<PointEntity>, target: GeoPoint, maxDp: Float): PointEntity? {

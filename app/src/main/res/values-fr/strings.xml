@@ -136,7 +136,7 @@
     <string name="about_ai_text">Ce projet a été développé avec l’aide d’outils d’IA.</string>
     <string name="about_version">Version : %1$s</string>
     <string name="about_project_license_title">Licence de l’application</string>
-    <string name="about_project_license_summary">Map Timeline Tool est publié en open source sous licence MIT.</string>
+    <string name="about_project_license_summary">Map Timeline Tool est publié en open source sous licence Apache-2.0.</string>
     <string name="tag_lock">Épingler</string>
     <string name="tag_unlock">Désépingler</string>
     <string name="tag_pin_limit_message">Vous pouvez épingler jusqu’à trois balises.</string>
