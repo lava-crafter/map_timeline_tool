@@ -100,7 +100,7 @@
     <string name="label_photo_size">Photo size: %1$s</string>
     <string name="settings_title">Settings</string>
     <string name="settings_help_title">Help</string>
-    <string name="settings_help_overview">Tap the cards below to reach the panels for themes, notifications, backup and restore, map controls, photo compression, cache, downloads, and default tags. Each screen has a ? button for quick tips.</string>
+    <string name="settings_help_overview">Points, photos, and settings stay on this device unless you export or share them. Before changing devices, create a full ZIP backup from Backup and Restore. Help buttons explain permissions, formats, caching, and downloads.</string>
     <string name="settings_theme_label">Dark theme</string>
     <string name="settings_theme_follow_system">Follow system</string>
     <string name="settings_theme_follow_system_hint">Follow system — controls dark theme</string>
@@ -110,14 +110,14 @@
     <string name="settings_language_title">Language</string>
     <string name="language_follow_system">Follow System</string>
     <string name="settings_notifications_title">Notifications</string>
-    <string name="settings_notifications_desc">Manage the Quick Add notification.</string>
-    <string name="settings_help_notifications">Turn on a persistent Quick Add notification for one-tap point capture. On Android 13 and newer, the app asks for notification permission only the first time you enable it.</string>
+    <string name="settings_notifications_desc">Optional persistent Quick Add notification.</string>
+    <string name="settings_help_notifications">Quick Add is an optional persistent notification for one-tap point saves. On Android 13+, enabling it needs notification permission. Quick Add still needs location permission to actually record a point.</string>
     <string name="settings_quick_add_notification_label">Quick Add notification</string>
-    <string name="settings_quick_add_notification_desc">Shows a persistent notification you can tap to quickly add a point.</string>
+    <string name="settings_quick_add_notification_desc">Shows an optional persistent notification for quickly adding a point when notifications and location are available.</string>
     <string name="settings_quick_add_notification_permission_hint">If you denied notification permission, turn it back on in system settings before enabling Quick Add here.</string>
     <string name="settings_sensors_title">Sensors</string>
-    <string name="settings_sensors_desc">Configure each sensor capture switch.</string>
-    <string name="settings_help_sensors">Turn each sensor on or off independently for new points. Noise capture requires microphone permission.</string>
+    <string name="settings_sensors_desc">Configure sensor capture for new points.</string>
+    <string name="settings_help_sensors">Turn each sensor on or off independently for new points. Noise capture needs microphone permission and stores approximate dBFS from a short sample, not a calibrated SPL reading.</string>
     <string name="settings_sensor_pressure">Barometer</string>
     <string name="settings_sensor_ambient_light">Ambient light</string>
     <string name="settings_sensor_accelerometer">Accelerometer</string>
@@ -127,14 +127,14 @@
     <string name="settings_noise_collect_label">Collect 3-second noise</string>
     <string name="settings_noise_collect_desc">Requires microphone permission. Captured asynchronously after point save as approximate dBFS, not calibrated SPL.</string>
     <string name="settings_map_operations_title">Map operations</string>
-    <string name="settings_map_operations_desc">Adjust the timeout, zoom controls, and marker size.</string>
-    <string name="settings_help_map_operations">Set how long a queued point waits before auto-saved, when the zoom controls appear, and how large markers should be. Tap Done when you understand the behavior.</string>
+    <string name="settings_map_operations_desc">Location-related add timeout, zoom controls, and marker size.</string>
+    <string name="settings_help_map_operations">Add, Quick Add, and map centering all depend on location permission. If a fresh precise fix is not available, the app may offer an approximate or last-known location instead of always failing. This page controls add timeout, zoom buttons, and marker size.</string>
     <string name="settings_photo_compression_title">Photo compression</string>
     <string name="settings_photo_compression_desc">Configure default photo compression behavior.</string>
     <string name="settings_help_photo_compression">Choose whether photos keep original quality or are compressed by default. In compressed mode, pick a format and compression quality.</string>
     <string name="settings_cache_title">Map cache</string>
     <string name="settings_cache_desc">Choose a tile source and cache policy for the map.</string>
-    <string name="settings_help_cache">Select the upstream tile source and how aggressively the app keeps tiles. Clearing the cache removes tiles not part of downloaded areas.</string>
+    <string name="settings_help_cache">Select the live tile source and how aggressively the app keeps tiles. Clearing the cache removes tiles not part of downloaded areas. EOX Sentinel-2 Cloudless is for non-commercial use only.</string>
     <string name="settings_cache_source_label">Cache tile source</string>
     <string name="settings_cache_source_notice">EOX Sentinel-2 Cloudless is for non-commercial use only (BY-NC-SA).</string>
     <string name="settings_cache_policy_label">Street map cache policy</string>
@@ -147,8 +147,8 @@
     <string name="settings_network_status_cellular">Mobile data</string>
     <string name="settings_network_status_offline">Offline</string>
     <string name="settings_download_title">Downloads</string>
-    <string name="settings_download_desc">Pick a download source and manage saved areas.</string>
-    <string name="settings_help_download">Select a tile server for bulk downloads, launch the map downloader, and prune or deduplicate saved areas from this screen.</string>
+    <string name="settings_download_desc">Pick a download source and manage saved offline areas.</string>
+    <string name="settings_help_download">Use this page to choose the bulk download source, open the area downloader, and manage saved areas. Large areas or high zoom ranges can grow quickly and take a lot of storage and time. Downloaded tiles help offline use. EOX Sentinel-2 Cloudless is for non-commercial use only.</string>
     <string name="settings_download_source_label">Download source</string>
     <string name="settings_download_multi_thread_label">Enable multi-threaded download</string>
     <string name="settings_download_thread_count_label">Download threads: %1$d</string>
@@ -161,13 +161,19 @@
     <string name="tile_source_attribution_eox_sentinel2_cloudless">Sentinel-2 cloudless 2024 by EOX (modified Copernicus Sentinel data), CC BY-NC-SA 4.0.</string>
     <string name="action_cycle_map_layer">Layer</string>
     <string name="settings_project_label">Project</string>
-    <string name="settings_project_url">github.com/muchenjiang/map_timeline_tool</string>
+    <string name="settings_project_url">https://github.com/muchenjiang/map_timeline_tool</string>
     <string name="settings_open_source_title">Open-source projects</string>
     <string name="about_project_label">Project</string>
     <string name="about_open_source_title">Open-source projects</string>
     <string name="about_ai_title">AI support</string>
     <string name="about_ai_text">This project was developed with help from AI tools.</string>
     <string name="about_version">Version: %1$s</string>
+    <string name="about_summary">Offline-first point logging for travel notes, field visits, and personal map timelines. Your local data stays on device unless you export or share it.</string>
+    <string name="about_backup_tip">Before moving to a new device, create a full ZIP backup from Settings → Backup and Restore.</string>
+    <string name="about_open_repository">Open project repository</string>
+    <string name="about_open_play">Open Google Play page</string>
+    <string name="about_repo_url">https://github.com/muchenjiang/map_timeline_tool</string>
+    <string name="about_play_url">https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool</string>
     <string name="about_project_license_title">App license</string>
     <string name="about_project_license_summary">Map Timeline Tool is published as open source under the Apache-2.0 license.</string>
     <string name="about_project_apache_title">Apache-2.0 (original text)</string>
@@ -195,12 +201,21 @@
     <string name="settings_default_tags_title">Default Tags</string>
     <string name="settings_default_tags_desc">Tags automatically added to new points</string>
     <string name="settings_backup_restore_title">Backup and Restore</string>
-    <string name="settings_backup_restore_desc">Import or export data, and share full backup ZIP</string>
-    <string name="settings_help_backup_restore">Use this page to import/export CSV, GeoJSON, KML, KMZ, or ZIP. You can also package a full ZIP backup locally and open the system share sheet to send it to other apps or cloud drives.</string>
+    <string name="settings_backup_restore_desc">Import/export formats and recommended ZIP backup</string>
+    <string name="settings_help_backup_restore">Use ZIP before changing devices or making a full backup.
+
+• CSV: plain point table for spreadsheets and simple exchange.
+• GeoJSON / KML / KMZ: map and GIS export formats for other tools.
+• ZIP: recommended full backup / transfer package; can include points plus related tags, photos, sensor fields, and settings.
+• Import: CSV adds points only, while ZIP can restore a fuller backup.</string>
     <string name="settings_language_label">Language</string>
     <string name="settings_language_follow_system">System default</string>
     <string name="settings_language_english">English</string>
     <string name="settings_language_chinese">Chinese</string>
+    <string name="settings_language_english_native">English</string>
+    <string name="settings_language_chinese_simplified_native">简体中文</string>
+    <string name="settings_language_legacy_value">%1$s (legacy / incomplete)</string>
+    <string name="settings_language_legacy_hint">Current saved language: %1$s. It is kept for compatibility, but only English and Simplified Chinese are currently maintained in the language picker.</string>
     <string name="about_title">About</string>
     <string name="tags_title">Tags</string>
     <string name="dialog_title_edit_tag">Edit tag</string>
@@ -261,7 +276,7 @@
     <string name="map_download_cancel_keep">Stop &amp; Save</string>
     <string name="map_download_cancel_resume">Continue Downloading</string>
     <string name="map_download_help_title">How to download</string>
-    <string name="map_download_help_body">1) Pan/zoom the map to the area you want.\n2) Tap “Use current view” to lock the area.\n3) Set min/max zoom levels.\n4) Tap Download to start.\nDownloaded tiles are used on the map page and new tiles won’t be fetched.</string>
+    <string name="map_download_help_body">1) Pan/zoom the map to the area you want.\n2) Tap “Use current view” to lock the area.\n3) Set min/max zoom levels.\n4) Tap Download to start.\nDownloaded tiles are reused on the map page.\nLarge areas or high zoom levels can become very large and take significant time and storage, so start small.\nEOX Sentinel-2 Cloudless is for non-commercial use only.</string>
     <string name="export_option_points_and_tags">Save points and tags</string>
     <string name="export_option_points_only">Save points only</string>
     <string name="action_next">Next</string>

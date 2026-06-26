@@ -71,6 +71,37 @@ import com.lavacrafter.maptimelinetool.NetworkStatus
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import kotlin.math.roundToInt
 
+private val supportedLanguageOptions = listOf(
+    LanguagePreference.FOLLOW_SYSTEM to R.string.settings_language_follow_system,
+    LanguagePreference.ENGLISH to R.string.settings_language_english_native,
+    LanguagePreference.CHINESE_SIMPLIFIED to R.string.settings_language_chinese_simplified_native
+)
+
+private fun LanguagePreference.isSupportedLanguageOption(): Boolean = supportedLanguageOptions.any { it.first == this }
+
+@Composable
+private fun languageDisplayName(preference: LanguagePreference): String {
+    val baseName = when (preference) {
+        LanguagePreference.FOLLOW_SYSTEM -> stringResource(R.string.settings_language_follow_system)
+        LanguagePreference.ENGLISH -> stringResource(R.string.settings_language_english_native)
+        LanguagePreference.CHINESE_SIMPLIFIED -> stringResource(R.string.settings_language_chinese_simplified_native)
+        LanguagePreference.CHINESE_TRADITIONAL -> "繁体中文"
+        LanguagePreference.JAPANESE -> "日本語"
+        LanguagePreference.KOREAN -> "한국어"
+        LanguagePreference.SPANISH -> "Español"
+        LanguagePreference.FRENCH -> "Français"
+        LanguagePreference.PORTUGUESE -> "Português"
+        LanguagePreference.ARABIC -> "العربية"
+        LanguagePreference.RUSSIAN -> "Русский"
+        LanguagePreference.HEBREW -> "עברית"
+    }
+    return if (preference.isSupportedLanguageOption()) {
+        baseName
+    } else {
+        stringResource(R.string.settings_language_legacy_value, baseName)
+    }
+}
+
 @Composable
 fun SettingsScreen(
     isDarkTheme: Boolean,
@@ -283,20 +314,7 @@ private fun SettingsOverviewScreen(
 
             SettingsOverviewItem(
                 title = stringResource(R.string.settings_language_title),
-                description = when (languagePreference) {
-                    LanguagePreference.FOLLOW_SYSTEM -> stringResource(R.string.language_follow_system)
-                    LanguagePreference.ARABIC -> "العربية"
-                    LanguagePreference.ENGLISH -> "English"
-                    LanguagePreference.FRENCH -> "Français"
-                    LanguagePreference.HEBREW -> "עברית"
-                    LanguagePreference.JAPANESE -> "日本語"
-                    LanguagePreference.KOREAN -> "한국어"
-                    LanguagePreference.PORTUGUESE -> "Português"
-                    LanguagePreference.RUSSIAN -> "Русский"
-                    LanguagePreference.CHINESE_SIMPLIFIED -> "简体中文"
-                    LanguagePreference.SPANISH -> "Español"
-                    LanguagePreference.CHINESE_TRADITIONAL -> "繁体中文"
-                },
+                description = languageDisplayName(languagePreference),
                 onClick = { onNavigateTo(SettingsRoute.Language) }
             )
             SettingsOverviewItem(
@@ -974,22 +992,20 @@ fun LanguageSettings(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-            val languages = listOf(
-                LanguagePreference.FOLLOW_SYSTEM to R.string.language_follow_system,
-                LanguagePreference.ARABIC to "العربية",
-                LanguagePreference.CHINESE_SIMPLIFIED to "简体中文",
-                LanguagePreference.CHINESE_TRADITIONAL to "繁体中文",
-                LanguagePreference.ENGLISH to "English",
-                LanguagePreference.FRENCH to "Français",
-                LanguagePreference.HEBREW to "עברית",
-                LanguagePreference.JAPANESE to "日本語",
-                LanguagePreference.KOREAN to "한국어",
-                LanguagePreference.PORTUGUESE to "Português",
-                LanguagePreference.RUSSIAN to "Русский",
-                LanguagePreference.SPANISH to "Español"
-            )
+            val languages = supportedLanguageOptions
 
-            languages.forEach { (pref, label) ->
+            if (!languagePreference.isSupportedLanguageOption()) {
+                Text(
+                    text = stringResource(
+                        R.string.settings_language_legacy_hint,
+                        languageDisplayName(languagePreference)
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                )
+            }
+
+            languages.forEach { (pref, labelRes) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1002,11 +1018,7 @@ fun LanguageSettings(
                         onClick = { onLanguagePreferenceChange(pref) }
                     )
                     Spacer(modifier = Modifier.width(16.dp))
-                    if (label is Int) {
-                        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
-                    } else if (label is String) {
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
-                    }
+                    Text(stringResource(labelRes), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }

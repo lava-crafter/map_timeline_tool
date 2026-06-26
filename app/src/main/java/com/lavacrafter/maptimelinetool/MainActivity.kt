@@ -17,15 +17,14 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.Manifest
-import android.content.Intent
 import android.content.Context
-import android.graphics.BitmapFactory
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.content.pm.PackageManager
+import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.Build
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
@@ -36,18 +35,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.NavigationBar
@@ -56,25 +49,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
-import androidx.exifinterface.media.ExifInterface
 import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
@@ -100,7 +90,6 @@ import com.lavacrafter.maptimelinetool.ui.AppViewModel
 import com.lavacrafter.maptimelinetool.ui.EditPointDialog
 import com.lavacrafter.maptimelinetool.ui.EditTagDialog
 import com.lavacrafter.maptimelinetool.ui.ListScreen
-import com.lavacrafter.maptimelinetool.ui.MapScreen
 import com.lavacrafter.maptimelinetool.ui.MapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.TagDetailScreen
 import com.lavacrafter.maptimelinetool.ui.TagListScreen
@@ -130,32 +119,6 @@ import java.util.Locale
 import java.util.UUID
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.modules.SqlTileWriter
-
-private suspend fun buildPointTagNameMap(
-    viewModel: AppViewModel,
-    points: List<com.lavacrafter.maptimelinetool.domain.model.Point>
-): Map<Long, List<String>> {
-    val tags = viewModel.tags.first()
-    val tagNamesById = tags.associate { it.id to it.name }
-    val result = mutableMapOf<Long, List<String>>()
-    points.forEach { point ->
-        val tagNames = viewModel.getTagIdsForPoint(point.id)
-            .mapNotNull { tagId -> tagNamesById[tagId] }
-            .filter { it.isNotBlank() }
-        if (tagNames.isNotEmpty()) {
-            result[point.id] = tagNames
-        }
-    }
-    return result
-}
-
-private enum class ExportFileKind {
-    CSV,
-    GEOJSON,
-    KML,
-    ZIP,
-    KMZ
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
@@ -232,22 +195,6 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val scope = rememberCoroutineScope()
-                data class PendingExportPayload(
-                    val points: List<com.lavacrafter.maptimelinetool.domain.model.Point>,
-                    val kind: ExportFileKind,
-                    val zip: Boolean,
-                    val zipOptions: ZipExporter.ExportOptions = ZipExporter.ExportOptions(),
-                    val zipTags: List<ZipExporter.TagRecord> = emptyList(),
-                    val pointTagIdsByPointId: Map<Long, List<Long>> = emptyMap()
-                )
-                data class PendingManualSaveConfirmation(
-                    val title: String,
-                    val note: String,
-                    val createdAt: Long,
-                    val selectedTags: Set<Long>,
-                    val photoPath: String?,
-                    val decision: LocationSaveDecision
-                )
                 var pendingManualSaveConfirmation by remember { mutableStateOf<PendingManualSaveConfirmation?>(null) }
                 var pendingExportPayload by remember { mutableStateOf<PendingExportPayload?>(null) }
                 var pendingExportSelection by remember { mutableStateOf<ExportSelection?>(null) }
@@ -780,18 +727,13 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     val pointsToExportDomain = pointsToExport.map { it.toDomain() }
-                    val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                     val pending = pendingExportPayload
                     if (pending != null) {
                         pendingExportSelection = null
                         return@LaunchedEffect
                     }
-                    val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                    val payload = PendingExportPayload(
-                        points = pointsToExportDomain,
-                        kind = ExportFileKind.CSV,
-                        zip = false
-                    )
+                    val baseName = buildExportBaseName()
+                    val payload = buildStandardExportPayload(pointsToExportDomain, ExportFileKind.CSV)
                     pendingExportPayload = payload
                     exportCsvLauncher.launch("$baseName.csv")
                     pendingExportSelection = null
@@ -815,13 +757,8 @@ class MainActivity : AppCompatActivity() {
                         val allPointsDomain = pointsState.map { it.toDomain() }
                         val pending = pendingExportPayload
                         if (pending != null) return@launch
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                        pendingExportPayload = PendingExportPayload(
-                            points = allPointsDomain,
-                            kind = ExportFileKind.GEOJSON,
-                            zip = false
-                        )
+                        val baseName = buildExportBaseName()
+                        pendingExportPayload = buildStandardExportPayload(allPointsDomain, ExportFileKind.GEOJSON)
                         exportGeoJsonLauncher.launch("$baseName.geojson")
                     }
                 }
@@ -830,13 +767,8 @@ class MainActivity : AppCompatActivity() {
                         val allPointsDomain = pointsState.map { it.toDomain() }
                         val pending = pendingExportPayload
                         if (pending != null) return@launch
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                        pendingExportPayload = PendingExportPayload(
-                            points = allPointsDomain,
-                            kind = ExportFileKind.KML,
-                            zip = false
-                        )
+                        val baseName = buildExportBaseName()
+                        pendingExportPayload = buildStandardExportPayload(allPointsDomain, ExportFileKind.KML)
                         exportKmlLauncher.launch("$baseName.kml")
                     }
                 }
@@ -845,13 +777,8 @@ class MainActivity : AppCompatActivity() {
                         val allPointsDomain = pointsState.map { it.toDomain() }
                         val pending = pendingExportPayload
                         if (pending != null) return@launch
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                        pendingExportPayload = PendingExportPayload(
-                            points = allPointsDomain,
-                            kind = ExportFileKind.KMZ,
-                            zip = false
-                        )
+                        val baseName = buildExportBaseName()
+                        pendingExportPayload = buildStandardExportPayload(allPointsDomain, ExportFileKind.KMZ)
                         exportKmzLauncher.launch("$baseName.kmz")
                     }
                 }
@@ -1210,110 +1137,52 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                         if (showZipExportOptions) {
-                            AlertDialog(
-                                onDismissRequest = { showZipExportOptions = false },
-                                title = { Text(stringResource(R.string.export_zip_options_title)) },
-                                text = {
-                                    Column {
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludePoints,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludePoints = checked
-                                                    if (!checked) {
-                                                        zipIncludeTags = false
-                                                        zipIncludeSensors = false
-                                                    }
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_points))
-                                        }
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludeTags,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludeTags = checked
-                                                    if (checked) zipIncludePoints = true
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_tags))
-                                        }
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludeSensors,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludeSensors = checked
-                                                    if (checked) zipIncludePoints = true
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_sensors))
-                                        }
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludePhotos,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludePhotos = checked
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_photos))
-                                        }
+                            ZipExportOptionsDialog(
+                                includePoints = zipIncludePoints,
+                                includeTags = zipIncludeTags,
+                                includeSensors = zipIncludeSensors,
+                                includePhotos = zipIncludePhotos,
+                                onIncludePointsChange = { checked ->
+                                    zipIncludePoints = checked
+                                    if (!checked) {
+                                        zipIncludeTags = false
+                                        zipIncludeSensors = false
                                     }
                                 },
-                                confirmButton = {
-                                    val canExport = zipIncludePoints || zipIncludePhotos
-                                    TextButton(
-                                        onClick = {
-                                            if (!canExport) return@TextButton
-                                            scope.launch {
-                                                val allPointsDomain = pointsState.map { it.toDomain() }
-                                                val includePoints = zipIncludePoints
-                                                val includePhotos = zipIncludePhotos
-                                                val includeTags = includePoints && zipIncludeTags
-                                                val includeSensors = includePoints && zipIncludeSensors
-                                                val pointTagMap = mutableMapOf<Long, List<Long>>()
-                                                val zipTags = mutableListOf<ZipExporter.TagRecord>()
-                                                if (includeTags) {
-                                                    allPointsDomain.forEach { point ->
-                                                        val tagIds = viewModel.getTagIdsForPoint(point.id)
-                                                        if (tagIds.isNotEmpty()) {
-                                                            pointTagMap[point.id] = tagIds
-                                                        }
-                                                    }
-                                                    val usedTagIds = pointTagMap.values.flatten().toSet()
-                                                    tagsState
-                                                        .filter { usedTagIds.contains(it.id) }
-                                                        .forEach { zipTags.add(ZipExporter.TagRecord(it.id, it.name)) }
-                                                }
-                                                val payload = PendingExportPayload(
-                                                    points = allPointsDomain,
-                                                    kind = ExportFileKind.ZIP,
-                                                    zip = true,
-                                                    zipOptions = ZipExporter.ExportOptions(
-                                                        includePoints = includePoints,
-                                                        includeTags = includeTags,
-                                                        includeSensors = includeSensors,
-                                                        includePhotos = includePhotos
-                                                    ),
-                                                    zipTags = zipTags,
-                                                    pointTagIdsByPointId = pointTagMap
-                                                )
-                                                val pending = pendingExportPayload
-                                                if (pending != null) return@launch
-                                                val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                                                val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                                                pendingExportPayload = payload
-                                                exportZipLauncher.launch("$baseName.zip")
-                                                showZipExportOptions = false
-                                            }
-                                        },
-                                        enabled = canExport
-                                    ) { Text(stringResource(R.string.action_export_zip)) }
+                                onIncludeTagsChange = { checked ->
+                                    zipIncludeTags = checked
+                                    if (checked) zipIncludePoints = true
                                 },
-                                dismissButton = {
-                                    TextButton(onClick = { showZipExportOptions = false }) {
-                                        Text(stringResource(R.string.action_cancel))
+                                onIncludeSensorsChange = { checked ->
+                                    zipIncludeSensors = checked
+                                    if (checked) zipIncludePoints = true
+                                },
+                                onIncludePhotosChange = { checked ->
+                                    zipIncludePhotos = checked
+                                },
+                                onConfirm = {
+                                    scope.launch {
+                                        val pending = pendingExportPayload
+                                        if (pending != null) return@launch
+                                        val allPointsDomain = pointsState.map { it.toDomain() }
+                                        val includePoints = zipIncludePoints
+                                        val includePhotos = zipIncludePhotos
+                                        val includeTags = includePoints && zipIncludeTags
+                                        val includeSensors = includePoints && zipIncludeSensors
+                                        pendingExportPayload = buildZipExportPayload(
+                                            points = allPointsDomain,
+                                            includePoints = includePoints,
+                                            includeTags = includeTags,
+                                            includeSensors = includeSensors,
+                                            includePhotos = includePhotos,
+                                            viewModel = viewModel,
+                                            tags = tagsState
+                                        )
+                                        exportZipLauncher.launch("${buildExportBaseName()}.zip")
+                                        showZipExportOptions = false
                                     }
-                                }
+                                },
+                                onDismiss = { showZipExportOptions = false }
                             )
                         }
                     }
@@ -1622,55 +1491,6 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MapWithListSheet(
-    points: List<com.lavacrafter.maptimelinetool.data.PointEntity>,
-    selectedPointId: Long?,
-    onSelectPoint: (com.lavacrafter.maptimelinetool.data.PointEntity) -> Unit,
-    onLongPressPoint: (com.lavacrafter.maptimelinetool.data.PointEntity) -> Unit,
-    onEditPointFromMap: (com.lavacrafter.maptimelinetool.data.PointEntity) -> Unit,
-    isActive: Boolean,
-    zoomBehavior: ZoomButtonBehavior,
-    markerScale: Float,
-    downloadedOnly: Boolean,
-    mapTileSourceId: String,
-    onMapTileSourceChange: (String) -> Unit,
-    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit,
-    scaffoldState: BottomSheetScaffoldState
-) {
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = 72.dp,
-        sheetContent = {
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(text = stringResource(R.string.tab_list))
-                Spacer(modifier = Modifier.height(8.dp))
-                ListScreen(
-                    points = points,
-                    onSelect = onSelectPoint,
-                    onLongPress = onLongPressPoint
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
-            MapScreen(
-                points = points,
-                selectedPointId = selectedPointId,
-                onEditPoint = onEditPointFromMap,
-                isActive = isActive,
-                zoomBehavior = zoomBehavior,
-                markerScale = markerScale,
-                downloadedOnly = downloadedOnly,
-                mapTileSourceId = mapTileSourceId,
-                onMapTileSourceChange = onMapTileSourceChange,
-                onResolveCenterLocation = onResolveCenterLocation
-            )
-        }
-    }
-}
-
 private fun vibrateOnce(context: Context) {
     val vibrator = context.getSystemService(Vibrator::class.java) ?: return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1678,105 +1498,5 @@ private fun vibrateOnce(context: Context) {
     } else {
         @Suppress("DEPRECATION")
         vibrator.vibrate(50)
-    }
-}
-
-@Composable
-private fun PhotoPreviewDialog(
-    photoPath: String,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val photoFile = remember(photoPath) { resolvePointPhotoFile(context, photoPath) }
-    val bitmap = remember(photoFile?.absolutePath) {
-        photoFile?.takeIf { it.exists() && it.isFile && it.canRead() }?.let { file ->
-            decodePreviewBitmap(file)
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
-        },
-        title = { Text(stringResource(R.string.action_view_photo)) },
-        text = {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = stringResource(R.string.action_view_photo),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Text(stringResource(R.string.label_photo_not_added))
-            }
-        }
-    )
-}
-
-private fun decodePreviewBitmap(file: java.io.File): android.graphics.Bitmap? {
-    val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return null
-    val orientation = runCatching {
-        ExifInterface(file.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-    return applyExifOrientation(decoded, orientation)
-}
-
-enum class NetworkStatus { WIFI, CELLULAR, NONE }
-
-@Composable
-fun observeNetworkStatus(context: Context): androidx.compose.runtime.State<NetworkStatus> {
-    val state = remember { mutableStateOf(getNetworkStatus(context)) }
-    DisposableEffect(context) {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) {
-                state.value = getNetworkStatus(context)
-            }
-
-            override fun onLost(network: android.net.Network) {
-                state.value = getNetworkStatus(context)
-            }
-
-            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) {
-                state.value = when {
-                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> NetworkStatus.WIFI
-                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkStatus.CELLULAR
-                      networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> resolveVpnNetworkStatus(connectivityManager)
-                      else -> NetworkStatus.NONE
-                  }
-              }
-          }
-          connectivityManager.registerDefaultNetworkCallback(callback)
-          onDispose {
-              runCatching { connectivityManager.unregisterNetworkCallback(callback) }
-          }
-      }
-      return state
-}
-
-@Suppress("DEPRECATION")
-private fun resolveVpnNetworkStatus(cm: android.net.ConnectivityManager): NetworkStatus {
-    val underlying = cm.allNetworks.find {
-        val c = cm.getNetworkCapabilities(it)
-        c != null && !c.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) && c.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
-    if (underlying != null) {
-        val c = cm.getNetworkCapabilities(underlying)
-        if (c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true) return NetworkStatus.WIFI
-        if (c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) == true) return NetworkStatus.CELLULAR
-    }
-    return NetworkStatus.CELLULAR
-}
-
-private fun getNetworkStatus(context: Context): NetworkStatus {
-    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-    val network = connectivityManager.activeNetwork ?: return NetworkStatus.NONE
-    val caps = connectivityManager.getNetworkCapabilities(network) ?: return NetworkStatus.NONE
-    return when {
-        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> NetworkStatus.WIFI
-        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkStatus.CELLULAR
-        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> resolveVpnNetworkStatus(connectivityManager)
-        else -> NetworkStatus.NONE
     }
 }
