@@ -44,6 +44,8 @@ object SettingsStore {
     private const val KEY_GYROSCOPE_ENABLED = "gyroscope_enabled"
     private const val KEY_MAGNETOMETER_ENABLED = "magnetometer_enabled"
     private const val KEY_NOISE_ENABLED = "noise_enabled"
+    private const val KEY_QUICK_ADD_NOTIFICATION_ENABLED = "quick_add_notification_enabled"
+    private const val KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED = "quick_add_notification_permission_requested"
     private const val SETTINGS_SCHEMA_VERSION = 1
     private const val MAX_RECENT_TAGS = 3
 
@@ -323,6 +325,30 @@ object SettingsStore {
             .apply()
     }
 
+    fun getQuickAddNotificationEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, false)
+    }
+
+    fun setQuickAddNotificationEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getQuickAddNotificationPermissionRequested(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, false)
+    }
+
+    fun setQuickAddNotificationPermissionRequested(context: Context, requested: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, requested)
+            .apply()
+    }
+
     fun getDownloadedAreas(context: Context): List<DownloadedArea> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_DOWNLOADED_AREAS, null)
@@ -393,6 +419,11 @@ object SettingsStore {
         root.put(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context))
         root.put(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context))
         root.put(KEY_NOISE_ENABLED, getNoiseEnabled(context))
+        root.put(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
+        root.put(
+            KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED,
+            getQuickAddNotificationPermissionRequested(context)
+        )
         val downloadedAreas = org.json.JSONArray()
         getDownloadedAreas(context).forEach { area ->
             val areaObj = org.json.JSONObject()
@@ -452,6 +483,21 @@ object SettingsStore {
             if (root.has(KEY_GYROSCOPE_ENABLED)) setGyroscopeEnabled(context, root.optBoolean(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context)))
             if (root.has(KEY_MAGNETOMETER_ENABLED)) setMagnetometerEnabled(context, root.optBoolean(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context)))
             if (root.has(KEY_NOISE_ENABLED)) setNoiseEnabled(context, root.optBoolean(KEY_NOISE_ENABLED, getNoiseEnabled(context)))
+            if (root.has(KEY_QUICK_ADD_NOTIFICATION_ENABLED)) {
+                setQuickAddNotificationEnabled(
+                    context,
+                    root.optBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
+                )
+            }
+            if (root.has(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED)) {
+                setQuickAddNotificationPermissionRequested(
+                    context,
+                    root.optBoolean(
+                        KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED,
+                        getQuickAddNotificationPermissionRequested(context)
+                    )
+                )
+            }
             if (root.has(KEY_DOWNLOADED_AREAS)) {
                 val areasArray = root.optJSONArray(KEY_DOWNLOADED_AREAS) ?: org.json.JSONArray()
                 val areas = buildList {

@@ -23,12 +23,14 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [PointEntity::class, TagEntity::class, PointTagCrossRef::class], version = 7, exportSchema = false)
+@Database(entities = [PointEntity::class, TagEntity::class, PointTagCrossRef::class], version = 7, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pointDao(): PointDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
+
+        const val DATABASE_NAME = "map_timeline.db"
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -66,14 +68,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        @JvmField
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "map_timeline.db"
+                    DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(*ALL_MIGRATIONS)
                     .build()
                     .also { instance = it }
             }

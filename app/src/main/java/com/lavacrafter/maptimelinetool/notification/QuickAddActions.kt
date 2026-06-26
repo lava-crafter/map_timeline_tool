@@ -33,8 +33,11 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.lavacrafter.maptimelinetool.MainActivity
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.appGraph
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,21 +59,34 @@ internal fun Context.showQuickAddNotification() {
     NotificationManagerCompat.from(this).notify(QUICK_ADD_NOTIFICATION_ID, notification)
 }
 
+internal fun Context.cancelQuickAddNotification() {
+    NotificationManagerCompat.from(this).cancel(QUICK_ADD_NOTIFICATION_ID)
+}
+
+internal fun Context.syncQuickAddNotification(enabled: Boolean) {
+    if (enabled && areNotificationsEnabledCompat()) {
+        showQuickAddNotification()
+    } else {
+        cancelQuickAddNotification()
+    }
+}
+
 internal suspend fun Context.performQuickAdd() {
     if (!hasLocationPermission()) {
-        showToast(getString(R.string.toast_location_failed))
+        showToast(getString(R.string.toast_permission_denied))
         return
     }
 
     val graph = appGraph()
-    val location = try {
-        graph.locationProvider.getPreciseLocation(QUICK_ADD_LOCATION_TIMEOUT_MS)
+    val decision = try {
+        graph.locationSaveResolver.resolve(LocationSaveFlow.QUICK_ADD, QUICK_ADD_LOCATION_TIMEOUT_MS)
     } catch (_: Exception) {
         null
     }
+    val location = decision?.location
 
-    if (location == null) {
-        showToast(getString(R.string.toast_precise_location_failed))
+    if (decision == null || !decision.canSave || location == null) {
+        showToast(getString(R.string.toast_location_unavailable_save_failed))
         return
     }
 
@@ -89,15 +105,16 @@ internal suspend fun Context.performQuickAdd() {
             timestamp = timestamp,
             tagIds = graph.settingsManagementUseCase.getDefaultTagIds().toSet()
         )
-        showToast(getString(R.string.toast_point_added))
+        val message = getString(messageResForQuickAdd(decision.quality))
+        showToast(message)
         vibrateOnce()
-        showQuickAddResultNotification()
+        showQuickAddResultNotification(message)
     } catch (_: Exception) {
-        showToast(getString(R.string.toast_precise_location_failed))
+        showToast(getString(R.string.toast_location_unavailable_save_failed))
     }
 }
 
-private fun Context.showQuickAddResultNotification() {
+private fun Context.showQuickAddResultNotification(message: String) {
     if (!areNotificationsEnabledCompat()) {
         return
     }
@@ -112,7 +129,7 @@ private fun Context.showQuickAddResultNotification() {
     val notification = NotificationCompat.Builder(this, channelId)
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle(getString(R.string.notification_title))
-        .setContentText(getString(R.string.toast_point_added))
+        .setContentText(message)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setAutoCancel(true)
@@ -132,8 +149,10 @@ private fun Context.buildQuickAddNotification(): Notification {
         descriptionResId = R.string.notification_channel_desc
     )
 
-    val intent = Intent(this, QuickAddReceiver::class.java).setAction(ACTION_QUICK_ADD)
-    val pendingIntent = PendingIntent.getBroadcast(
+    val intent = Intent(this, MainActivity::class.java)
+        .setAction(ACTION_QUICK_ADD)
+        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    val pendingIntent = PendingIntent.getActivity(
         this,
         0,
         intent,
@@ -192,4 +211,14 @@ private fun Context.ensureNotificationChannel(channelId: String, nameResId: Int,
     }
     val manager = getSystemService(NotificationManager::class.java)
     manager.createNotificationChannel(channel)
+}
+
+private fun messageResForQuickAdd(quality: LocationSaveQuality): Int {
+    return when (quality) {
+        LocationSaveQuality.PRECISE_FRESH -> R.string.toast_point_added
+        LocationSaveQuality.FRESH_BUT_LOW_ACCURACY -> R.string.toast_point_added_approximate
+        LocationSaveQuality.LAST_KNOWN_RECENT -> R.string.toast_point_added_last_known
+        LocationSaveQuality.LAST_KNOWN_STALE -> R.string.toast_point_added_stale
+        LocationSaveQuality.UNAVAILABLE -> R.string.toast_location_unavailable_save_failed
+    }
 }

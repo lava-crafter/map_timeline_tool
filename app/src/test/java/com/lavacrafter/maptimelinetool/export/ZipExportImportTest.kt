@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -387,5 +388,157 @@ class ZipExportImportTest {
         val imported = ZipImporter.importZip(ByteArrayInputStream(zipBytes.toByteArray())) { _, _ -> null }
         assertEquals(1, imported.points.size)
         assertEquals("""{"schema_version":1,"follow_system_theme":false}""", imported.settingsJson)
+    }
+
+    @Test
+    fun `zip export and import round trip keeps points tags photos and settings`() {
+        val tempDir = createTempDirectory("zip-round-trip-test").toFile()
+        val firstPhoto = File(tempDir, "first.jpg").apply { writeBytes(byteArrayOf(1, 2, 3, 4)) }
+        val secondPhoto = File(tempDir, "second.jpg").apply { writeBytes(byteArrayOf(5, 6, 7, 8)) }
+        val points = listOf(
+            Point(
+                id = 10L,
+                timestamp = 1710000000000L,
+                latitude = 10.0,
+                longitude = 20.0,
+                locationAccuracyMeters = 5.5f,
+                locationFixTimeMs = 1709999999000L,
+                locationProvider = "gps",
+                title = "Alpha",
+                note = "First point",
+                pressureHpa = 1000.5f,
+                ambientLightLux = 44.4f,
+                accelerometerX = 1.1f,
+                gyroscopeY = 2.2f,
+                magnetometerZ = 3.3f,
+                noiseDb = 40.4f,
+                photoPath = firstPhoto.absolutePath
+            ),
+            Point(
+                id = 20L,
+                timestamp = 1710000005000L,
+                latitude = 11.0,
+                longitude = 21.0,
+                title = "Beta",
+                note = "Second point",
+                photoPath = secondPhoto.absolutePath
+            )
+        )
+        val output = ByteArrayOutputStream()
+
+        ZipExporter.export(
+            points = points,
+            outputStream = output,
+            resolvePhotoFile = { path -> File(path) },
+            options = ZipExporter.ExportOptions(includePoints = true, includeTags = true, includeSensors = true, includePhotos = true),
+            tags = listOf(
+                ZipExporter.TagRecord(id = 100L, name = "Work"),
+                ZipExporter.TagRecord(id = 200L, name = "Travel")
+            ),
+            pointTagIdsByPointId = mapOf(10L to listOf(100L, 200L), 20L to listOf(200L)),
+            settingsJsonProvider = { """{"schema_version":1,"timeout_seconds":30}""" }
+        )
+
+        val imported = ZipImporter.importZip(ByteArrayInputStream(output.toByteArray())) { entryName, photoInput ->
+            val target = File(tempDir, entryName.substringAfterLast('/'))
+            target.writeBytes(photoInput.readBytes())
+            "stored/${target.name}"
+        }
+
+        assertEquals(2, imported.points.size)
+        assertEquals(2, imported.tags.size)
+        assertEquals(3, imported.pointTags.size)
+        assertEquals(2, imported.importedPhotoCount)
+        assertEquals(0, imported.missingPhotoCount)
+        assertEquals("""{"schema_version":1,"timeout_seconds":30}""", imported.settingsJson)
+        assertEquals("gps", imported.points.first().locationProvider)
+        assertEquals(40.4f, imported.points.first().noiseDb ?: 0f, 0.001f)
+        assertEquals("stored/first.jpg", imported.points.first().photoPath)
+        assertEquals("stored/second.jpg", imported.points[1].photoPath)
+    }
+
+    @Test
+    fun `zip photo paths stay safe across duplicates traversal backslashes and blanks`() {
+        val tempDir = createTempDirectory("zip-photo-safety-test").toFile()
+        val duplicateA = File(tempDir, "photo.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val duplicateDir = File(tempDir, "nested").apply { mkdirs() }
+        val duplicateB = File(duplicateDir, "photo.jpg").apply { writeBytes(byteArrayOf(4, 5, 6)) }
+        val weirdName = File(tempDir, "..\\unsafe name.jpg").apply { writeBytes(byteArrayOf(7, 8, 9)) }
+        val output = ByteArrayOutputStream()
+
+        ZipExporter.export(
+            points = listOf(
+                Point(timestamp = 1L, latitude = 1.0, longitude = 1.0, title = "A", note = "A", photoPath = duplicateA.absolutePath),
+                Point(timestamp = 2L, latitude = 2.0, longitude = 2.0, title = "B", note = "B", photoPath = duplicateB.absolutePath),
+                Point(timestamp = 3L, latitude = 3.0, longitude = 3.0, title = "C", note = "C", photoPath = weirdName.absolutePath),
+                Point(timestamp = 4L, latitude = 4.0, longitude = 4.0, title = "D", note = "D", photoPath = ""),
+                Point(timestamp = 5L, latitude = 5.0, longitude = 5.0, title = "E", note = "E", photoPath = File(tempDir, "missing.jpg").absolutePath)
+            ),
+            outputStream = output,
+            resolvePhotoFile = { path -> File(path) },
+            options = ZipExporter.ExportOptions(includePoints = true, includeTags = false, includeSensors = false, includePhotos = true)
+        )
+
+        val entryNames = mutableListOf<String>()
+        var csvContent = ""
+        java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                entryNames.add(entry.name)
+                if (entry.name == "points.csv") {
+                    csvContent = zip.readBytes().toString(Charsets.UTF_8)
+                }
+                zip.closeEntry()
+            }
+        }
+
+        assertTrue(entryNames.contains("photos/photo.jpg"))
+        assertTrue(entryNames.contains("photos/photo_1.jpg"))
+        assertTrue(entryNames.any { it.startsWith("photos/_") && it.endsWith("unsafe name.jpg") })
+        assertFalse(entryNames.any { it.contains("..") || it.contains('\\') })
+        assertTrue(csvContent.contains("photos/photo.jpg"))
+        assertTrue(csvContent.contains("photos/photo_1.jpg"))
+
+        val imported = ZipImporter.importZip(ByteArrayInputStream(output.toByteArray())) { entryName, photoInput ->
+            photoInput.readBytes()
+            "saved/$entryName"
+        }
+        assertEquals(5, imported.points.size)
+        assertEquals(0, imported.missingPhotoCount)
+        assertNull(imported.points[3].photoPath)
+        assertNull(imported.points[4].photoPath)
+    }
+
+    @Test
+    fun `zip import normalizes backslashes and rejects parent traversal photo entries`() {
+        val zipBytes = ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(zipBytes).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("points.csv"))
+            val csv = CsvExporter.buildCsv(
+                listOf(
+                    Point(timestamp = 1710000000000L, latitude = 1.0, longitude = 2.0, title = "P1", note = "N1"),
+                    Point(timestamp = 1710000001000L, latitude = 3.0, longitude = 4.0, title = "P2", note = "N2")
+                )
+            ) { point -> if (point.title == "P1") "photos\\safe.jpg" else "photos/../blocked.jpg" }
+            zip.write(csv.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("photos\\safe.jpg"))
+            zip.write(byteArrayOf(1, 2, 3))
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("photos/../blocked.jpg"))
+            zip.write(byteArrayOf(4, 5, 6))
+            zip.closeEntry()
+        }
+
+        val imported = ZipImporter.importZip(ByteArrayInputStream(zipBytes.toByteArray())) { entryName, photoInput ->
+            photoInput.readBytes()
+            "stored/$entryName"
+        }
+
+        assertEquals(2, imported.points.size)
+        assertEquals("stored/photos/safe.jpg", imported.points[0].photoPath)
+        assertNull(imported.points[1].photoPath)
+        assertEquals(1, imported.importedPhotoCount)
+        assertEquals(1, imported.missingPhotoCount)
     }
 }

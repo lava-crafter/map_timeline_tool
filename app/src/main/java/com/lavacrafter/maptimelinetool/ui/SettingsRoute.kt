@@ -20,6 +20,7 @@ sealed interface SettingsRoute {
     object Main : SettingsRoute
     object BackupRestore : SettingsRoute
     object Language : SettingsRoute
+    object Notification : SettingsRoute
     object Sensors : SettingsRoute
     object MapOperations : SettingsRoute
     object PhotoCompression : SettingsRoute

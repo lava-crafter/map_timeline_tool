@@ -26,6 +26,7 @@ import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveResolver
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
@@ -66,7 +67,15 @@ class AppGraph(
     }
 
     val locationProvider: LocationProvider by lazy {
-        AndroidLocationProvider(app)
+        val androidProvider = AndroidLocationProvider(app)
+        CompositeLocationProvider(
+            preferred = GoogleFusedLocationProvider(app),
+            fallback = androidProvider
+        )
+    }
+
+    val locationSaveResolver: LocationSaveResolver by lazy {
+        LocationSaveResolver(locationProvider)
     }
 
     val sensorSnapshotPort: SensorSnapshotPort by lazy {

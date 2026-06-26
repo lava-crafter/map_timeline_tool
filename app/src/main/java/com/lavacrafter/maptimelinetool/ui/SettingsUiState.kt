@@ -41,5 +41,7 @@ data class SettingsUiState(
     val gyroscopeEnabled: Boolean = true,
     val magnetometerEnabled: Boolean = true,
     val noiseEnabled: Boolean = false,
+    val quickAddNotificationEnabled: Boolean = false,
+    val quickAddNotificationPermissionRequested: Boolean = false,
     val mapTileSourceId: String = mapTileSources.first().id
 )

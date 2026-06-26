@@ -1,0 +1,201 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "db41be7a90435e23ba02ce6eaf629804",
+    "entities": [
+      {
+        "tableName": "points",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `locationAccuracyMeters` REAL, `locationFixTimeMs` INTEGER, `locationProvider` TEXT, `title` TEXT NOT NULL, `note` TEXT NOT NULL, `pressureHpa` REAL, `ambientLightLux` REAL, `accelerometerX` REAL, `accelerometerY` REAL, `accelerometerZ` REAL, `gyroscopeX` REAL, `gyroscopeY` REAL, `gyroscopeZ` REAL, `magnetometerX` REAL, `magnetometerY` REAL, `magnetometerZ` REAL, `noiseDb` REAL, `photoPath` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationAccuracyMeters",
+            "columnName": "locationAccuracyMeters",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "locationFixTimeMs",
+            "columnName": "locationFixTimeMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "locationProvider",
+            "columnName": "locationProvider",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pressureHpa",
+            "columnName": "pressureHpa",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "ambientLightLux",
+            "columnName": "ambientLightLux",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "accelerometerX",
+            "columnName": "accelerometerX",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "accelerometerY",
+            "columnName": "accelerometerY",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "accelerometerZ",
+            "columnName": "accelerometerZ",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gyroscopeX",
+            "columnName": "gyroscopeX",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gyroscopeY",
+            "columnName": "gyroscopeY",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gyroscopeZ",
+            "columnName": "gyroscopeZ",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "magnetometerX",
+            "columnName": "magnetometerX",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "magnetometerY",
+            "columnName": "magnetometerY",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "magnetometerZ",
+            "columnName": "magnetometerZ",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "noiseDb",
+            "columnName": "noiseDb",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "photoPath",
+            "columnName": "photoPath",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "point_tags",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pointId` INTEGER NOT NULL, `tagId` INTEGER NOT NULL, PRIMARY KEY(`pointId`, `tagId`))",
+        "fields": [
+          {
+            "fieldPath": "pointId",
+            "columnName": "pointId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tagId",
+            "columnName": "tagId",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "pointId",
+            "tagId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_point_tags_tagId",
+            "unique": false,
+            "columnNames": [
+              "tagId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_point_tags_tagId` ON `${TABLE_NAME}` (`tagId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'db41be7a90435e23ba02ce6eaf629804')"
+    ]
+  }
+}
