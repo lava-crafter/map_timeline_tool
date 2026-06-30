@@ -21,8 +21,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Bundle
 import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
@@ -108,6 +109,8 @@ import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
 import com.lavacrafter.maptimelinetool.notification.ACTION_QUICK_ADD
 import com.lavacrafter.maptimelinetool.notification.performQuickAdd
 import com.lavacrafter.maptimelinetool.notification.syncQuickAddNotification
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddEnableAction
+import com.lavacrafter.maptimelinetool.quickadd.resolveQuickAddEnableAction
 import com.lavacrafter.maptimelinetool.ui.theme.MapTimelineToolTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -417,11 +420,12 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                var onQuickAddEnableRequest: () -> Unit = {}
                 val notificationPermissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
                 ) { granted ->
                     if (granted) {
-                        settingsViewModel.setQuickAddNotificationEnabled(true)
+                        onQuickAddEnableRequest()
                     } else {
                         settingsViewModel.setQuickAddNotificationEnabled(false)
                         Toast.makeText(
@@ -499,6 +503,31 @@ class MainActivity : AppCompatActivity() {
                         ) == PackageManager.PERMISSION_GRANTED
                 }
 
+                fun hasPreciseLocationPermission(): Boolean {
+                    return ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                }
+
+                fun hasBackgroundLocationPermission(): Boolean {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                        return true
+                    }
+                    return ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                }
+
+                fun openAppSettings() {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                    )
+                }
+
                 fun requestLocationPermission() {
                     locationPermissionLauncher.launch(
                         arrayOf(
@@ -506,6 +535,62 @@ class MainActivity : AppCompatActivity() {
                             Manifest.permission.ACCESS_COARSE_LOCATION
                         )
                     )
+                }
+
+                onQuickAddEnableRequest = {
+                    when (
+                        resolveQuickAddEnableAction(
+                            sdkInt = Build.VERSION.SDK_INT,
+                            notificationsGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) == PackageManager.PERMISSION_GRANTED,
+                            preciseLocationGranted = hasPreciseLocationPermission(),
+                            coarseLocationGranted = hasLocationPermission(),
+                            backgroundLocationGranted = hasBackgroundLocationPermission()
+                        )
+                    ) {
+                        QuickAddEnableAction.ENABLE -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(true)
+                        }
+                        QuickAddEnableAction.REQUEST_NOTIFICATION_PERMISSION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            if (!settingsState.quickAddNotificationPermissionRequested) {
+                                settingsViewModel.setQuickAddNotificationPermissionRequested(true)
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.toast_quick_add_notification_permission_required),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                        QuickAddEnableAction.REQUEST_FOREGROUND_LOCATION_PERMISSION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            pendingLocationPermissionAction = { onQuickAddEnableRequest() }
+                            requestLocationPermission()
+                        }
+                        QuickAddEnableAction.OPEN_SETTINGS_FOR_PRECISE_LOCATION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.toast_quick_add_precise_permission_required),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            openAppSettings()
+                        }
+                        QuickAddEnableAction.OPEN_SETTINGS_FOR_BACKGROUND_LOCATION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.toast_quick_add_background_permission_required),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            openAppSettings()
+                        }
+                    }
                 }
 
                 fun resetPendingAddDialogState(clearPendingPhoto: Boolean = false) {
@@ -1006,25 +1091,8 @@ class MainActivity : AppCompatActivity() {
                                     onQuickAddNotificationEnabledChange = { enabled ->
                                         if (!enabled) {
                                             settingsViewModel.setQuickAddNotificationEnabled(false)
-                                        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                            settingsViewModel.setQuickAddNotificationEnabled(true)
-                                        } else if (
-                                            ContextCompat.checkSelfPermission(
-                                                context,
-                                                Manifest.permission.POST_NOTIFICATIONS
-                                            ) == PackageManager.PERMISSION_GRANTED
-                                        ) {
-                                            settingsViewModel.setQuickAddNotificationEnabled(true)
-                                        } else if (!settingsState.quickAddNotificationPermissionRequested) {
-                                            settingsViewModel.setQuickAddNotificationPermissionRequested(true)
-                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                         } else {
-                                            settingsViewModel.setQuickAddNotificationEnabled(false)
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.toast_quick_add_notification_permission_required),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            onQuickAddEnableRequest()
                                         }
                                     },
                                     timeoutSeconds = settingsState.timeoutSeconds,

@@ -46,6 +46,7 @@
     <string name="toast_quick_add_saved_from_fresh">快速打点已使用新的精确定位保存</string>
     <string name="toast_quick_add_failed_no_fresh_accurate_location">快速打点未能获取新的准确定位，未保存点位。</string>
     <string name="toast_quick_add_precise_permission_required">快速打点需要精确定位权限；只有近似定位时不会保存点位。</string>
+    <string name="toast_quick_add_background_permission_required">Android 10 及以上要让快速打点在后台持续预热严格缓存，还需要后台定位权限。请先到系统设置中开启“始终允许”，再启用快速打点。</string>
     <string name="toast_noise_permission_denied">麦克风权限被拒绝，噪音采集保持关闭。</string>
     <string name="toast_location_loading">定位加载中</string>
     <string name="label_utc_time">%1$s UTC</string>
@@ -278,8 +279,11 @@
     <string name="settings_help_backup_restore">更换设备或做完整备份前，优先使用 ZIP。\n\n• CSV：适合表格查看或简单交换的点位表。\n• GeoJSON / KML / KMZ：适合地图或 GIS 工具的导出格式。\n• ZIP：推荐的完整备份 / 迁移包；可包含点位以及相关标签、照片、传感器字段和设置。\n• 导入：CSV 只添加点位，ZIP 可以恢复更完整的备份内容。</string>
     <string name="settings_notifications_title">通知</string>
     <string name="settings_notifications_desc">可选的常驻“快速打点”通知。</string>
-    <string name="settings_help_notifications">“快速打点”是一个可选的常驻通知，用于一键记录点位。它只有在已有近期且准确的缓存定位，或能拿到一次新的精确定位时才会保存；否则会明确提示失败且不会创建点位。启用后，应用可能会在不持续追踪的前提下，顺带利用系统产生的定位更新来预热一个短时有效的快速打点缓存。Android 13 及以上在启用通知时还需要通知权限。</string>
-    <string name="settings_quick_add_notification_desc">显示可选的常驻通知；快速打点只会使用近期且准确的缓存定位，或一次新的精确定位。</string>
+    <string name="settings_help_notifications">“快速打点”是一个可选的常驻通知，用于一键记录点位。它只有在已有近期且准确的缓存定位，或能拿到一次新的精确定位时才会保存；否则会明确提示失败且不会创建点位。启用后，应用可能会在不持续追踪的前提下，顺带利用系统产生的定位更新来预热一个短时有效的快速打点缓存。Android 13 及以上在启用通知时还需要通知权限。若希望应用退到后台后仍能继续预热这个严格缓存，还需要精确定位权限，以及 Android 10 及以上的后台定位（“始终允许”）。</string>
+    <string name="settings_quick_add_notification_desc">显示可选的常驻通知；快速打点只会使用近期且准确的缓存定位，或一次新的精确定位。后台预热缓存还需要精确定位，以及 Android 10 及以上的后台定位。</string>
+    <string name="settings_quick_add_notification_permission_hint">如果你拒绝过通知权限，请先到系统设置里重新开启通知，再在这里启用快速打点。</string>
+    <string name="settings_quick_add_notification_precise_location_hint">只有允许精确定位时，快速打点才能维持当前严格语义。仅授予近似定位时，既无法预热也无法保存严格快速打点位置。</string>
+    <string name="settings_quick_add_notification_background_location_hint">Android 10 及以上若没有后台定位（“始终允许”），快速打点就无法在后台继续预热严格缓存，因此会保持关闭。</string>
     <string name="settings_language_english_native">English</string>
     <string name="settings_language_chinese_simplified_native">简体中文</string>
     <string name="settings_language_legacy_value">%1$s（旧设置 / 暂未完整支持）</string>

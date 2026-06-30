@@ -35,6 +35,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.appGraph
+import com.lavacrafter.maptimelinetool.quickadd.hasRequiredLocationPermissionsForQuickAdd
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResult
 
 internal const val ACTION_QUICK_ADD = "com.lavacrafter.maptimelinetool.notification.action.QUICK_ADD"
@@ -69,7 +70,13 @@ internal fun Context.syncQuickAddNotification(enabled: Boolean) {
 }
 
 internal fun Context.isQuickAddNotificationAvailable(enabled: Boolean): Boolean {
-    return enabled && areNotificationsEnabledCompat()
+    return enabled &&
+        areNotificationsEnabledCompat() &&
+        hasRequiredLocationPermissionsForQuickAdd(
+            sdkInt = Build.VERSION.SDK_INT,
+            hasPreciseLocationPermission = hasPreciseLocationPermission(),
+            hasBackgroundLocationPermission = hasBackgroundLocationPermissionForQuickAdd()
+        )
 }
 
 internal suspend fun Context.performQuickAdd() {
@@ -182,6 +189,13 @@ private fun Context.vibrateOnce() {
 
 private fun Context.hasPreciseLocationPermission(): Boolean {
     return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun Context.hasBackgroundLocationPermissionForQuickAdd(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        return true
+    }
+    return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun Context.areNotificationsEnabledCompat(): Boolean {

@@ -60,6 +60,7 @@
     <string name="toast_quick_add_saved_from_fresh">Quick Add saved using a fresh precise location</string>
     <string name="toast_quick_add_failed_no_fresh_accurate_location">Quick Add could not get a fresh accurate location. Point not saved.</string>
     <string name="toast_quick_add_precise_permission_required">Quick Add needs precise location permission. Approximate-only access will not save a point.</string>
+    <string name="toast_quick_add_background_permission_required">Quick Add background cache warming needs background location on Android 10+. Enable "Allow all the time" in system settings before turning Quick Add on.</string>
     <string name="toast_noise_permission_denied">Microphone permission denied. Noise capture remains off.</string>
     <string name="toast_quick_add_notification_permission_denied">Notification permission denied. Quick Add stays off.</string>
     <string name="toast_quick_add_notification_permission_required">Quick Add notifications are blocked. Enable notifications in system settings first.</string>
@@ -115,10 +116,12 @@
     <string name="language_follow_system">Follow System</string>
     <string name="settings_notifications_title">Notifications</string>
     <string name="settings_notifications_desc">Optional persistent Quick Add notification.</string>
-    <string name="settings_help_notifications">Quick Add is an optional persistent notification for one-tap point saves. It only saves when a recent accurate cache entry is available or a fresh precise fix can be obtained; otherwise it reports failure without creating a point. While enabled, the app may opportunistically warm a short-lived Quick Add cache from system location updates without continuous tracking. On Android 13+, enabling the notification needs notification permission.</string>
+    <string name="settings_help_notifications">Quick Add is an optional persistent notification for one-tap point saves. It only saves when a recent accurate cache entry is available or a fresh precise fix can be obtained; otherwise it reports failure without creating a point. While enabled, the app may opportunistically warm a short-lived Quick Add cache from system location updates without continuous tracking. On Android 13+, enabling the notification needs notification permission. To keep that strict cache warm after the app goes to background, Quick Add also needs precise location and, on Android 10+, background location ("Allow all the time").</string>
     <string name="settings_quick_add_notification_label">Quick Add notification</string>
-    <string name="settings_quick_add_notification_desc">Shows an optional persistent notification for strict Quick Add saves using a recent accurate cache or one fresh precise fix.</string>
+    <string name="settings_quick_add_notification_desc">Shows an optional persistent notification for strict Quick Add saves using a recent accurate cache or one fresh precise fix. Background cache warming also needs precise location and, on Android 10+, background location.</string>
     <string name="settings_quick_add_notification_permission_hint">If you denied notification permission, turn it back on in system settings before enabling Quick Add here.</string>
+    <string name="settings_quick_add_notification_precise_location_hint">Quick Add stays off unless precise location is allowed. Approximate-only access cannot warm or save strict Quick Add locations.</string>
+    <string name="settings_quick_add_notification_background_location_hint">On Android 10+, Quick Add background cache warming needs background location ("Allow all the time"). Without it, Quick Add stays off.</string>
     <string name="settings_sensors_title">Sensors</string>
     <string name="settings_sensors_desc">Configure sensor capture for new points.</string>
     <string name="settings_help_sensors">Turn each sensor on or off independently for new points. Noise capture needs microphone permission and stores approximate dBFS from a short sample, not a calibrated SPL reading.</string>

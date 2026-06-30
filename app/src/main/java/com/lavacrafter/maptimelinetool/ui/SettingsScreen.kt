@@ -69,6 +69,7 @@ import androidx.core.content.ContextCompat
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.NetworkStatus
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.quickadd.requiresBackgroundLocationForQuickAdd
 import kotlin.math.roundToInt
 
 private val supportedLanguageOptions = listOf(
@@ -541,6 +542,11 @@ private fun NotificationSettings(
     val context = LocalContext.current
     val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    val preciseLocationGranted =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val backgroundLocationRequired = requiresBackgroundLocationForQuickAdd(Build.VERSION.SDK_INT)
+    val backgroundLocationGranted = !backgroundLocationRequired ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     SettingsSubpageScaffold(
         title = stringResource(R.string.settings_notifications_title),
@@ -557,6 +563,18 @@ private fun NotificationSettings(
                 text = stringResource(R.string.settings_quick_add_notification_desc),
                 style = MaterialTheme.typography.bodySmall
             )
+            if (!preciseLocationGranted) {
+                Text(
+                    text = stringResource(R.string.settings_quick_add_notification_precise_location_hint),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (!backgroundLocationGranted) {
+                Text(
+                    text = stringResource(R.string.settings_quick_add_notification_background_location_hint),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             if (quickAddNotificationPermissionRequested && !quickAddNotificationEnabled && !notificationPermissionGranted) {
                 Text(
                     text = stringResource(R.string.settings_quick_add_notification_permission_hint),

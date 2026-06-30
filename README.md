@@ -30,7 +30,7 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
 - **ZIP import** can restore a fuller backup package, including photos, tags, and settings when present.
 
 ## Compatibility
-- Current Gradle config: `minSdk 24`, `targetSdk 36`, `compileSdk 36`.
+- Current Gradle config: `minSdk 24`, `targetSdk 37`, `compileSdk 37`.
 - The current app module targets Android 7.0+ devices.
 
 ## How to Run
@@ -115,7 +115,7 @@ Map Timeline Tool 是一款离线优先的 Android 手动打点应用。除非�
 - **ZIP 导入** 可在包内数据存在时恢复更完整的备份内容，包括照片、标签和设置。
 
 ## 兼容性
-- 当前 Gradle 配置：`minSdk 24`、`targetSdk 36`、`compileSdk 36`。
+- 当前 Gradle 配置：`minSdk 24`、`targetSdk 37`、`compileSdk 37`。
 - 当前 app 模块面向 Android 7.0 及以上设备。
 
 ## 运行
