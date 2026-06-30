@@ -56,6 +56,10 @@
     <string name="toast_point_auto_saved_stale">Point auto-saved using stale last known location</string>
     <string name="toast_location_unavailable_save_failed">No location was available. Point not saved.</string>
     <string name="toast_auto_save_location_failed">Auto-save could not get any location. Point not saved.</string>
+    <string name="toast_quick_add_saved_from_cache">Quick Add saved using a recent accurate cached location</string>
+    <string name="toast_quick_add_saved_from_fresh">Quick Add saved using a fresh precise location</string>
+    <string name="toast_quick_add_failed_no_fresh_accurate_location">Quick Add could not get a fresh accurate location. Point not saved.</string>
+    <string name="toast_quick_add_precise_permission_required">Quick Add needs precise location permission. Approximate-only access will not save a point.</string>
     <string name="toast_noise_permission_denied">Microphone permission denied. Noise capture remains off.</string>
     <string name="toast_quick_add_notification_permission_denied">Notification permission denied. Quick Add stays off.</string>
     <string name="toast_quick_add_notification_permission_required">Quick Add notifications are blocked. Enable notifications in system settings first.</string>
@@ -111,9 +115,9 @@
     <string name="language_follow_system">Follow System</string>
     <string name="settings_notifications_title">Notifications</string>
     <string name="settings_notifications_desc">Optional persistent Quick Add notification.</string>
-    <string name="settings_help_notifications">Quick Add is an optional persistent notification for one-tap point saves. On Android 13+, enabling it needs notification permission. Quick Add still needs location permission to actually record a point.</string>
+    <string name="settings_help_notifications">Quick Add is an optional persistent notification for one-tap point saves. It only saves when a recent accurate cache entry is available or a fresh precise fix can be obtained; otherwise it reports failure without creating a point. While enabled, the app may opportunistically warm a short-lived Quick Add cache from system location updates without continuous tracking. On Android 13+, enabling the notification needs notification permission.</string>
     <string name="settings_quick_add_notification_label">Quick Add notification</string>
-    <string name="settings_quick_add_notification_desc">Shows an optional persistent notification for quickly adding a point when notifications and location are available.</string>
+    <string name="settings_quick_add_notification_desc">Shows an optional persistent notification for strict Quick Add saves using a recent accurate cache or one fresh precise fix.</string>
     <string name="settings_quick_add_notification_permission_hint">If you denied notification permission, turn it back on in system settings before enabling Quick Add here.</string>
     <string name="settings_sensors_title">Sensors</string>
     <string name="settings_sensors_desc">Configure sensor capture for new points.</string>
@@ -128,7 +132,7 @@
     <string name="settings_noise_collect_desc">Requires microphone permission. Captured asynchronously after point save as approximate dBFS, not calibrated SPL.</string>
     <string name="settings_map_operations_title">Map operations</string>
     <string name="settings_map_operations_desc">Location-related add timeout, zoom controls, and marker size.</string>
-    <string name="settings_help_map_operations">Add, Quick Add, and map centering all depend on location permission. If a fresh precise fix is not available, the app may offer an approximate or last-known location instead of always failing. This page controls add timeout, zoom buttons, and marker size.</string>
+    <string name="settings_help_map_operations">Manual Add, Auto-save, and map centering all depend on location permission. Manual Add and Auto-save may still fall back to approximate or last-known locations when needed. Quick Add is stricter: it saves only from a recent accurate Quick Add cache entry or one fresh precise fix, and otherwise fails without saving. This page controls add timeout, zoom buttons, and marker size.</string>
     <string name="settings_photo_compression_title">Photo compression</string>
     <string name="settings_photo_compression_desc">Configure default photo compression behavior.</string>
     <string name="settings_help_photo_compression">Choose whether photos keep original quality or are compressed by default. In compressed mode, pick a format and compression quality.</string>
@@ -251,9 +255,9 @@
     <string name="settings_language_restart_now">Restart now</string>
     <string name="settings_language_restart_later">Later</string>
     <string name="notification_channel_name">Quick Add</string>
-    <string name="notification_channel_desc">Quick add point from notification</string>
+    <string name="notification_channel_desc">Strict quick add point from notification</string>
     <string name="notification_title">Quick add</string>
-    <string name="notification_text">Tap to add a point</string>
+    <string name="notification_text">Tap to save a point using a recent accurate location or one fresh precise fix</string>
     <string name="exit_title">Exit</string>
     <string name="exit_message">Close Map Timeline Tool?</string>
     <string name="exit_button">Exit</string>

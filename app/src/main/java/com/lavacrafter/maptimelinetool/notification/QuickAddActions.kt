@@ -33,14 +33,9 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.lavacrafter.maptimelinetool.MainActivity
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.appGraph
-import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow
-import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddResult
 
 internal const val ACTION_QUICK_ADD = "com.lavacrafter.maptimelinetool.notification.action.QUICK_ADD"
 
@@ -64,54 +59,54 @@ internal fun Context.cancelQuickAddNotification() {
 }
 
 internal fun Context.syncQuickAddNotification(enabled: Boolean) {
-    if (enabled && areNotificationsEnabledCompat()) {
+    val isQuickAddAvailable = isQuickAddNotificationAvailable(enabled)
+    appGraph().quickAddPassiveLocationUpdater.refreshRegistration(isQuickAddAvailable)
+    if (isQuickAddAvailable) {
         showQuickAddNotification()
     } else {
         cancelQuickAddNotification()
     }
 }
 
+internal fun Context.isQuickAddNotificationAvailable(enabled: Boolean): Boolean {
+    return enabled && areNotificationsEnabledCompat()
+}
+
 internal suspend fun Context.performQuickAdd() {
-    if (!hasLocationPermission()) {
-        showToast(getString(R.string.toast_permission_denied))
+    if (!hasPreciseLocationPermission()) {
+        showQuickAddResult(R.string.toast_quick_add_precise_permission_required)
         return
     }
 
     val graph = appGraph()
-    val decision = try {
-        graph.locationSaveResolver.resolve(LocationSaveFlow.QUICK_ADD, QUICK_ADD_LOCATION_TIMEOUT_MS)
+    val clickTimeMs = System.currentTimeMillis()
+    val result = try {
+        graph.quickAddResolver.savePoint(timeoutMs = QUICK_ADD_LOCATION_TIMEOUT_MS, clickTimeMs = clickTimeMs)
     } catch (_: Exception) {
         null
     }
-    val location = decision?.location
 
-    if (decision == null || !decision.canSave || location == null) {
-        showToast(getString(R.string.toast_location_unavailable_save_failed))
-        return
+    when (result) {
+        QuickAddResult.SAVED_FROM_RECENT_CACHE,
+        QuickAddResult.SAVED_FROM_FRESH_REQUEST -> {
+            val messageResId = messageResForQuickAdd(result)
+            showToast(getString(messageResId))
+            vibrateOnce()
+            showQuickAddResultNotification(getString(messageResId))
+        }
+        QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION -> {
+            showQuickAddResult(R.string.toast_quick_add_failed_no_fresh_accurate_location)
+        }
+        null -> {
+            showQuickAddResult(R.string.toast_location_unavailable_save_failed)
+        }
     }
+}
 
-    val eventTime = System.currentTimeMillis()
-    val timestamp = location.fixTimeMs
-        ?.takeIf { it > 0L }
-        ?.let { maxOf(eventTime, it) }
-        ?: eventTime
-    val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-
-    try {
-        graph.pointWriteUseCase.addPointWithTags(
-            title = title,
-            note = "",
-            location = location,
-            timestamp = timestamp,
-            tagIds = graph.settingsManagementUseCase.getDefaultTagIds().toSet()
-        )
-        val message = getString(messageResForQuickAdd(decision.quality))
-        showToast(message)
-        vibrateOnce()
-        showQuickAddResultNotification(message)
-    } catch (_: Exception) {
-        showToast(getString(R.string.toast_location_unavailable_save_failed))
-    }
+private fun Context.showQuickAddResult(messageResId: Int) {
+    val message = getString(messageResId)
+    showToast(message)
+    showQuickAddResultNotification(message)
 }
 
 private fun Context.showQuickAddResultNotification(message: String) {
@@ -149,10 +144,9 @@ private fun Context.buildQuickAddNotification(): Notification {
         descriptionResId = R.string.notification_channel_desc
     )
 
-    val intent = Intent(this, MainActivity::class.java)
+    val intent = Intent(this, QuickAddReceiver::class.java)
         .setAction(ACTION_QUICK_ADD)
-        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    val pendingIntent = PendingIntent.getActivity(
+    val pendingIntent = PendingIntent.getBroadcast(
         this,
         0,
         intent,
@@ -186,9 +180,8 @@ private fun Context.vibrateOnce() {
     }
 }
 
-private fun Context.hasLocationPermission(): Boolean {
-    return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+private fun Context.hasPreciseLocationPermission(): Boolean {
+    return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun Context.areNotificationsEnabledCompat(): Boolean {
@@ -213,12 +206,10 @@ private fun Context.ensureNotificationChannel(channelId: String, nameResId: Int,
     manager.createNotificationChannel(channel)
 }
 
-private fun messageResForQuickAdd(quality: LocationSaveQuality): Int {
-    return when (quality) {
-        LocationSaveQuality.PRECISE_FRESH -> R.string.toast_point_added
-        LocationSaveQuality.FRESH_BUT_LOW_ACCURACY -> R.string.toast_point_added_approximate
-        LocationSaveQuality.LAST_KNOWN_RECENT -> R.string.toast_point_added_last_known
-        LocationSaveQuality.LAST_KNOWN_STALE -> R.string.toast_point_added_stale
-        LocationSaveQuality.UNAVAILABLE -> R.string.toast_location_unavailable_save_failed
+private fun messageResForQuickAdd(result: QuickAddResult): Int {
+    return when (result) {
+        QuickAddResult.SAVED_FROM_RECENT_CACHE -> R.string.toast_quick_add_saved_from_cache
+        QuickAddResult.SAVED_FROM_FRESH_REQUEST -> R.string.toast_quick_add_saved_from_fresh
+        QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION -> R.string.toast_quick_add_failed_no_fresh_accurate_location
     }
 }

@@ -42,6 +42,10 @@
     <string name="toast_cache_cleared">地图缓存已清除</string>
     <string name="toast_cache_skip_downloaded">已下载区域将被保留，请先删除已下载区域再清缓存。</string>
     <string name="toast_point_added">打点完成</string>
+    <string name="toast_quick_add_saved_from_cache">快速打点已使用近期且准确的缓存定位保存</string>
+    <string name="toast_quick_add_saved_from_fresh">快速打点已使用新的精确定位保存</string>
+    <string name="toast_quick_add_failed_no_fresh_accurate_location">快速打点未能获取新的准确定位，未保存点位。</string>
+    <string name="toast_quick_add_precise_permission_required">快速打点需要精确定位权限；只有近似定位时不会保存点位。</string>
     <string name="toast_noise_permission_denied">麦克风权限被拒绝，噪音采集保持关闭。</string>
     <string name="toast_location_loading">定位加载中</string>
     <string name="label_utc_time">%1$s UTC</string>
@@ -185,9 +189,9 @@
     <string name="open_source_kotlin">Kotlin（Apache-2.0）</string>
     <string name="open_source_osm">OpenStreetMap 数据（ODbL，需署名）</string>
     <string name="notification_channel_name">快速打点</string>
-    <string name="notification_channel_desc">通知栏快速打点</string>
+    <string name="notification_channel_desc">通过通知栏进行严格快速打点</string>
     <string name="notification_title">快速打点</string>
-    <string name="notification_text">点击直接添加打点</string>
+    <string name="notification_text">点击可用近期准确定位或一次新的精确定位来保存打点</string>
     <string name="exit_title">退出</string>
     <string name="exit_message">关闭地图时间线工具？</string>
     <string name="exit_button">退出</string>
@@ -262,7 +266,7 @@
     <string name="settings_theme_dark_mode">深色模式</string>
     <string name="settings_map_operations_title">地图操作</string>
     <string name="settings_map_operations_desc">与定位相关的打点超时、缩放控件和标记大小。</string>
-    <string name="settings_help_map_operations">新增打点、通知栏快速打点和地图居中都依赖定位权限。如果暂时拿不到新鲜且精确的定位，应用可能会提供近似定位或最近一次已知定位，而不一定直接失败。本页用于设置打点超时、缩放按钮和标记大小。</string>
+    <string name="settings_help_map_operations">手动新增、自动保存和地图居中都依赖定位权限。手动新增与自动保存在必要时仍可能回退到近似定位或最近一次已知定位；但快速打点更严格，只会使用近期且准确的快速打点缓存，或一次新的精确定位，否则直接失败且不保存。本页用于设置打点超时、缩放按钮和标记大小。</string>
     <string name="settings_cache_title">地图缓存</string>
     <string name="settings_cache_desc">选择地图瓦片源和缓存策略。</string>
     <string name="settings_help_cache">选择在线瓦片源以及应用的缓存策略。清除缓存会移除不属于已下载区域的瓦片。EOX Sentinel-2 Cloudless 仅限非商业使用。</string>
@@ -274,8 +278,8 @@
     <string name="settings_help_backup_restore">更换设备或做完整备份前，优先使用 ZIP。\n\n• CSV：适合表格查看或简单交换的点位表。\n• GeoJSON / KML / KMZ：适合地图或 GIS 工具的导出格式。\n• ZIP：推荐的完整备份 / 迁移包；可包含点位以及相关标签、照片、传感器字段和设置。\n• 导入：CSV 只添加点位，ZIP 可以恢复更完整的备份内容。</string>
     <string name="settings_notifications_title">通知</string>
     <string name="settings_notifications_desc">可选的常驻“快速打点”通知。</string>
-    <string name="settings_help_notifications">“快速打点”是一个可选的常驻通知，用于一键记录点位。Android 13 及以上在启用时需要通知权限；真正保存点位时仍然需要定位权限。</string>
-    <string name="settings_quick_add_notification_desc">在通知和定位可用时显示可选的常驻通知，便于快速添加点位。</string>
+    <string name="settings_help_notifications">“快速打点”是一个可选的常驻通知，用于一键记录点位。它只有在已有近期且准确的缓存定位，或能拿到一次新的精确定位时才会保存；否则会明确提示失败且不会创建点位。启用后，应用可能会在不持续追踪的前提下，顺带利用系统产生的定位更新来预热一个短时有效的快速打点缓存。Android 13 及以上在启用通知时还需要通知权限。</string>
+    <string name="settings_quick_add_notification_desc">显示可选的常驻通知；快速打点只会使用近期且准确的缓存定位，或一次新的精确定位。</string>
     <string name="settings_language_english_native">English</string>
     <string name="settings_language_chinese_simplified_native">简体中文</string>
     <string name="settings_language_legacy_value">%1$s（旧设置 / 暂未完整支持）</string>

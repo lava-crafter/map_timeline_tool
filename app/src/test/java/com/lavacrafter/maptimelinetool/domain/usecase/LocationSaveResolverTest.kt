@@ -48,7 +48,7 @@ class LocationSaveResolverTest {
             bestEffortLocation = fallback
         )
 
-        val decision = LocationSaveResolver(provider).resolve(LocationSaveFlow.QUICK_ADD, 5_000L, nowMs = 1_000_000L)
+        val decision = LocationSaveResolver(provider).resolve(LocationSaveFlow.MANUAL_ADD, 5_000L, nowMs = 1_000_000L)
 
         assertEquals(LocationSaveQuality.FRESH_BUT_LOW_ACCURACY, decision.quality)
         assertEquals(1, provider.preciseCalls)
