@@ -499,6 +499,15 @@ class MainActivity : AppCompatActivity() {
                         ) == PackageManager.PERMISSION_GRANTED
                 }
 
+                fun requestLocationPermission() {
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                }
+
                 fun resetPendingAddDialogState(clearPendingPhoto: Boolean = false) {
                     if (clearPendingPhoto) {
                         val pathToDelete = pendingAddPhotoPath
@@ -574,18 +583,19 @@ class MainActivity : AppCompatActivity() {
                         scope.launch { onGranted() }
                     } else {
                         pendingLocationPermissionAction = onGranted
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
+                        requestLocationPermission()
                     }
                 }
 
                 fun requestCenterLocation(onResolved: (com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) {
                     runWithLocationPermission {
                         onResolved(viewModel.getBestEffortLocation(5_000L))
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    if (!hasLocationPermission()) {
+                        requestLocationPermission()
                     }
                 }
 

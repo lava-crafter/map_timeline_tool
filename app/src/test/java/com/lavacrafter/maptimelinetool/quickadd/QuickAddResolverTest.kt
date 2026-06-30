@@ -20,12 +20,11 @@ import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class QuickAddResolverTest {
     @Test
-    fun savePoint_prefersQualifiedCacheAndUsesClickTimestamp() = runBlocking {
+    fun savePoint_prefersFreshPreciseLocationOverQualifiedCacheAndUsesClickTimestamp() = runBlocking {
         val cachedLocation = QuickAddLocation(
             latitude = 1.0,
             longitude = 2.0,
@@ -34,7 +33,15 @@ class QuickAddResolverTest {
             provider = "gps"
         )
         val cache = QuickAddLocationCache(wallClockMs = { 100_000L }).apply { update(cachedLocation) }
-        val provider = FakeLocationProvider()
+        val provider = FakeLocationProvider(
+            preciseLocation = GeoPoint(
+                latitude = 3.0,
+                longitude = 4.0,
+                accuracyMeters = 10f,
+                fixTimeMs = 99_000L,
+                provider = "fused"
+            )
+        )
         var savedTitle: String? = null
         var savedLocation: GeoPoint? = null
         var savedTimestamp: Long? = null
@@ -51,11 +58,12 @@ class QuickAddResolverTest {
             titleFormatter = { "title-$it" }
         ).savePoint(timeoutMs = 5_000L, clickTimeMs = 123_456L)
 
-        assertEquals(QuickAddResult.SAVED_FROM_RECENT_CACHE, result)
-        assertEquals(0, provider.preciseCalls)
+        assertEquals(QuickAddResult.SAVED_FROM_FRESH_REQUEST, result)
+        assertEquals(1, provider.preciseCalls)
         assertEquals("title-123456", savedTitle)
-        assertEquals(cachedLocation.toGeoPoint(), savedLocation)
+        assertEquals(provider.preciseLocation, savedLocation)
         assertEquals(123_456L, savedTimestamp)
+        assertEquals(provider.preciseLocation?.accuracyMeters, cache.getQualifiedLocation()?.accuracyMeters)
     }
 
     @Test
@@ -115,19 +123,34 @@ class QuickAddResolverTest {
     }
 
     @Test
-    fun savePoint_failsWhenNoStrictLocationCanBeResolved() = runBlocking {
+    fun savePoint_fallsBackToQualifiedCacheWhenNoStrictLocationCanBeResolved() = runBlocking {
         val provider = FakeLocationProvider(preciseLocation = null)
         var savedTitle: String? = null
+        var savedLocation: GeoPoint? = null
+        val cachedLocation = QuickAddLocation(
+            latitude = 8.0,
+            longitude = 9.0,
+            accuracyMeters = 18f,
+            fixTimeMs = 95_000L,
+            provider = "gps"
+        )
+        val cache = QuickAddLocationCache(wallClockMs = { 100_000L }).apply { update(cachedLocation) }
 
         val result = QuickAddResolver(
             locationProvider = provider,
-            locationCache = QuickAddLocationCache(wallClockMs = { 100_000L }),
-            addPoint = { title, _, _ -> savedTitle = title },
-            wallClockMs = { 100_000L }
+            locationCache = cache,
+            addPoint = { title, location, _ ->
+                savedTitle = title
+                savedLocation = location
+            },
+            wallClockMs = { 100_000L },
+            titleFormatter = { "title-$it" }
         ).savePoint(timeoutMs = 5_000L, clickTimeMs = 101_000L)
 
-        assertEquals(QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION, result)
-        assertNull(savedTitle)
+        assertEquals(QuickAddResult.SAVED_FROM_RECENT_CACHE, result)
+        assertEquals("title-101000", savedTitle)
+        assertEquals(cachedLocation.toGeoPoint(), savedLocation)
+        assertEquals(1, provider.preciseCalls)
     }
 
     private class FakeLocationProvider(

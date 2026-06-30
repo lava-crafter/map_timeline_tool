@@ -39,11 +39,6 @@ class QuickAddResolver(
     }
 ) {
     suspend fun savePoint(timeoutMs: Long, clickTimeMs: Long = wallClockMs()): QuickAddResult {
-        locationCache.getQualifiedLocation()?.let { cachedLocation ->
-            addPoint(titleFormatter(clickTimeMs), cachedLocation.toGeoPoint(), clickTimeMs)
-            return QuickAddResult.SAVED_FROM_RECENT_CACHE
-        }
-
         val preciseLocation = runCatching {
             locationProvider.getPreciseLocation(timeoutMs)
         }.getOrNull()
@@ -54,10 +49,18 @@ class QuickAddResolver(
                 observedElapsedRealtimeNanos = elapsedRealtimeNanos()
             )
             ?.takeIf { locationCache.isQualified(it) }
-            ?: return QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION
 
-        addPoint(titleFormatter(clickTimeMs), strictLocation.toGeoPoint(), clickTimeMs)
-        locationCache.update(strictLocation)
-        return QuickAddResult.SAVED_FROM_FRESH_REQUEST
+        if (strictLocation != null) {
+            addPoint(titleFormatter(clickTimeMs), strictLocation.toGeoPoint(), clickTimeMs)
+            locationCache.update(strictLocation)
+            return QuickAddResult.SAVED_FROM_FRESH_REQUEST
+        }
+
+        locationCache.getQualifiedLocation()?.let { cachedLocation ->
+            addPoint(titleFormatter(clickTimeMs), cachedLocation.toGeoPoint(), clickTimeMs)
+            return QuickAddResult.SAVED_FROM_RECENT_CACHE
+        }
+
+        return QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION
     }
 }
