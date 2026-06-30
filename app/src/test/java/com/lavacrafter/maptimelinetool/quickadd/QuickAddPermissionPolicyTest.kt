@@ -103,4 +103,32 @@ class QuickAddPermissionPolicyTest {
             )
         )
     }
+
+    @Test
+    fun executionHelperRequiresFeatureEnabledAndFullLocationAccess() {
+        assertFalse(
+            isQuickAddExecutionAllowed(
+                enabled = false,
+                sdkInt = Build.VERSION_CODES.TIRAMISU,
+                hasPreciseLocationPermission = true,
+                hasBackgroundLocationPermission = true
+            )
+        )
+        assertFalse(
+            isQuickAddExecutionAllowed(
+                enabled = true,
+                sdkInt = Build.VERSION_CODES.Q,
+                hasPreciseLocationPermission = true,
+                hasBackgroundLocationPermission = false
+            )
+        )
+        assertTrue(
+            isQuickAddExecutionAllowed(
+                enabled = true,
+                sdkInt = Build.VERSION_CODES.TIRAMISU,
+                hasPreciseLocationPermission = true,
+                hasBackgroundLocationPermission = true
+            )
+        )
+    }
 }

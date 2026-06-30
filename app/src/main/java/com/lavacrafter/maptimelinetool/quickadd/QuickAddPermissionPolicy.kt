@@ -41,6 +41,19 @@ internal fun hasRequiredLocationPermissionsForQuickAdd(
     return !requiresBackgroundLocationForQuickAdd(sdkInt) || hasBackgroundLocationPermission
 }
 
+internal fun isQuickAddExecutionAllowed(
+    enabled: Boolean,
+    sdkInt: Int,
+    hasPreciseLocationPermission: Boolean,
+    hasBackgroundLocationPermission: Boolean
+): Boolean {
+    return enabled && hasRequiredLocationPermissionsForQuickAdd(
+        sdkInt = sdkInt,
+        hasPreciseLocationPermission = hasPreciseLocationPermission,
+        hasBackgroundLocationPermission = hasBackgroundLocationPermission
+    )
+}
+
 internal fun resolveQuickAddEnableAction(
     sdkInt: Int,
     notificationsGranted: Boolean,

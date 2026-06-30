@@ -420,10 +420,6 @@ object SettingsStore {
         root.put(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context))
         root.put(KEY_NOISE_ENABLED, getNoiseEnabled(context))
         root.put(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
-        root.put(
-            KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED,
-            getQuickAddNotificationPermissionRequested(context)
-        )
         val downloadedAreas = org.json.JSONArray()
         getDownloadedAreas(context).forEach { area ->
             val areaObj = org.json.JSONObject()
@@ -440,9 +436,15 @@ object SettingsStore {
         return root.toString()
     }
 
-    fun importBackupJson(context: Context, json: String): Boolean {
+    fun importBackupJson(
+        context: Context,
+        json: String,
+        legacyTagIdToActualId: Map<Long, Long> = emptyMap()
+    ): Boolean {
+        val normalizedJson = sanitizeBackupJsonForImport(json, legacyTagIdToActualId)
+            ?: return false
         return runCatching {
-            val root = org.json.JSONObject(json)
+            val root = org.json.JSONObject(normalizedJson)
             if (root.has(KEY_TIMEOUT)) setTimeoutSeconds(context, root.optInt(KEY_TIMEOUT, getTimeoutSeconds(context)))
             if (root.has(KEY_CACHE_POLICY)) setCachePolicy(context, MapCachePolicy.fromValue(root.optInt(KEY_CACHE_POLICY, getCachePolicy(context).value)))
             if (root.has(KEY_SATELLITE_CACHE_POLICY)) {
@@ -489,15 +491,6 @@ object SettingsStore {
                     root.optBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
                 )
             }
-            if (root.has(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED)) {
-                setQuickAddNotificationPermissionRequested(
-                    context,
-                    root.optBoolean(
-                        KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED,
-                        getQuickAddNotificationPermissionRequested(context)
-                    )
-                )
-            }
             if (root.has(KEY_DOWNLOADED_AREAS)) {
                 val areasArray = root.optJSONArray(KEY_DOWNLOADED_AREAS) ?: org.json.JSONArray()
                 val areas = buildList {
@@ -520,6 +513,20 @@ object SettingsStore {
             }
             true
         }.getOrDefault(false)
+    }
+
+    internal fun sanitizeBackupJsonForImport(
+        json: String,
+        legacyTagIdToActualId: Map<Long, Long> = emptyMap()
+    ): String? {
+        return runCatching {
+            val root = org.json.JSONObject(json)
+            root.remove(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED)
+            remapTagIdsForImport(root, KEY_PINNED_TAGS, legacyTagIdToActualId)
+            remapTagIdsForImport(root, KEY_RECENT_TAGS, legacyTagIdToActualId)
+            remapTagIdsForImport(root, KEY_DEFAULT_TAGS, legacyTagIdToActualId)
+            root.toString()
+        }.getOrNull()
     }
 
     private fun saveDownloadedAreas(context: Context, areas: List<DownloadedArea>) {
@@ -593,6 +600,38 @@ object SettingsStore {
                     else -> null
                 }
                 if (value != null) add(value)
+            }
+        }
+    }
+
+    private fun remapTagIdsForImport(
+        root: org.json.JSONObject,
+        key: String,
+        legacyTagIdToActualId: Map<Long, Long>
+    ) {
+        if (!root.has(key)) {
+            return
+        }
+        val remapped = remapImportedTagIds(parseLongArray(root.optJSONArray(key)), legacyTagIdToActualId)
+        val array = org.json.JSONArray()
+        remapped.forEach { tagId -> array.put(tagId) }
+        root.put(key, array)
+    }
+
+    private fun remapImportedTagIds(
+        tagIds: List<Long>,
+        legacyTagIdToActualId: Map<Long, Long>
+    ): List<Long> {
+        if (tagIds.isEmpty()) {
+            return emptyList()
+        }
+        val seen = mutableSetOf<Long>()
+        return buildList {
+            tagIds.forEach { legacyId ->
+                val actualId = legacyTagIdToActualId[legacyId] ?: return@forEach
+                if (seen.add(actualId)) {
+                    add(actualId)
+                }
             }
         }
     }

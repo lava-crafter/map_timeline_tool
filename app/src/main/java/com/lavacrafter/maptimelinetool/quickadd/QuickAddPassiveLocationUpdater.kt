@@ -94,8 +94,10 @@ internal fun shouldRegisterQuickAddPassiveLocationUpdater(
     hasFinePermission: Boolean,
     hasBackgroundPermission: Boolean
 ): Boolean {
-    if (!enabled || !hasFinePermission) {
-        return false
-    }
-    return sdkInt < Build.VERSION_CODES.Q || hasBackgroundPermission
+    return isQuickAddExecutionAllowed(
+        enabled = enabled,
+        sdkInt = sdkInt,
+        hasPreciseLocationPermission = hasFinePermission,
+        hasBackgroundLocationPermission = hasBackgroundPermission
+    )
 }

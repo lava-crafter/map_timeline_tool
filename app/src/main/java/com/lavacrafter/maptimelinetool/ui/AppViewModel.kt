@@ -56,6 +56,10 @@ class AppViewModel(
     private val tagManagementUseCase: TagManagementUseCase,
     private val locationProvider: LocationProvider
 ) : AndroidViewModel(app) {
+    data class ZipImportResult(
+        val legacyTagIdToActualId: Map<Long, Long>
+    )
+
     val points = repo.observeAll().map { list -> list.map { it.toEntity() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tags = tagManagementUseCase.observeTags().map { list -> list.map { it.toEntity() } }
@@ -118,7 +122,7 @@ class AppViewModel(
         }
     }
 
-    suspend fun importZipData(importStats: ZipImporter.ImportStats) {
+    suspend fun importZipData(importStats: ZipImporter.ImportStats): ZipImportResult {
         val existingPoints = repo.getAll()
         val existingMap = existingPoints.associateBy {
             Triple(it.timestamp, it.latitude, it.longitude)
@@ -145,8 +149,6 @@ class AppViewModel(
             pointIdByIndex[index] = actualId
         }
 
-        if (importStats.tags.isEmpty() || importStats.pointTags.isEmpty()) return
-
         val existingTags = repo.observeTags().first()
         val existingTagByName = existingTags.associateBy { sanitizeTagName(it.name).lowercase(Locale.US) }.toMutableMap()
         val legacyTagIdToActualId = mutableMapOf<Long, Long>()
@@ -159,6 +161,10 @@ class AppViewModel(
             legacyTagIdToActualId[importedTag.legacyId] = actualId
         }
 
+        if (importStats.tags.isEmpty() || importStats.pointTags.isEmpty()) {
+            return ZipImportResult(legacyTagIdToActualId = legacyTagIdToActualId)
+        }
+
         val insertedPairs = mutableSetOf<Pair<Long, Long>>()
         importStats.pointTags.forEach { importedPointTag ->
             val pointId = pointIdByIndex[importedPointTag.pointIndex] ?: return@forEach
@@ -168,6 +174,8 @@ class AppViewModel(
                 repo.insertPointTag(pointId, tagId)
             }
         }
+
+        return ZipImportResult(legacyTagIdToActualId = legacyTagIdToActualId)
     }
 
     fun setTagForPoint(pointId: Long, tagId: Long, enabled: Boolean) {

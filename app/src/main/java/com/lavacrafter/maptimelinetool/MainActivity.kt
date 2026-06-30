@@ -402,9 +402,13 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0, null)
                             }
-                            viewModel.importZipData(imported)
+                            val importResult = viewModel.importZipData(imported)
                             imported.settingsJson?.let { json ->
-                                val restored = SettingsStore.importBackupJson(context, json)
+                                val restored = SettingsStore.importBackupJson(
+                                    context,
+                                    json,
+                                    importResult.legacyTagIdToActualId
+                                )
                                 if (restored) {
                                     settingsViewModel.reloadFromStore()
                                     applyLanguagePreference(settingsViewModel.uiState.value.languagePreference)
@@ -556,16 +560,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         QuickAddEnableAction.REQUEST_NOTIFICATION_PERMISSION -> {
                             settingsViewModel.setQuickAddNotificationEnabled(false)
-                            if (!settingsState.quickAddNotificationPermissionRequested) {
-                                settingsViewModel.setQuickAddNotificationPermissionRequested(true)
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.toast_quick_add_notification_permission_required),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                            settingsViewModel.setQuickAddNotificationPermissionRequested(true)
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                         QuickAddEnableAction.REQUEST_FOREGROUND_LOCATION_PERMISSION -> {
                             settingsViewModel.setQuickAddNotificationEnabled(false)

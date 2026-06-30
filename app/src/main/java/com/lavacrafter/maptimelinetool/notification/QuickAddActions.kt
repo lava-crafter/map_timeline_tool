@@ -36,7 +36,9 @@ import androidx.core.content.ContextCompat
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.appGraph
 import com.lavacrafter.maptimelinetool.quickadd.hasRequiredLocationPermissionsForQuickAdd
+import com.lavacrafter.maptimelinetool.quickadd.isQuickAddExecutionAllowed
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResult
+import com.lavacrafter.maptimelinetool.quickadd.requiresBackgroundLocationForQuickAdd
 
 internal const val ACTION_QUICK_ADD = "com.lavacrafter.maptimelinetool.notification.action.QUICK_ADD"
 
@@ -80,12 +82,19 @@ internal fun Context.isQuickAddNotificationAvailable(enabled: Boolean): Boolean 
 }
 
 internal suspend fun Context.performQuickAdd() {
-    if (!hasPreciseLocationPermission()) {
-        showQuickAddResult(R.string.toast_quick_add_precise_permission_required)
+    val graph = appGraph()
+    val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
+    if (!isQuickAddExecutionAllowed(
+            enabled = quickAddEnabled,
+            sdkInt = Build.VERSION.SDK_INT,
+            hasPreciseLocationPermission = hasPreciseLocationPermission(),
+            hasBackgroundLocationPermission = hasBackgroundLocationPermissionForQuickAdd()
+        )) {
+        syncQuickAddNotification(quickAddEnabled)
+        showQuickAddResult(quickAddBlockedReasonResId(quickAddEnabled))
         return
     }
 
-    val graph = appGraph()
     val clickTimeMs = System.currentTimeMillis()
     val result = try {
         graph.quickAddResolver.savePoint(timeoutMs = QUICK_ADD_LOCATION_TIMEOUT_MS, clickTimeMs = clickTimeMs)
@@ -225,5 +234,16 @@ private fun messageResForQuickAdd(result: QuickAddResult): Int {
         QuickAddResult.SAVED_FROM_RECENT_CACHE -> R.string.toast_quick_add_saved_from_cache
         QuickAddResult.SAVED_FROM_FRESH_REQUEST -> R.string.toast_quick_add_saved_from_fresh
         QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION -> R.string.toast_quick_add_failed_no_fresh_accurate_location
+    }
+}
+
+private fun Context.quickAddBlockedReasonResId(enabled: Boolean): Int {
+    return when {
+        !enabled -> R.string.toast_location_unavailable_save_failed
+        !hasPreciseLocationPermission() -> R.string.toast_quick_add_precise_permission_required
+        requiresBackgroundLocationForQuickAdd(Build.VERSION.SDK_INT) && !hasBackgroundLocationPermissionForQuickAdd() -> {
+            R.string.toast_quick_add_background_permission_required
+        }
+        else -> R.string.toast_location_unavailable_save_failed
     }
 }
