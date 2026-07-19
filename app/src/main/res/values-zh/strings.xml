@@ -268,7 +268,7 @@
 
 
     <string name="settings_help_title">帮助</string>
-    <string name="settings_help_overview">打点、照片和设置默认都保存在本机，只有在你导出或分享时才会离开设备。更换手机前，建议先在“备份与恢复”中创建完整 ZIP 备份。每个页面的 ? 按钮都会说明权限、格式、缓存和下载注意事项。</string>
+    <string name="settings_help_overview">打点、照片和设置保存在应用沙箱中。如果此设备启用了 Android 系统备份或设备迁移，Android 可能通过已配置的系统备份目的地备份或迁移这些数据。你也可以在“备份与恢复”中创建完整 ZIP 备份。每个页面的 ? 按钮都会说明权限、格式、缓存和下载注意事项。</string>
     <string name="settings_theme_dark_mode">深色模式</string>
     <string name="settings_map_operations_title">地图操作</string>
     <string name="settings_map_operations_desc">与定位相关的打点超时、缩放控件和标记大小。</string>
@@ -293,7 +293,7 @@
     <string name="settings_language_chinese_simplified_native">简体中文</string>
     <string name="settings_language_legacy_value">%1$s（旧设置 / 暂未完整支持）</string>
     <string name="settings_language_legacy_hint">当前保存的语言是：%1$s。该设置会继续保留以兼容旧版本，但语言选择器目前只维护 English 和 简体中文。</string>
-    <string name="about_summary">一款适合旅行记录、现场采样和个人地图时间线的离线优先打点工具。除非你主动导出或分享，本地数据会一直保存在设备上。</string>
+    <string name="about_summary">一款适合旅行记录、现场采样和个人地图时间线的离线优先打点工具。数据保存在应用沙箱中；如果此设备启用了 Android 系统备份或设备迁移，Android 可能备份或迁移这些数据。</string>
     <string name="about_backup_tip">更换设备前，建议先到“设置 → 备份与恢复”创建完整 ZIP 备份。</string>
     <string name="about_open_repository">打开项目仓库</string>
     <string name="about_open_play">打开 Google Play 页面</string>

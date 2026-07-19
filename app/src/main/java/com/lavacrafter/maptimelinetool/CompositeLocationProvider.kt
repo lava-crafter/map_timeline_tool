@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
+import kotlinx.coroutines.CancellationException
 
 class CompositeLocationProvider(
     private val preferred: LocationProvider,
@@ -39,26 +40,25 @@ class CompositeLocationProvider(
         timeoutMs: Long,
         block: suspend (LocationProvider, Long) -> GeoPoint?
     ): GeoPoint? {
-        val preferredTimeoutMs = preferredTimeout(timeoutMs)
-        val fallbackTimeoutMs = (timeoutMs - preferredTimeoutMs).coerceAtLeast(1L)
-        val preferredResult = runCatching {
-            block(preferred, preferredTimeoutMs)
-        }.getOrNull()
+        val deadline = LocationDeadline.after(timeoutMs)
+        val preferredResult = locationOrNull {
+            block(preferred, deadline.preferredBudgetMs())
+        }
         if (preferredResult != null) {
             return preferredResult
         }
-        return runCatching {
-            block(fallback, fallbackTimeoutMs)
-        }.getOrNull()
+        val fallbackBudgetMs = deadline.remainingMs()
+        if (fallbackBudgetMs <= 0L) return null
+        return locationOrNull { block(fallback, fallbackBudgetMs) }
     }
 
-    private fun preferredTimeout(timeoutMs: Long): Long {
-        if (timeoutMs <= 1L) {
-            return 1L
+    private suspend fun locationOrNull(block: suspend () -> GeoPoint?): GeoPoint? {
+        return try {
+            block()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
         }
-        if (timeoutMs < 2_000L) {
-            return (timeoutMs / 2L).coerceAtLeast(1L)
-        }
-        return ((timeoutMs * 3L) / 5L).coerceAtLeast(1L)
     }
 }

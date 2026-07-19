@@ -17,6 +17,8 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
+import com.lavacrafter.maptimelinetool.LocationDeadline
+import kotlinx.coroutines.CancellationException
 
 class LocationSaveResolver(
     private val locationProvider: LocationProvider,
@@ -27,29 +29,31 @@ class LocationSaveResolver(
         timeoutMs: Long,
         nowMs: Long = System.currentTimeMillis()
     ): LocationSaveDecision {
-        val preciseTimeoutMs = preciseTimeout(timeoutMs)
-        val fallbackTimeoutMs = (timeoutMs - preciseTimeoutMs).coerceAtLeast(1L)
+        val deadline = LocationDeadline.after(timeoutMs)
 
-        val preciseLocation = runCatching {
-            locationProvider.getPreciseLocation(preciseTimeoutMs)
-        }.getOrNull()
+        val preciseLocation = locationOrNull {
+            locationProvider.getPreciseLocation(deadline.preferredBudgetMs())
+        }
         if (preciseLocation != null) {
             return policy.evaluate(preciseLocation, null, flow, nowMs)
         }
 
-        val fallbackLocation = runCatching {
-            locationProvider.getBestEffortLocation(fallbackTimeoutMs)
-        }.getOrNull()
+        val fallbackBudgetMs = deadline.remainingMs()
+        val fallbackLocation = if (fallbackBudgetMs > 0L) {
+            locationOrNull { locationProvider.getBestEffortLocation(fallbackBudgetMs) }
+        } else {
+            null
+        }
         return policy.evaluate(null, fallbackLocation, flow, nowMs)
     }
 
-    private fun preciseTimeout(timeoutMs: Long): Long {
-        if (timeoutMs <= 1L) {
-            return 1L
+    private suspend fun locationOrNull(block: suspend () -> com.lavacrafter.maptimelinetool.domain.model.GeoPoint?): com.lavacrafter.maptimelinetool.domain.model.GeoPoint? {
+        return try {
+            block()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
         }
-        if (timeoutMs < 2_000L) {
-            return (timeoutMs / 2L).coerceAtLeast(1L)
-        }
-        return ((timeoutMs * 3L) / 5L).coerceAtLeast(1L)
     }
 }

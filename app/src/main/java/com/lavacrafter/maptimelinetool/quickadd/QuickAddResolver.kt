@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.quickadd
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
+import kotlinx.coroutines.CancellationException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -39,9 +40,13 @@ class QuickAddResolver(
     }
 ) {
     suspend fun savePoint(timeoutMs: Long, clickTimeMs: Long = wallClockMs()): QuickAddResult {
-        val preciseLocation = runCatching {
+        val preciseLocation = try {
             locationProvider.getPreciseLocation(timeoutMs)
-        }.getOrNull()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
 
         val strictLocation = preciseLocation
             ?.toQuickAddLocation(

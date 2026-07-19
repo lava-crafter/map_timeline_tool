@@ -17,10 +17,16 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.data
 
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.Flow
 
-class PointRepository(private val dao: PointDao) : PointRepositoryGateway {
+class PointRepository(
+    private val database: AppDatabase,
+    private val dao: PointDao
+) : PointRepositoryGateway {
+    override suspend fun <T> inTransaction(block: suspend () -> T): T = database.withTransaction { block() }
+
     override fun observeAll(): Flow<List<com.lavacrafter.maptimelinetool.domain.model.Point>> =
         dao.observeAll().map { points -> points.map { it.toDomain() } }
 
@@ -29,8 +35,13 @@ class PointRepository(private val dao: PointDao) : PointRepositoryGateway {
     override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = dao.updateNoiseDb(pointId, noiseDb)
     override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.delete(point.toEntity())
     override suspend fun getAll() = dao.getAll().map { it.toDomain() }
+    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double) =
+        dao.findByImportKey(timestamp, latitude, longitude)?.toDomain()
+    override suspend fun getPageAfterId(afterId: Long, limit: Int) =
+        dao.getPageAfterId(afterId, limit.coerceIn(1, 10_000)).map { it.toDomain() }
 
     override fun observeTags() = dao.observeTags().map { tags -> tags.map { it.toDomain() } }
+    override suspend fun getAllTags() = dao.getAllTags().map { it.toDomain() }
     override suspend fun insertTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.insertTag(tag.toEntity())
     override suspend fun updateTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.updateTag(tag.toEntity())
     override suspend fun deleteTag(tagId: Long) = dao.deleteTag(tagId)

@@ -23,7 +23,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [PointEntity::class, TagEntity::class, PointTagCrossRef::class], version = 7, exportSchema = true)
+@Database(entities = [PointEntity::class, TagEntity::class, PointTagCrossRef::class], version = 8, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pointDao(): PointDao
 
@@ -68,8 +68,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_points_import_key ON points (timestamp, latitude, longitude)"
+                )
+            }
+        }
+
         @JvmField
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {

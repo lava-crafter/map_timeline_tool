@@ -541,4 +541,54 @@ class ZipExportImportTest {
         assertEquals(1, imported.importedPhotoCount)
         assertEquals(1, imported.missingPhotoCount)
     }
+
+    @Test
+    fun `zip export writes v2 manifest sections`() {
+        val output = ByteArrayOutputStream()
+        ZipExporter.export(
+            points = listOf(Point(timestamp = 1L, latitude = 1.0, longitude = 2.0, title = "A", note = "B")),
+            outputStream = output,
+            resolvePhotoFile = { null },
+            options = ZipExporter.ExportOptions(includePoints = true, includeTags = false, includeSensors = false, includePhotos = false),
+            settingsJsonProvider = { "{}" }
+        )
+
+        var manifest = ""
+        java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == "backup_manifest.json") {
+                    manifest = zip.readBytes().toString(Charsets.UTF_8)
+                }
+                zip.closeEntry()
+            }
+        }
+
+        assertTrue(manifest.contains("\"backup_version\":2"))
+        assertTrue(manifest.contains("\"points\":true"))
+        assertTrue(manifest.contains("\"tags\":false"))
+        assertTrue(manifest.contains("\"sensors\":false"))
+        assertTrue(manifest.contains("\"photos\":false"))
+        assertTrue(manifest.contains("\"settings\":true"))
+    }
+
+    @Test
+    fun `zip import rejects entries beyond configured decompression budget`() {
+        val archive = ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(archive).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("points.csv"))
+            zip.write("name,latitude,longitude\nA,1,2\n".toByteArray())
+            zip.closeEntry()
+        }
+
+        try {
+            ZipImporter.importZip(
+                inputStream = ByteArrayInputStream(archive.toByteArray()),
+                limits = ZipImportLimits(maxDataEntryBytes = 8)
+            ) { _, _ -> null }
+            throw AssertionError("Expected archive budget rejection")
+        } catch (_: ZipImportLimitExceededException) {
+            // Expected: the archive is valid ZIP but exceeds the configured safety budget.
+        }
+    }
 }

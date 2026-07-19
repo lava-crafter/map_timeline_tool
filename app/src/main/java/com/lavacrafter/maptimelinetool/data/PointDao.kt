@@ -42,11 +42,20 @@ interface PointDao {
     @Query("SELECT * FROM points ORDER BY timestamp ASC")
     suspend fun getAll(): List<PointEntity>
 
+    @Query("SELECT * FROM points WHERE timestamp = :timestamp AND latitude = :latitude AND longitude = :longitude LIMIT 1")
+    suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): PointEntity?
+
+    @Query("SELECT * FROM points WHERE id > :afterId ORDER BY id ASC LIMIT :limit")
+    suspend fun getPageAfterId(afterId: Long, limit: Int): List<PointEntity>
+
     @Query("UPDATE points SET noiseDb = :noiseDb WHERE id = :pointId")
     suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?)
 
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun observeTags(): Flow<List<TagEntity>>
+
+    @Query("SELECT * FROM tags ORDER BY name ASC")
+    suspend fun getAllTags(): List<TagEntity>
 
     @Insert
     suspend fun insertTag(tag: TagEntity): Long

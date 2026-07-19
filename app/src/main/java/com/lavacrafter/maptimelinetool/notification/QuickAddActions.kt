@@ -49,12 +49,16 @@ private const val QUICK_ADD_NOTIFICATION_CHANNEL_ID = "quick_add_channel"
 private const val QUICK_ADD_RESULT_CHANNEL_ID = "quick_add_result_channel_v2"
 
 internal fun Context.showQuickAddNotification() {
-    if (!areNotificationsEnabledCompat()) {
+    if (!canPostNotifications()) {
         return
     }
 
     val notification = buildQuickAddNotification()
-    NotificationManagerCompat.from(this).notify(QUICK_ADD_NOTIFICATION_ID, notification)
+    try {
+        NotificationManagerCompat.from(this).notify(QUICK_ADD_NOTIFICATION_ID, notification)
+    } catch (_: SecurityException) {
+        // Notification permission can be revoked after the availability check.
+    }
 }
 
 internal fun Context.cancelQuickAddNotification() {
@@ -126,7 +130,7 @@ private fun Context.showQuickAddResult(messageResId: Int) {
 }
 
 private fun Context.showQuickAddResultNotification(message: String) {
-    if (!areNotificationsEnabledCompat()) {
+    if (!canPostNotifications()) {
         return
     }
 
@@ -149,7 +153,11 @@ private fun Context.showQuickAddResultNotification(message: String) {
         .setTimeoutAfter(2000L)
         .build()
 
-    NotificationManagerCompat.from(this).notify(QUICK_ADD_RESULT_NOTIFICATION_ID, notification)
+    try {
+        NotificationManagerCompat.from(this).notify(QUICK_ADD_RESULT_NOTIFICATION_ID, notification)
+    } catch (_: SecurityException) {
+        // Notification permission can be revoked after the availability check.
+    }
 }
 
 private fun Context.buildQuickAddNotification(): Notification {
@@ -209,6 +217,12 @@ private fun Context.hasBackgroundLocationPermissionForQuickAdd(): Boolean {
 
 private fun Context.areNotificationsEnabledCompat(): Boolean {
     return NotificationManagerCompat.from(this).areNotificationsEnabled()
+}
+
+private fun Context.canPostNotifications(): Boolean {
+    if (!areNotificationsEnabledCompat()) return false
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun Context.ensureNotificationChannel(channelId: String, nameResId: Int, descriptionResId: Int) {

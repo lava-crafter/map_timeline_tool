@@ -16,8 +16,9 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool
 
-import android.annotation.SuppressLint
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
 import android.location.Location
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -75,8 +76,9 @@ class GoogleFusedLocationProvider(
     }
 
     override suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? {
+        val deadline = LocationDeadline.after(timeoutMs)
         val recentLastKnown = getLastLocation(
-            timeoutMs = timeoutMs,
+            timeoutMs = deadline.remainingMs(),
             maxAgeMs = MAX_LAST_KNOWN_LOCATION_AGE_MS,
             maxAccuracyMeters = MAX_LAST_KNOWN_ACCURACY_METERS
         )
@@ -84,21 +86,21 @@ class GoogleFusedLocationProvider(
             return recentLastKnown.toGeoPointAndCache(appContext)
         }
 
-        val fresh = getFreshLocation(timeoutMs)
+        val freshBudgetMs = deadline.remainingMs()
+        val fresh = if (freshBudgetMs > 0L) getFreshLocation(freshBudgetMs) else null
         if (fresh != null) {
             return fresh
         }
 
         return getLastLocation(
-            timeoutMs = timeoutMs,
+            timeoutMs = deadline.remainingMs(),
             maxAgeMs = MAX_STALE_LAST_KNOWN_LOCATION_AGE_MS,
             maxAccuracyMeters = MAX_STALE_LAST_KNOWN_ACCURACY_METERS
         )?.toGeoPointAndCache(appContext)
     }
 
-    @SuppressLint("MissingPermission")
     private suspend fun getCurrentLocation(timeoutMs: Long): Location? {
-        if (!isAvailable()) {
+        if (!isAvailable() || !hasLocationPermission()) {
             return null
         }
         val effectiveTimeoutMs = timeoutMs.coerceAtLeast(1L)
@@ -108,20 +110,29 @@ class GoogleFusedLocationProvider(
             .setMaxUpdateAgeMillis(0L)
             .build()
         val cancellationTokenSource = CancellationTokenSource()
-        return client.getCurrentLocation(request, cancellationTokenSource.token)
+        val task = try {
+            client.getCurrentLocation(request, cancellationTokenSource.token)
+        } catch (_: SecurityException) {
+            return null
+        }
+        return task
             .awaitResult(effectiveTimeoutMs, cancellationTokenSource)
     }
 
-    @SuppressLint("MissingPermission")
     private suspend fun getLastLocation(
         timeoutMs: Long,
         maxAgeMs: Long,
         maxAccuracyMeters: Float
     ): Location? {
-        if (!isAvailable()) {
+        if (!isAvailable() || !hasLocationPermission() || timeoutMs <= 0L) {
             return null
         }
-        val location = client.lastLocation.awaitResult(timeoutMs.coerceAtLeast(1L)) ?: return null
+        val task = try {
+            client.lastLocation
+        } catch (_: SecurityException) {
+            return null
+        }
+        val location = task.awaitResult(timeoutMs.coerceAtLeast(1L)) ?: return null
         return location.takeIf {
             isLocationAcceptable(
                 location = it,
@@ -136,6 +147,11 @@ class GoogleFusedLocationProvider(
         return runCatching {
             GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(appContext) == ConnectionResult.SUCCESS
         }.getOrDefault(false)
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        return appContext.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            appContext.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun isLocationAcceptable(

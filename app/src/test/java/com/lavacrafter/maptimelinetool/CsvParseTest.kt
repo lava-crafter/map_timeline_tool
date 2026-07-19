@@ -22,6 +22,8 @@ import com.lavacrafter.maptimelinetool.export.CsvImporter
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import java.io.StringReader
 
 class CsvParseTest {
     @Test
@@ -89,5 +91,26 @@ class CsvParseTest {
         assertEquals("", points[1].note)
         assertNull(points[1].locationProvider)
         assertNull(points[1].photoPath)
+    }
+
+    @Test
+    fun forEachPoint_streamsRecordsAndRejectsOversizedFields() {
+        val titles = mutableListOf<String>()
+        CsvImporter.forEachPoint(
+            StringReader("name,latitude,longitude\nOne,1,2\nTwo,3,4\n")
+        ) { point ->
+            titles += point.title
+        }
+        assertEquals(listOf("One", "Two"), titles)
+
+        try {
+            CsvImporter.forEachPoint(
+                StringReader("name,latitude,longitude\n${"a".repeat(20)},1,2\n"),
+                limits = CsvImporter.Limits(maxFieldChars = 10)
+            ) { }
+            throw AssertionError("Expected CSV field budget rejection")
+        } catch (_: IllegalArgumentException) {
+            assertTrue(true)
+        }
     }
 }

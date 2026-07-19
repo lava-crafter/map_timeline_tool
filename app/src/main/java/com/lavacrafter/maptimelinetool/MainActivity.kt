@@ -79,6 +79,7 @@ import com.lavacrafter.maptimelinetool.export.KmlExporter
 import com.lavacrafter.maptimelinetool.export.KmzExporter
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.export.ZipImporter
+import com.lavacrafter.maptimelinetool.export.ZipImportLimits
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
 import com.lavacrafter.maptimelinetool.ui.ExportScreens
@@ -396,7 +397,7 @@ class MainActivity : AppCompatActivity() {
                         runCatching {
                             val importedPoints = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8))
+                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8)) { null }
                                 } ?: emptyList()
                             }
                             viewModel.importPoints(importedPoints)
@@ -410,26 +411,46 @@ class MainActivity : AppCompatActivity() {
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
                         val importedPhotoPaths = mutableListOf<String>()
+                        var photoStagingDir: java.io.File? = null
+                        var dataImportCommitted = false
                         runCatching {
                             val imported = withContext(Dispatchers.IO) {
+                                photoStagingDir = createPointPhotoImportStagingDir(context)
+                                val availableBytes = requireNotNull(photoStagingDir).usableSpace
+                                val reservedBytes = 64L * 1024L * 1024L
+                                if (availableBytes <= reservedBytes) {
+                                    throw IOException("Not enough storage available for import staging")
+                                }
+                                val totalBudget = minOf(
+                                    2L * 1024L * 1024L * 1024L,
+                                    availableBytes - reservedBytes
+                                )
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    ZipImporter.importZip(input) { entryName, photoInput ->
-                                        runCatching {
-                                            val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
-                                            val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
-                                            val importedPhotoFile = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
-                                            importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
-                                            toStoredPhotoPath(importedPhotoFile).also { importedPhotoPaths += it }
-                                        }.getOrNull()
-                                    }
-                                } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0, null)
+                                    ZipImporter.importZip(input, limits = ZipImportLimits(
+                                        maxPhotoBytes = minOf(128L * 1024L * 1024L, totalBudget),
+                                        maxTotalBytes = totalBudget
+                                    ), savePhoto = { entryName, photoInput ->
+                                        val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
+                                        val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
+                                        val importedPhotoFile = java.io.File(requireNotNull(photoStagingDir), "point_photo_${UUID.randomUUID()}.$safeExt")
+                                        importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
+                                        importedPhotoFile.name
+                                    })
+                                } ?: throw IOException("Failed to open import")
+                            }
+                            withContext(Dispatchers.IO) {
+                                val stagingFiles = requireNotNull(photoStagingDir).listFiles()?.toList().orEmpty()
+                                importedPhotoPaths += commitPointPhotoImport(context, stagingFiles)
+                                deletePointPhotoImportStagingDir(photoStagingDir)
                             }
                             val importResult = viewModel.importZipData(imported)
-                            imported.settingsJson?.let { json ->
+                            dataImportCommitted = true
+                            imported.settingsJson?.takeIf { imported.manifest.sections.settings }?.let { json ->
                                 val restored = SettingsStore.importBackupJson(
                                     context,
                                     json,
-                                    importResult.legacyTagIdToActualId
+                                    importResult.legacyTagIdToActualId,
+                                    restoreTagSettings = imported.manifest.sections.tags
                                 )
                                 if (restored) {
                                     settingsViewModel.reloadFromStore()
@@ -438,8 +459,11 @@ class MainActivity : AppCompatActivity() {
                             }
                             Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
                         }.onFailure {
-                            scope.launch(Dispatchers.IO) {
-                                importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
+                            if (!dataImportCommitted) {
+                                scope.launch(Dispatchers.IO) {
+                                    importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
+                                    deletePointPhotoImportStagingDir(photoStagingDir)
+                                }
                             }
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }

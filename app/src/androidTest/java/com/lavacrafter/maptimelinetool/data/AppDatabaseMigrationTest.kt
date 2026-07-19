@@ -192,6 +192,37 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migrate7To8_addsImportKeyIndexWithoutChangingPoints() {
+        runMigrationTest(startVersion = 7, dbName = "migration-test-v7.db") { db ->
+            createLegacyTagsSchema(db)
+            createPointsTableV6(db)
+            db.execSQL("ALTER TABLE points ADD COLUMN locationAccuracyMeters REAL")
+            db.execSQL("ALTER TABLE points ADD COLUMN locationFixTimeMs INTEGER")
+            db.execSQL("ALTER TABLE points ADD COLUMN locationProvider TEXT")
+            db.insertOrThrow(
+                "points",
+                null,
+                ContentValues().apply {
+                    put("timestamp", 1710000004000L)
+                    put("latitude", 14.1)
+                    put("longitude", 24.2)
+                    put("title", "Legacy V7")
+                    put("note", "index")
+                }
+            )
+        }
+
+        migrateAndAssert("migration-test-v7.db") { point, db ->
+            assertEquals("Legacy V7", point.title)
+            db.openHelper.readableDatabase.query("PRAGMA index_list(points)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                assertTrue(generateSequence { if (cursor.moveToNext()) cursor.getString(nameIndex) else null }
+                    .contains("index_points_import_key"))
+            }
+        }
+    }
+
     private fun runMigrationTest(
         startVersion: Int,
         dbName: String,

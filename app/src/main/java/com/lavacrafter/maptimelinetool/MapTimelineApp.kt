@@ -67,8 +67,10 @@ class AppGraph(
 ) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private val database: AppDatabase by lazy { AppDatabase.get(app) }
+
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
-        PointRepository(AppDatabase.get(app).pointDao())
+        PointRepository(database, database.pointDao())
     }
 
     val settingsManagementUseCase: SettingsManagementUseCase by lazy {

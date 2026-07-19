@@ -67,6 +67,17 @@ object ZipExporter {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         val includeTagsInArchive = options.includePoints && options.includeTags
+        val usedTagIds = if (includeTagsInArchive) {
+            val exportedPointIds = points.asSequence().map { it.id }.toSet()
+            pointTagIdsByPointId
+                .filterKeys { exportedPointIds.contains(it) }
+                .values
+                .flatten()
+                .toSet()
+        } else {
+            emptySet()
+        }
+        val filteredTags = tags.filter { usedTagIds.contains(it.id) }
         val photoEntries = mutableMapOf<String, File>()
         val pointPhotoMeta = points.map { point ->
             buildPhotoMeta(
@@ -78,6 +89,23 @@ object ZipExporter {
         }
 
         ZipOutputStream(outputStream.buffered()).use { zip ->
+            val settingsJson = settingsJsonProvider?.invoke()?.takeIf { it.isNotBlank() }
+            val manifestJson = buildBackupManifestJson(
+                createdAtUtc = sdf.format(Date()),
+                appVersion = appVersion.orEmpty(),
+                includePoints = options.includePoints,
+                includeTags = includeTagsInArchive,
+                includeSensors = options.includeSensors,
+                includePhotos = options.includePhotos,
+                includeSettings = settingsJson != null,
+                pointCount = if (options.includePoints) points.size else 0,
+                tagCount = filteredTags.size,
+                photoCount = photoEntries.size
+            )
+            zip.putNextEntry(ZipEntry("backup_manifest.json"))
+            zip.write(manifestJson.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
             if (options.includePoints) {
                 zip.putNextEntry(ZipEntry("points.csv"))
                 val writer = OutputStreamWriter(zip, Charsets.UTF_8)
@@ -130,17 +158,7 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
-            var exportedTagCount = 0
             if (includeTagsInArchive) {
-                val pointsWithIndex = points.withIndex().associate { (index, point) -> point.id to index }
-                val usedTagIds = pointTagIdsByPointId
-                    .filterKeys { pointsWithIndex.containsKey(it) }
-                    .values
-                    .flatten()
-                    .toSet()
-                val filteredTags = tags.filter { usedTagIds.contains(it.id) }
-                exportedTagCount = filteredTags.size
-
                 zip.putNextEntry(ZipEntry("tags.csv"))
                 val tagWriter = OutputStreamWriter(zip, Charsets.UTF_8)
                 CsvExporter.writeRow(tagWriter, listOf("tag_id", "name"))
@@ -168,22 +186,6 @@ object ZipExporter {
                 file.inputStream().buffered().use { input -> input.copyTo(zip) }
                 zip.closeEntry()
             }
-
-            val settingsJson = settingsJsonProvider?.invoke()?.takeIf { it.isNotBlank() }
-            val manifestJson = buildBackupManifestJson(
-                createdAtUtc = sdf.format(Date()),
-                appVersion = appVersion.orEmpty(),
-                includePoints = options.includePoints,
-                includeTags = includeTagsInArchive,
-                includePhotos = options.includePhotos,
-                includeSettings = settingsJson != null,
-                pointCount = if (options.includePoints) points.size else 0,
-                tagCount = if (includeTagsInArchive) exportedTagCount else 0,
-                photoCount = photoEntries.size
-            )
-            zip.putNextEntry(ZipEntry("backup_manifest.json"))
-            zip.write(manifestJson.toByteArray(Charsets.UTF_8))
-            zip.closeEntry()
 
             if (settingsJson != null) {
                 zip.putNextEntry(ZipEntry("settings.json"))
@@ -264,6 +266,7 @@ object ZipExporter {
         appVersion: String,
         includePoints: Boolean,
         includeTags: Boolean,
+        includeSensors: Boolean,
         includePhotos: Boolean,
         includeSettings: Boolean,
         pointCount: Int,
@@ -272,12 +275,13 @@ object ZipExporter {
     ): String {
         return buildString {
             append('{')
-            append("\"backup_version\":1,")
+            append("\"backup_version\":2,")
             append("\"created_at_utc\":\"").append(jsonEscape(createdAtUtc)).append("\",")
             append("\"app_version\":\"").append(jsonEscape(appVersion)).append("\",")
             append("\"sections\":{")
             append("\"points\":").append(includePoints).append(',')
             append("\"tags\":").append(includeTags).append(',')
+            append("\"sensors\":").append(includeSensors).append(',')
             append("\"photos\":").append(includePhotos).append(',')
             append("\"settings\":").append(includeSettings)
             append("},\"counts\":{")

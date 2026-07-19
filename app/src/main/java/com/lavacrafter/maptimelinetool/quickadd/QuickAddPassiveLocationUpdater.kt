@@ -54,10 +54,13 @@ class QuickAddPassiveLocationUpdater(
 
     private fun register() {
         val manager = locationManager ?: return
+        if (!hasPreciseLocationPermission() || !hasBackgroundLocationPermission()) {
+            return
+        }
         if (!runCatching { manager.allProviders.contains(LocationManager.PASSIVE_PROVIDER) }.getOrDefault(false)) {
             return
         }
-        runCatching {
+        try {
             manager.requestLocationUpdates(
                 LocationManager.PASSIVE_PROVIDER,
                 0L,
@@ -65,8 +68,9 @@ class QuickAddPassiveLocationUpdater(
                 listener,
                 Looper.getMainLooper()
             )
-        }.onSuccess {
             registered = true
+        } catch (_: SecurityException) {
+            registered = false
         }
     }
 

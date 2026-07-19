@@ -84,8 +84,11 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = Unit
     override suspend fun delete(point: Point) = Unit
     override suspend fun getAll(): List<Point> = emptyList()
+    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point? = null
+    override suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point> = emptyList()
 
     override fun observeTags(): Flow<List<Tag>> = flowOf(emptyList())
+    override suspend fun getAllTags(): List<Tag> = emptyList()
     override suspend fun insertTag(tag: Tag): Long {
         lastInsertedTag = tag
         return 7L

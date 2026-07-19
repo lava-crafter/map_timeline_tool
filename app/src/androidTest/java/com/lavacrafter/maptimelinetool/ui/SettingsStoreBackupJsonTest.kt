@@ -55,6 +55,20 @@ class SettingsStoreBackupJsonTest {
     }
 
     @Test
+    fun sanitizeBackupJsonForImport_preservesLocalTagPreferencesWhenArchiveHasNoTags() {
+        val sanitized = SettingsStore.sanitizeBackupJsonForImport(
+            json = """{"default_tags":[10],"pinned_tags":[20],"recent_tags":[30],"timeout_seconds":25}""",
+            restoreTagSettings = false
+        )
+
+        val root = JSONObject(requireNotNull(sanitized))
+        assertFalse(root.has("default_tags"))
+        assertFalse(root.has("pinned_tags"))
+        assertFalse(root.has("recent_tags"))
+        assertEquals(25, root.getInt("timeout_seconds"))
+    }
+
+    @Test
     fun sanitizeBackupJsonForImport_returnsNullForInvalidJson() {
         val sanitized = SettingsStore.sanitizeBackupJsonForImport("not-json")
 

@@ -2,11 +2,11 @@
 
 **Language**: English | [中文](#中文说明)
 
-Map Timeline Tool is an offline-first Android app for manually logging points. Your points, photos, and settings stay on the device unless you export or share them. Before changing devices, create a full ZIP backup from **Settings → Backup and Restore**.
+Map Timeline Tool is an offline-first Android app for manually logging points. Your points, photos, and settings stay in the app sandbox; if you enable Android system backup or device transfer, Android may back up or transfer them through your device's configured system backup destination. You can also manually create a full ZIP backup from **Settings → Backup and Restore**.
 
 - Repository: https://github.com/muchenjiang/map_timeline_tool
 - Google Play: https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
-- Current app version: **0.1.7**
+- Current app version: **0.1.8**
 
 ## Highlights
 - Manual point logging with timestamp, coordinates, title, note, tags, optional photo, and location-quality metadata.
@@ -87,11 +87,11 @@ AI tools were used to help with parts of the development. Final decisions, revie
 
 # 中文说明
 
-Map Timeline Tool 是一款离线优先的 Android 手动打点应用。除非你主动导出或分享，点位、照片和设置都会保存在设备本地。更换设备前，建议先在 **设置 → 备份与恢复** 中创建完整 ZIP 备份。
+Map Timeline Tool 是一款离线优先的 Android 手动打点应用。点位、照片和设置保存在应用沙箱中；如果你启用了 Android 系统备份或设备迁移，Android 可能通过设备已配置的系统备份目的地备份或迁移这些数据。你也可以在 **设置 → 备份与恢复** 中手动创建完整 ZIP 备份。
 
 - 项目仓库：https://github.com/muchenjiang/map_timeline_tool
 - Google Play：https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
-- 当前应用版本：**0.1.7**
+- 当前应用版本：**0.1.8**
 
 ## 主要功能
 - 手动打点：记录时间、经纬度、标题、备注、标签、可选照片，以及定位质量元数据。

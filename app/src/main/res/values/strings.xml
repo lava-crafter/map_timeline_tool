@@ -110,7 +110,7 @@
     <string name="label_photo_size">Photo size: %1$s</string>
     <string name="settings_title">Settings</string>
     <string name="settings_help_title">Help</string>
-    <string name="settings_help_overview">Points, photos, and settings stay on this device unless you export or share them. Before changing devices, create a full ZIP backup from Backup and Restore. Help buttons explain permissions, formats, caching, and downloads.</string>
+    <string name="settings_help_overview">Points, photos, and settings are stored in the app sandbox. If Android system backup or device transfer is enabled on this device, Android may back up or transfer this data through the configured system destination. You can also create a full ZIP backup from Backup and Restore. Help buttons explain permissions, formats, caching, and downloads.</string>
     <string name="settings_theme_label">Dark theme</string>
     <string name="settings_theme_follow_system">Follow system</string>
     <string name="settings_theme_follow_system_hint">Follow system — controls dark theme</string>
@@ -180,7 +180,7 @@
     <string name="about_ai_title">AI support</string>
     <string name="about_ai_text">This project was developed with help from AI tools.</string>
     <string name="about_version">Version: %1$s</string>
-    <string name="about_summary">Offline-first point logging for travel notes, field visits, and personal map timelines. Your local data stays on device unless you export or share it.</string>
+    <string name="about_summary">Offline-first point logging for travel notes, field visits, and personal map timelines. Data stays in the app sandbox; Android may include it in system backup or device transfer when enabled on your device.</string>
     <string name="about_backup_tip">Before moving to a new device, create a full ZIP backup from Settings → Backup and Restore.</string>
     <string name="about_open_repository">Open project repository</string>
     <string name="about_open_play">Open Google Play page</string>
