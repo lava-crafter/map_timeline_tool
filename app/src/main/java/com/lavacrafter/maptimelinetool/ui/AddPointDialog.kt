@@ -44,8 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
-import com.lavacrafter.maptimelinetool.text.sanitizePointNote
-import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
+import com.lavacrafter.maptimelinetool.text.normalizePointNoteForEditing
+import com.lavacrafter.maptimelinetool.text.normalizePointTitleForEditing
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -106,7 +106,7 @@ fun AddPointDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = {
-                        onTitleChange(sanitizePointTitle(it))
+                        onTitleChange(normalizePointTitleForEditing(it))
                         onUserTyping()
                     },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
@@ -118,7 +118,7 @@ fun AddPointDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = {
-                        onNoteChange(sanitizePointNote(it))
+                        onNoteChange(normalizePointNoteForEditing(it))
                         onUserTyping()
                     },
                     label = { Text(stringResource(R.string.dialog_note_label)) },

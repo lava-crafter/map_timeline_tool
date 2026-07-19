@@ -45,7 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
-import com.lavacrafter.maptimelinetool.text.sanitizeTagName
+import com.lavacrafter.maptimelinetool.text.normalizeTagNameForEditing
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -68,7 +68,7 @@ fun TagListScreen(
         Row(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = newTag,
-                onValueChange = { newTag = sanitizeTagName(it) },
+                onValueChange = { newTag = normalizeTagNameForEditing(it) },
                 label = { Text(stringResource(R.string.label_new_tag)) },
                 modifier = Modifier.weight(1f),
                 singleLine = true
