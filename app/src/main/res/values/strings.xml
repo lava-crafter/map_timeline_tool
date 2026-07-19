@@ -34,6 +34,11 @@
     <string name="action_retake_photo">Retake</string>
     <string name="action_remove_photo">Remove photo</string>
     <string name="action_view_photo">View photo</string>
+    <string name="action_share_photo">Share photo</string>
+    <string name="photo_share_chooser_title">Share photo</string>
+    <string name="toast_photo_unavailable">Photo file is unavailable</string>
+    <string name="toast_no_photo_viewer">No app is available to view this photo</string>
+    <string name="toast_photo_share_failed">Unable to share this photo</string>
     <string name="action_add">Add</string>
     <string name="action_done">Done</string>
     <string name="action_add_point_to_tag">Add points</string>

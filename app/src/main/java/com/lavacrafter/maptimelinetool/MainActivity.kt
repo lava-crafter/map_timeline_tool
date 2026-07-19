@@ -159,7 +159,6 @@ class MainActivity : AppCompatActivity() {
                 var pendingAddPhotoPath by remember { mutableStateOf<String?>(null) }
                 var pendingAddPhotoUri by remember { mutableStateOf<Uri?>(null) }
                 var pendingLocationPermissionAction by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
-                var previewPhotoPath by remember { mutableStateOf<String?>(null) }
                 var remainingSeconds by remember { mutableStateOf(settingsState.timeoutSeconds) }
                 var isCountdownPaused by remember { mutableStateOf(false) }
                 var lastTypingTime by remember { mutableStateOf<Long?>(null) }
@@ -198,6 +197,29 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val scope = rememberCoroutineScope()
+                val showPhotoActionFailure: (PointPhotoExternalActionResult, Boolean) -> Unit = { result, isShare ->
+                    val message = when (result) {
+                        PointPhotoExternalActionResult.LAUNCHED -> null
+                        PointPhotoExternalActionResult.PHOTO_UNAVAILABLE -> context.getString(R.string.toast_photo_unavailable)
+                        PointPhotoExternalActionResult.NO_HANDLER -> context.getString(
+                            if (isShare) R.string.toast_photo_share_failed else R.string.toast_no_photo_viewer
+                        )
+                    }
+                    message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                }
+                val viewPhoto: (String?) -> Unit = { photoPath ->
+                    showPhotoActionFailure(launchPointPhotoViewer(context, photoPath), false)
+                }
+                val sharePhoto: (String?) -> Unit = { photoPath ->
+                    showPhotoActionFailure(
+                        launchPointPhotoShare(
+                            context,
+                            photoPath,
+                            context.getString(R.string.photo_share_chooser_title)
+                        ),
+                        true
+                    )
+                }
                 var pendingManualSaveConfirmation by remember { mutableStateOf<PendingManualSaveConfirmation?>(null) }
                 var pendingExportPayload by remember { mutableStateOf<PendingExportPayload?>(null) }
                 var pendingExportSelection by remember { mutableStateOf<ExportSelection?>(null) }
@@ -1301,9 +1323,8 @@ class MainActivity : AppCompatActivity() {
                             pendingAddPhotoUri = null
                             deletePhotoOnIo(oldPath)
                         },
-                        onViewPhoto = {
-                            previewPhotoPath = pendingAddPhotoPath
-                        },
+                        onViewPhoto = { viewPhoto(pendingAddPhotoPath) },
+                        onSharePhoto = { sharePhoto(pendingAddPhotoPath) },
                         onDismiss = {
                             resetPendingAddDialogState(clearPendingPhoto = true)
                         },
@@ -1449,9 +1470,8 @@ class MainActivity : AppCompatActivity() {
                             clearReplacedEditingPhoto()
                             editingPointPhotoPath = null
                         },
-                        onViewPhoto = {
-                            previewPhotoPath = editingPointPhotoPath
-                        },
+                        onViewPhoto = { viewPhoto(editingPointPhotoPath) },
+                        onSharePhoto = { sharePhoto(editingPointPhotoPath) },
                         onSave = { title, note, photoPath ->
                             scope.launch {
                                 val persistedPhotoPath = if (photoPath == point.photoPath) {
@@ -1472,14 +1492,6 @@ class MainActivity : AppCompatActivity() {
                             clearUnsavedEditingPhoto()
                             resetEditingPointState()
                         }
-                    )
-                }
-
-                val activePreviewPhotoPath = previewPhotoPath
-                if (!activePreviewPhotoPath.isNullOrBlank()) {
-                    PhotoPreviewDialog(
-                        photoPath = activePreviewPhotoPath,
-                        onDismiss = { previewPhotoPath = null }
                     )
                 }
 

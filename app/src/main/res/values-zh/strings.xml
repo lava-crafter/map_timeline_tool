@@ -31,6 +31,11 @@
     <string name="action_retake_photo">重拍</string>
     <string name="action_remove_photo">移除照片</string>
     <string name="action_view_photo">查看照片</string>
+    <string name="action_share_photo">分享照片</string>
+    <string name="photo_share_chooser_title">分享照片</string>
+    <string name="toast_photo_unavailable">照片文件不可用</string>
+    <string name="toast_no_photo_viewer">没有可查看此照片的应用</string>
+    <string name="toast_photo_share_failed">无法分享此照片</string>
     <string name="action_add">新增</string>
     <string name="action_done">完成</string>
     <string name="action_add_point_to_tag">添加打点</string>

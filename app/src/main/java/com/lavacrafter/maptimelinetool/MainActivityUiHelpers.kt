@@ -17,12 +17,9 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,12 +40,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.exifinterface.media.ExifInterface
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.ui.ListScreen
@@ -168,48 +161,6 @@ internal fun ZipExportOptionsDialog(
             }
         }
     )
-}
-
-@Composable
-internal fun PhotoPreviewDialog(
-    photoPath: String,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val photoFile = remember(photoPath) { resolvePointPhotoFile(context, photoPath) }
-    val bitmap = remember(photoFile?.absolutePath) {
-        photoFile?.takeIf { it.exists() && it.isFile && it.canRead() }?.let { file ->
-            decodePreviewBitmap(file)
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
-        },
-        title = { Text(stringResource(R.string.action_view_photo)) },
-        text = {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = stringResource(R.string.action_view_photo),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Text(stringResource(R.string.label_photo_not_added))
-            }
-        }
-    )
-}
-
-private fun decodePreviewBitmap(file: java.io.File): Bitmap? {
-    val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return null
-    val orientation = runCatching {
-        ExifInterface(file.absolutePath)
-            .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-    return applyExifOrientation(decoded, orientation)
 }
 
 enum class NetworkStatus { WIFI, CELLULAR, NONE }
