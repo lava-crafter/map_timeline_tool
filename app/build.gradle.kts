@@ -214,8 +214,8 @@ android {
         applicationId = "com.lavacrafter.maptimelinetool"
         minSdk = 24
         targetSdk = 37
-        versionCode = 21
-        versionName = "0.1.8"
+        versionCode = 22
+        versionName = "0.1.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
