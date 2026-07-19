@@ -51,6 +51,8 @@ import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
+import com.lavacrafter.maptimelinetool.text.normalizePointNoteForEditing
+import com.lavacrafter.maptimelinetool.text.normalizePointTitleForEditing
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -67,6 +69,7 @@ fun EditPointDialog(
     onRetakePhoto: () -> Unit,
     onRemovePhoto: () -> Unit,
     onViewPhoto: () -> Unit,
+    onSharePhoto: () -> Unit,
     onSave: (String, String, String?) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
@@ -104,14 +107,14 @@ fun EditPointDialog(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = sanitizePointTitle(it) },
+                    onValueChange = { title = normalizePointTitleForEditing(it) },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = note,
-                    onValueChange = { note = sanitizePointNote(it) },
+                    onValueChange = { note = normalizePointNoteForEditing(it) },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -143,6 +146,9 @@ fun EditPointDialog(
                         }
                         OutlinedButton(onClick = onViewPhoto) {
                             Text(stringResource(R.string.action_view_photo))
+                        }
+                        OutlinedButton(onClick = onSharePhoto) {
+                            Text(stringResource(R.string.action_share_photo))
                         }
                     }
                 }

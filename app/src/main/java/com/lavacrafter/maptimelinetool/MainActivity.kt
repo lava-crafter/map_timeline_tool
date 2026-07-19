@@ -17,15 +17,15 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.Manifest
-import android.content.Intent
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.net.Uri
-import android.os.Bundle
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.Build
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
@@ -36,18 +36,12 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.NavigationBar
@@ -56,25 +50,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
-import androidx.exifinterface.media.ExifInterface
 import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
@@ -88,6 +79,7 @@ import com.lavacrafter.maptimelinetool.export.KmlExporter
 import com.lavacrafter.maptimelinetool.export.KmzExporter
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.export.ZipImporter
+import com.lavacrafter.maptimelinetool.export.ZipImportLimits
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
 import com.lavacrafter.maptimelinetool.ui.ExportScreens
@@ -100,7 +92,6 @@ import com.lavacrafter.maptimelinetool.ui.AppViewModel
 import com.lavacrafter.maptimelinetool.ui.EditPointDialog
 import com.lavacrafter.maptimelinetool.ui.EditTagDialog
 import com.lavacrafter.maptimelinetool.ui.ListScreen
-import com.lavacrafter.maptimelinetool.ui.MapScreen
 import com.lavacrafter.maptimelinetool.ui.MapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.TagDetailScreen
 import com.lavacrafter.maptimelinetool.ui.TagListScreen
@@ -113,8 +104,17 @@ import com.lavacrafter.maptimelinetool.ui.downloadTileSourceById
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
 import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
-import com.lavacrafter.maptimelinetool.notification.showQuickAddNotification
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
+import com.lavacrafter.maptimelinetool.notification.ACTION_QUICK_ADD
+import com.lavacrafter.maptimelinetool.notification.performQuickAdd
+import com.lavacrafter.maptimelinetool.notification.syncQuickAddNotification
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddEnableAction
+import com.lavacrafter.maptimelinetool.quickadd.resolveQuickAddEnableAction
 import com.lavacrafter.maptimelinetool.ui.theme.MapTimelineToolTheme
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.text.SimpleDateFormat
@@ -124,35 +124,10 @@ import java.util.UUID
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.modules.SqlTileWriter
 
-private suspend fun buildPointTagNameMap(
-    viewModel: AppViewModel,
-    points: List<com.lavacrafter.maptimelinetool.domain.model.Point>
-): Map<Long, List<String>> {
-    val tags = viewModel.tags.first()
-    val tagNamesById = tags.associate { it.id to it.name }
-    val result = mutableMapOf<Long, List<String>>()
-    points.forEach { point ->
-        val tagNames = viewModel.getTagIdsForPoint(point.id)
-            .mapNotNull { tagId -> tagNamesById[tagId] }
-            .filter { it.isNotBlank() }
-        if (tagNames.isNotEmpty()) {
-            result[point.id] = tagNames
-        }
-    }
-    return result
-}
-
-private enum class ExportFileKind {
-    CSV,
-    GEOJSON,
-    KML,
-    ZIP,
-    KMZ
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
     private val graph by lazy { applicationContext.appGraph() }
+    private val quickAddRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val viewModel: AppViewModel by viewModels {
         AppViewModel.factory(application, graph)
     }
@@ -184,12 +159,24 @@ class MainActivity : AppCompatActivity() {
                 var newPointNote by remember { mutableStateOf("") }
                 var pendingAddPhotoPath by remember { mutableStateOf<String?>(null) }
                 var pendingAddPhotoUri by remember { mutableStateOf<Uri?>(null) }
-                var previewPhotoPath by remember { mutableStateOf<String?>(null) }
+                var pendingLocationPermissionAction by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
                 var remainingSeconds by remember { mutableStateOf(settingsState.timeoutSeconds) }
                 var isCountdownPaused by remember { mutableStateOf(false) }
                 var lastTypingTime by remember { mutableStateOf<Long?>(null) }
                 val scaffoldState = rememberBottomSheetScaffoldState()
                 val sheetState = scaffoldState.bottomSheetState
+                var tab by remember { mutableStateOf(0) }
+                var showAbout by remember { mutableStateOf(false) }
+                var showDialog by remember { mutableStateOf(false) }
+                var pendingTimestamp by remember { mutableStateOf<Long?>(null) }
+                var selectedPointId by remember { mutableStateOf<Long?>(null) }
+                var editingPoint by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.PointEntity?>(null) }
+                var editingPointTagIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+                var editingPointPhotoPath by remember { mutableStateOf<String?>(null) }
+                var editingCaptureCandidatePhotoPath by remember { mutableStateOf<String?>(null) }
+                var pendingEditPhotoUri by remember { mutableStateOf<Uri?>(null) }
+                var editingTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
+                var selectedTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
 
                 val recordRecentTag: (Long) -> Unit = { tagId ->
                     settingsViewModel.addRecentTagId(tagId)
@@ -211,14 +198,30 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val scope = rememberCoroutineScope()
-                data class PendingExportPayload(
-                    val points: List<com.lavacrafter.maptimelinetool.domain.model.Point>,
-                    val kind: ExportFileKind,
-                    val zip: Boolean,
-                    val zipOptions: ZipExporter.ExportOptions = ZipExporter.ExportOptions(),
-                    val zipTags: List<ZipExporter.TagRecord> = emptyList(),
-                    val pointTagIdsByPointId: Map<Long, List<Long>> = emptyMap()
-                )
+                val showPhotoActionFailure: (PointPhotoExternalActionResult, Boolean) -> Unit = { result, isShare ->
+                    val message = when (result) {
+                        PointPhotoExternalActionResult.LAUNCHED -> null
+                        PointPhotoExternalActionResult.PHOTO_UNAVAILABLE -> context.getString(R.string.toast_photo_unavailable)
+                        PointPhotoExternalActionResult.NO_HANDLER -> context.getString(
+                            if (isShare) R.string.toast_photo_share_failed else R.string.toast_no_photo_viewer
+                        )
+                    }
+                    message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                }
+                val viewPhoto: (String?) -> Unit = { photoPath ->
+                    showPhotoActionFailure(launchPointPhotoViewer(context, photoPath), false)
+                }
+                val sharePhoto: (String?) -> Unit = { photoPath ->
+                    showPhotoActionFailure(
+                        launchPointPhotoShare(
+                            context,
+                            photoPath,
+                            context.getString(R.string.photo_share_chooser_title)
+                        ),
+                        true
+                    )
+                }
+                var pendingManualSaveConfirmation by remember { mutableStateOf<PendingManualSaveConfirmation?>(null) }
                 var pendingExportPayload by remember { mutableStateOf<PendingExportPayload?>(null) }
                 var pendingExportSelection by remember { mutableStateOf<ExportSelection?>(null) }
                 var zipIncludePoints by remember { mutableStateOf(true) }
@@ -394,7 +397,7 @@ class MainActivity : AppCompatActivity() {
                         runCatching {
                             val importedPoints = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8))
+                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8)) { null }
                                 } ?: emptyList()
                             }
                             viewModel.importPoints(importedPoints)
@@ -408,23 +411,47 @@ class MainActivity : AppCompatActivity() {
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
                         val importedPhotoPaths = mutableListOf<String>()
+                        var photoStagingDir: java.io.File? = null
+                        var dataImportCommitted = false
                         runCatching {
                             val imported = withContext(Dispatchers.IO) {
+                                photoStagingDir = createPointPhotoImportStagingDir(context)
+                                val availableBytes = requireNotNull(photoStagingDir).usableSpace
+                                val reservedBytes = 64L * 1024L * 1024L
+                                if (availableBytes <= reservedBytes) {
+                                    throw IOException("Not enough storage available for import staging")
+                                }
+                                val totalBudget = minOf(
+                                    2L * 1024L * 1024L * 1024L,
+                                    availableBytes - reservedBytes
+                                )
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    ZipImporter.importZip(input) { entryName, photoInput ->
-                                        runCatching {
-                                            val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
-                                            val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
-                                            val importedPhotoFile = java.io.File(getPointPhotoDir(context), "point_photo_${UUID.randomUUID()}.$safeExt")
-                                            importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
-                                            toStoredPhotoPath(importedPhotoFile).also { importedPhotoPaths += it }
-                                        }.getOrNull()
-                                    }
-                                } ?: ZipImporter.ImportStats(emptyList(), emptyList(), emptyList(), 0, 0, null)
+                                    ZipImporter.importZip(input, limits = ZipImportLimits(
+                                        maxPhotoBytes = minOf(128L * 1024L * 1024L, totalBudget),
+                                        maxTotalBytes = totalBudget
+                                    ), savePhoto = { entryName, photoInput ->
+                                        val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
+                                        val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
+                                        val importedPhotoFile = java.io.File(requireNotNull(photoStagingDir), "point_photo_${UUID.randomUUID()}.$safeExt")
+                                        importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
+                                        importedPhotoFile.name
+                                    })
+                                } ?: throw IOException("Failed to open import")
                             }
-                            viewModel.importZipData(imported)
-                            imported.settingsJson?.let { json ->
-                                val restored = SettingsStore.importBackupJson(context, json)
+                            withContext(Dispatchers.IO) {
+                                val stagingFiles = requireNotNull(photoStagingDir).listFiles()?.toList().orEmpty()
+                                importedPhotoPaths += commitPointPhotoImport(context, stagingFiles)
+                                deletePointPhotoImportStagingDir(photoStagingDir)
+                            }
+                            val importResult = viewModel.importZipData(imported)
+                            dataImportCommitted = true
+                            imported.settingsJson?.takeIf { imported.manifest.sections.settings }?.let { json ->
+                                val restored = SettingsStore.importBackupJson(
+                                    context,
+                                    json,
+                                    importResult.legacyTagIdToActualId,
+                                    restoreTagSettings = imported.manifest.sections.tags
+                                )
                                 if (restored) {
                                     settingsViewModel.reloadFromStore()
                                     applyLanguagePreference(settingsViewModel.uiState.value.languagePreference)
@@ -432,20 +459,30 @@ class MainActivity : AppCompatActivity() {
                             }
                             Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
                         }.onFailure {
-                            scope.launch(Dispatchers.IO) {
-                                importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
+                            if (!dataImportCommitted) {
+                                scope.launch(Dispatchers.IO) {
+                                    importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
+                                    deletePointPhotoImportStagingDir(photoStagingDir)
+                                }
                             }
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
 
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestMultiplePermissions()
-                ) { result ->
-                    val granted = result.values.all { it }
-                    if (!granted) {
-                        Toast.makeText(context, context.getString(R.string.toast_permission_denied), Toast.LENGTH_SHORT).show()
+                var onQuickAddEnableRequest: () -> Unit = {}
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        onQuickAddEnableRequest()
+                    } else {
+                        settingsViewModel.setQuickAddNotificationEnabled(false)
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_quick_add_notification_permission_denied),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
                 val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -458,37 +495,27 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(context, context.getString(R.string.toast_noise_permission_denied), Toast.LENGTH_SHORT).show()
                     }
                 }
-
-                LaunchedEffect(Unit) {
-                    permissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION
-                        )
-                    )
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+                val locationPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestMultiplePermissions()
+                ) { grants ->
+                    val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                        grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+                    val pendingAction = pendingLocationPermissionAction
+                    pendingLocationPermissionAction = null
+                    if (granted && pendingAction != null) {
+                        scope.launch { pendingAction() }
+                    } else if (!granted) {
+                        Toast.makeText(context, context.getString(R.string.toast_permission_denied), Toast.LENGTH_SHORT).show()
                     }
-                    context.showQuickAddNotification()
+                }
+
+                LaunchedEffect(settingsState.quickAddNotificationEnabled) {
+                    context.syncQuickAddNotification(settingsState.quickAddNotificationEnabled)
                 }
 
                 LaunchedEffect(settingsState.cachePolicy, settingsState.satelliteCachePolicy, settingsState.mapTileSourceId, networkStatus) {
                     applyMapCachePolicy(context, settingsState.mapTileSourceId)
                 }
-
-
-                var tab by remember { mutableStateOf(0) }
-                var showAbout by remember { mutableStateOf(false) }
-                var showDialog by remember { mutableStateOf(false) }
-                var pendingTimestamp by remember { mutableStateOf<Long?>(null) }
-                var selectedPointId by remember { mutableStateOf<Long?>(null) }
-                var editingPoint by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.PointEntity?>(null) }
-                var editingPointTagIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
-                var editingPointPhotoPath by remember { mutableStateOf<String?>(null) }
-                var editingCaptureCandidatePhotoPath by remember { mutableStateOf<String?>(null) }
-                var pendingEditPhotoUri by remember { mutableStateOf<Uri?>(null) }
-                var editingTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
-                var selectedTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
                 val editPhotoLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.TakePicture()
                 ) { isSuccess ->
@@ -515,12 +542,198 @@ class MainActivity : AppCompatActivity() {
                         )
                     )
                 }
-                val clearPendingAddPhoto = {
-                    val pathToDelete = pendingAddPhotoPath
-                    pendingAddPhotoPath = null
-                    pendingAddPhotoUri = null
-                    deletePhotoOnIo(pathToDelete)
+                fun hasLocationPermission(): Boolean {
+                    return ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED ||
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
                 }
+
+                fun hasPreciseLocationPermission(): Boolean {
+                    return ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                }
+
+                fun hasBackgroundLocationPermission(): Boolean {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                        return true
+                    }
+                    return ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                }
+
+                fun openAppSettings() {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                    )
+                }
+
+                fun requestLocationPermission() {
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                }
+
+                onQuickAddEnableRequest = {
+                    when (
+                        resolveQuickAddEnableAction(
+                            sdkInt = Build.VERSION.SDK_INT,
+                            notificationsGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) == PackageManager.PERMISSION_GRANTED,
+                            preciseLocationGranted = hasPreciseLocationPermission(),
+                            coarseLocationGranted = hasLocationPermission(),
+                            backgroundLocationGranted = hasBackgroundLocationPermission()
+                        )
+                    ) {
+                        QuickAddEnableAction.ENABLE -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(true)
+                        }
+                        QuickAddEnableAction.REQUEST_NOTIFICATION_PERMISSION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            settingsViewModel.setQuickAddNotificationPermissionRequested(true)
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        QuickAddEnableAction.REQUEST_FOREGROUND_LOCATION_PERMISSION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            pendingLocationPermissionAction = { onQuickAddEnableRequest() }
+                            requestLocationPermission()
+                        }
+                        QuickAddEnableAction.OPEN_SETTINGS_FOR_PRECISE_LOCATION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.toast_quick_add_precise_permission_required),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            openAppSettings()
+                        }
+                        QuickAddEnableAction.OPEN_SETTINGS_FOR_BACKGROUND_LOCATION -> {
+                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.toast_quick_add_background_permission_required),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            openAppSettings()
+                        }
+                    }
+                }
+
+                fun resetPendingAddDialogState(clearPendingPhoto: Boolean = false) {
+                    if (clearPendingPhoto) {
+                        val pathToDelete = pendingAddPhotoPath
+                        pendingAddPhotoPath = null
+                        pendingAddPhotoUri = null
+                        deletePhotoOnIo(pathToDelete)
+                    } else {
+                        pendingAddPhotoPath = null
+                        pendingAddPhotoUri = null
+                    }
+                    pendingManualSaveConfirmation = null
+                    showDialog = false
+                    pendingTimestamp = null
+                    newPointSelectedTagIds = emptySet()
+                    showTagPickerForAdd = false
+                    remainingSeconds = settingsState.timeoutSeconds
+                    isCountdownPaused = false
+                    lastTypingTime = null
+                    newPointTitle = ""
+                    newPointNote = ""
+                }
+
+                fun saveToastRes(quality: LocationSaveQuality, autoSaved: Boolean): Int {
+                    return when (quality) {
+                        LocationSaveQuality.PRECISE_FRESH -> {
+                            if (autoSaved) R.string.toast_point_auto_saved else R.string.toast_point_added
+                        }
+                        LocationSaveQuality.FRESH_BUT_LOW_ACCURACY -> {
+                            if (autoSaved) R.string.toast_point_auto_saved_approximate else R.string.toast_point_added_approximate
+                        }
+                        LocationSaveQuality.LAST_KNOWN_RECENT -> {
+                            if (autoSaved) R.string.toast_point_auto_saved_last_known else R.string.toast_point_added_last_known
+                        }
+                        LocationSaveQuality.LAST_KNOWN_STALE -> {
+                            if (autoSaved) R.string.toast_point_auto_saved_stale else R.string.toast_point_added_stale
+                        }
+                        LocationSaveQuality.UNAVAILABLE -> {
+                            if (autoSaved) R.string.toast_auto_save_location_failed else R.string.toast_location_unavailable_save_failed
+                        }
+                    }
+                }
+
+                suspend fun finalizeAddDialogSave(
+                    title: String,
+                    note: String,
+                    createdAt: Long,
+                    selectedTags: Set<Long>,
+                    photoPath: String?,
+                    decision: LocationSaveDecision,
+                    autoSaved: Boolean
+                ) {
+                    val location = decision.location ?: return
+                    val persistedPhotoPath = preparePhotoPathForPersist(photoPath)
+                    viewModel.addPointWithTags(
+                        title = title.trim(),
+                        note = note.trim(),
+                        location = location,
+                        timestamp = createdAt,
+                        tagIds = selectedTags,
+                        photoPath = persistedPhotoPath
+                    )
+                    vibrateOnce(context)
+                    Toast.makeText(
+                        context,
+                        context.getString(saveToastRes(decision.quality, autoSaved)),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    resetPendingAddDialogState()
+                }
+
+                fun runWithLocationPermission(onGranted: suspend () -> Unit) {
+                    if (hasLocationPermission()) {
+                        scope.launch { onGranted() }
+                    } else {
+                        pendingLocationPermissionAction = onGranted
+                        requestLocationPermission()
+                    }
+                }
+
+                fun requestCenterLocation(onResolved: (com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) {
+                    runWithLocationPermission {
+                        onResolved(viewModel.getBestEffortLocation(5_000L))
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    if (!hasLocationPermission()) {
+                        requestLocationPermission()
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    quickAddRequests.collectLatest {
+                        runWithLocationPermission {
+                            context.performQuickAdd()
+                        }
+                    }
+                }
+
                 val clearUnsavedEditingPhoto = {
                     val basePhotoPath = editingPoint?.photoPath
                     val pathToDelete = editingPointPhotoPath
@@ -547,6 +760,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+                BackHandler(pendingManualSaveConfirmation != null) { pendingManualSaveConfirmation = null }
                 BackHandler(showTagPickerForEdit) { showTagPickerForEdit = false }
                 BackHandler(showTagPickerForAdd) { showTagPickerForAdd = false }
                 BackHandler(editingPoint != null) {
@@ -554,13 +768,9 @@ class MainActivity : AppCompatActivity() {
                     resetEditingPointState()
                 }
                 BackHandler(editingTag != null) { editingTag = null }
-                BackHandler(showDialog && !showTagPickerForAdd && !showTagPickerForEdit) {
+                BackHandler(showDialog && pendingManualSaveConfirmation == null && !showTagPickerForAdd && !showTagPickerForEdit) {
                     viewModel.cancelAutoAdd()
-                    clearPendingAddPhoto()
-                    showDialog = false
-                    pendingTimestamp = null
-                    newPointSelectedTagIds = emptySet()
-                    showTagPickerForAdd = false
+                    resetPendingAddDialogState(clearPendingPhoto = true)
                 }
                 BackHandler(showAbout) { showAbout = false }
                 BackHandler(showMapDownload) { showMapDownload = false }
@@ -610,24 +820,23 @@ class MainActivity : AppCompatActivity() {
                     val note = newPointNote.trim()
                     val addPhotoPath = pendingAddPhotoPath
                     scope.launch {
-                        val loc = viewModel.getPreciseLocation(5000L)
-                        if (loc == null) {
-                            Toast.makeText(context, context.getString(R.string.toast_precise_location_failed), Toast.LENGTH_SHORT).show()
-                            withContext(Dispatchers.IO) {
-                                deletePointPhotoFile(context, addPhotoPath)
-                            }
+                        val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.AUTO_SAVE, 5_000L)
+                        if (!decision.canSave || decision.location == null) {
+                            Toast.makeText(context, context.getString(R.string.toast_auto_save_location_failed), Toast.LENGTH_SHORT).show()
+                            remainingSeconds = settingsState.timeoutSeconds
+                            isCountdownPaused = true
+                            lastTypingTime = null
                         } else {
-                            val persistedPhotoPath = preparePhotoPathForPersist(addPhotoPath)
-                            viewModel.addPointWithTags(title, note, loc, createdAt, newPointSelectedTagIds, persistedPhotoPath)
-                            vibrateOnce(context)
-                            Toast.makeText(context, context.getString(R.string.toast_point_added), Toast.LENGTH_SHORT).show()
+                            finalizeAddDialogSave(
+                                title = title,
+                                note = note,
+                                createdAt = createdAt,
+                                selectedTags = newPointSelectedTagIds,
+                                photoPath = addPhotoPath,
+                                decision = decision,
+                                autoSaved = true
+                            )
                         }
-                        showDialog = false
-                        pendingTimestamp = null
-                        newPointSelectedTagIds = emptySet()
-                        pendingAddPhotoPath = null
-                        pendingAddPhotoUri = null
-                        showTagPickerForAdd = false
                     }
                 }
                 val pointsState = viewModel.points.collectAsState().value
@@ -655,18 +864,13 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     val pointsToExportDomain = pointsToExport.map { it.toDomain() }
-                    val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                     val pending = pendingExportPayload
                     if (pending != null) {
                         pendingExportSelection = null
                         return@LaunchedEffect
                     }
-                    val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                    val payload = PendingExportPayload(
-                        points = pointsToExportDomain,
-                        kind = ExportFileKind.CSV,
-                        zip = false
-                    )
+                    val baseName = buildExportBaseName()
+                    val payload = buildStandardExportPayload(pointsToExportDomain, ExportFileKind.CSV)
                     pendingExportPayload = payload
                     exportCsvLauncher.launch("$baseName.csv")
                     pendingExportSelection = null
@@ -690,13 +894,8 @@ class MainActivity : AppCompatActivity() {
                         val allPointsDomain = pointsState.map { it.toDomain() }
                         val pending = pendingExportPayload
                         if (pending != null) return@launch
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                        pendingExportPayload = PendingExportPayload(
-                            points = allPointsDomain,
-                            kind = ExportFileKind.GEOJSON,
-                            zip = false
-                        )
+                        val baseName = buildExportBaseName()
+                        pendingExportPayload = buildStandardExportPayload(allPointsDomain, ExportFileKind.GEOJSON)
                         exportGeoJsonLauncher.launch("$baseName.geojson")
                     }
                 }
@@ -705,13 +904,8 @@ class MainActivity : AppCompatActivity() {
                         val allPointsDomain = pointsState.map { it.toDomain() }
                         val pending = pendingExportPayload
                         if (pending != null) return@launch
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                        pendingExportPayload = PendingExportPayload(
-                            points = allPointsDomain,
-                            kind = ExportFileKind.KML,
-                            zip = false
-                        )
+                        val baseName = buildExportBaseName()
+                        pendingExportPayload = buildStandardExportPayload(allPointsDomain, ExportFileKind.KML)
                         exportKmlLauncher.launch("$baseName.kml")
                     }
                 }
@@ -720,13 +914,8 @@ class MainActivity : AppCompatActivity() {
                         val allPointsDomain = pointsState.map { it.toDomain() }
                         val pending = pendingExportPayload
                         if (pending != null) return@launch
-                        val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                        val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                        pendingExportPayload = PendingExportPayload(
-                            points = allPointsDomain,
-                            kind = ExportFileKind.KMZ,
-                            zip = false
-                        )
+                        val baseName = buildExportBaseName()
+                        pendingExportPayload = buildStandardExportPayload(allPointsDomain, ExportFileKind.KMZ)
                         exportKmzLauncher.launch("$baseName.kmz")
                     }
                 }
@@ -810,9 +999,12 @@ class MainActivity : AppCompatActivity() {
                             ExtendedFloatingActionButton(
                                 modifier = Modifier.height(64.dp),
                                 onClick = {
-                                    pendingTimestamp = System.currentTimeMillis()
-                                    newPointSelectedTagIds = settingsState.defaultTagIds
-                                    showDialog = true
+                                    val requestedAt = System.currentTimeMillis()
+                                    runWithLocationPermission {
+                                        pendingTimestamp = requestedAt
+                                        newPointSelectedTagIds = settingsState.defaultTagIds
+                                        showDialog = true
+                                    }
                                 }
                             ) {
                                 Text(stringResource(R.string.action_add_point))
@@ -868,6 +1060,7 @@ class MainActivity : AppCompatActivity() {
                                 },
                                 mapTileSourceId = settingsState.mapTileSourceId,
                                 onMapTileSourceChange = settingsViewModel::setMapTileSourceId,
+                                onResolveCenterLocation = ::requestCenterLocation,
                                 scaffoldState = scaffoldState
                             )
                             1 -> {
@@ -919,7 +1112,8 @@ class MainActivity : AppCompatActivity() {
                                         val isSatellite = downloadTileSource.id.contains("satellite", true) || downloadTileSource.id.contains("eox", true)
                                         val policy = if (isSatellite) settingsState.satelliteCachePolicy else settingsState.cachePolicy
                                         policy == MapCachePolicy.DISABLED || (policy == MapCachePolicy.WIFI_ONLY && networkStatus != NetworkStatus.WIFI)
-                                    }
+                                    },
+                                    onResolveCenterLocation = ::requestCenterLocation
                                 )
                             } else {
                                 SettingsScreen(
@@ -932,6 +1126,15 @@ class MainActivity : AppCompatActivity() {
                                         if (preference != settingsState.languagePreference) {
                                             settingsViewModel.setLanguagePreference(preference)
                                             restartApp()
+                                        }
+                                    },
+                                    quickAddNotificationEnabled = settingsState.quickAddNotificationEnabled,
+                                    quickAddNotificationPermissionRequested = settingsState.quickAddNotificationPermissionRequested,
+                                    onQuickAddNotificationEnabledChange = { enabled ->
+                                        if (!enabled) {
+                                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                                        } else {
+                                            onQuickAddEnableRequest()
                                         }
                                     },
                                     timeoutSeconds = settingsState.timeoutSeconds,
@@ -1054,110 +1257,52 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                         if (showZipExportOptions) {
-                            AlertDialog(
-                                onDismissRequest = { showZipExportOptions = false },
-                                title = { Text(stringResource(R.string.export_zip_options_title)) },
-                                text = {
-                                    Column {
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludePoints,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludePoints = checked
-                                                    if (!checked) {
-                                                        zipIncludeTags = false
-                                                        zipIncludeSensors = false
-                                                    }
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_points))
-                                        }
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludeTags,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludeTags = checked
-                                                    if (checked) zipIncludePoints = true
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_tags))
-                                        }
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludeSensors,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludeSensors = checked
-                                                    if (checked) zipIncludePoints = true
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_sensors))
-                                        }
-                                        Row {
-                                            Checkbox(
-                                                checked = zipIncludePhotos,
-                                                onCheckedChange = { checked ->
-                                                    zipIncludePhotos = checked
-                                                }
-                                            )
-                                            Text(stringResource(R.string.export_zip_option_photos))
-                                        }
+                            ZipExportOptionsDialog(
+                                includePoints = zipIncludePoints,
+                                includeTags = zipIncludeTags,
+                                includeSensors = zipIncludeSensors,
+                                includePhotos = zipIncludePhotos,
+                                onIncludePointsChange = { checked ->
+                                    zipIncludePoints = checked
+                                    if (!checked) {
+                                        zipIncludeTags = false
+                                        zipIncludeSensors = false
                                     }
                                 },
-                                confirmButton = {
-                                    val canExport = zipIncludePoints || zipIncludePhotos
-                                    TextButton(
-                                        onClick = {
-                                            if (!canExport) return@TextButton
-                                            scope.launch {
-                                                val allPointsDomain = pointsState.map { it.toDomain() }
-                                                val includePoints = zipIncludePoints
-                                                val includePhotos = zipIncludePhotos
-                                                val includeTags = includePoints && zipIncludeTags
-                                                val includeSensors = includePoints && zipIncludeSensors
-                                                val pointTagMap = mutableMapOf<Long, List<Long>>()
-                                                val zipTags = mutableListOf<ZipExporter.TagRecord>()
-                                                if (includeTags) {
-                                                    allPointsDomain.forEach { point ->
-                                                        val tagIds = viewModel.getTagIdsForPoint(point.id)
-                                                        if (tagIds.isNotEmpty()) {
-                                                            pointTagMap[point.id] = tagIds
-                                                        }
-                                                    }
-                                                    val usedTagIds = pointTagMap.values.flatten().toSet()
-                                                    tagsState
-                                                        .filter { usedTagIds.contains(it.id) }
-                                                        .forEach { zipTags.add(ZipExporter.TagRecord(it.id, it.name)) }
-                                                }
-                                                val payload = PendingExportPayload(
-                                                    points = allPointsDomain,
-                                                    kind = ExportFileKind.ZIP,
-                                                    zip = true,
-                                                    zipOptions = ZipExporter.ExportOptions(
-                                                        includePoints = includePoints,
-                                                        includeTags = includeTags,
-                                                        includeSensors = includeSensors,
-                                                        includePhotos = includePhotos
-                                                    ),
-                                                    zipTags = zipTags,
-                                                    pointTagIdsByPointId = pointTagMap
-                                                )
-                                                val pending = pendingExportPayload
-                                                if (pending != null) return@launch
-                                                val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                                                val baseName = "map_timeline_${sdf.format(java.util.Date())}"
-                                                pendingExportPayload = payload
-                                                exportZipLauncher.launch("$baseName.zip")
-                                                showZipExportOptions = false
-                                            }
-                                        },
-                                        enabled = canExport
-                                    ) { Text(stringResource(R.string.action_export_zip)) }
+                                onIncludeTagsChange = { checked ->
+                                    zipIncludeTags = checked
+                                    if (checked) zipIncludePoints = true
                                 },
-                                dismissButton = {
-                                    TextButton(onClick = { showZipExportOptions = false }) {
-                                        Text(stringResource(R.string.action_cancel))
+                                onIncludeSensorsChange = { checked ->
+                                    zipIncludeSensors = checked
+                                    if (checked) zipIncludePoints = true
+                                },
+                                onIncludePhotosChange = { checked ->
+                                    zipIncludePhotos = checked
+                                },
+                                onConfirm = {
+                                    scope.launch {
+                                        val pending = pendingExportPayload
+                                        if (pending != null) return@launch
+                                        val allPointsDomain = pointsState.map { it.toDomain() }
+                                        val includePoints = zipIncludePoints
+                                        val includePhotos = zipIncludePhotos
+                                        val includeTags = includePoints && zipIncludeTags
+                                        val includeSensors = includePoints && zipIncludeSensors
+                                        pendingExportPayload = buildZipExportPayload(
+                                            points = allPointsDomain,
+                                            includePoints = includePoints,
+                                            includeTags = includeTags,
+                                            includeSensors = includeSensors,
+                                            includePhotos = includePhotos,
+                                            viewModel = viewModel,
+                                            tags = tagsState
+                                        )
+                                        exportZipLauncher.launch("${buildExportBaseName()}.zip")
+                                        showZipExportOptions = false
                                     }
-                                }
+                                },
+                                onDismiss = { showZipExportOptions = false }
                             )
                         }
                     }
@@ -1202,47 +1347,80 @@ class MainActivity : AppCompatActivity() {
                             pendingAddPhotoUri = null
                             deletePhotoOnIo(oldPath)
                         },
-                        onViewPhoto = {
-                            previewPhotoPath = pendingAddPhotoPath
-                        },
+                        onViewPhoto = { viewPhoto(pendingAddPhotoPath) },
+                        onSharePhoto = { sharePhoto(pendingAddPhotoPath) },
                         onDismiss = {
-                            clearPendingAddPhoto()
-                            showDialog = false
-                            pendingTimestamp = null
-                            newPointSelectedTagIds = emptySet()
-                            showTagPickerForAdd = false
-                            remainingSeconds = settingsState.timeoutSeconds
-                            isCountdownPaused = false
-                            lastTypingTime = null
-                            newPointTitle = ""
-                            newPointNote = ""
+                            resetPendingAddDialogState(clearPendingPhoto = true)
                         },
                         onConfirm = { title, note, createdAt, selectedTags ->
                             scope.launch {
                                 val addPhotoPath = pendingAddPhotoPath
-                                val loc = viewModel.getPreciseLocation(5000L)
-                                if (loc == null) {
-                                    Toast.makeText(context, context.getString(R.string.toast_precise_location_failed), Toast.LENGTH_SHORT).show()
-                                    withContext(Dispatchers.IO) {
-                                        deletePointPhotoFile(context, addPhotoPath)
-                                    }
+                                val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.MANUAL_ADD, 5_000L)
+                                if (!decision.canSave || decision.location == null) {
+                                    Toast.makeText(context, context.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
+                                } else if (decision.requiresManualConfirmation) {
+                                    pendingManualSaveConfirmation = PendingManualSaveConfirmation(
+                                        title = title,
+                                        note = note,
+                                        createdAt = createdAt,
+                                        selectedTags = selectedTags,
+                                        photoPath = addPhotoPath,
+                                        decision = decision
+                                    )
                                 } else {
-                                    val persistedPhotoPath = preparePhotoPathForPersist(addPhotoPath)
-                                    viewModel.addPointWithTags(title.trim(), note.trim(), loc, createdAt, selectedTags, persistedPhotoPath)
-                                    vibrateOnce(context)
-                                    Toast.makeText(context, context.getString(R.string.toast_point_added), Toast.LENGTH_SHORT).show()
+                                    finalizeAddDialogSave(
+                                        title = title,
+                                        note = note,
+                                        createdAt = createdAt,
+                                        selectedTags = selectedTags,
+                                        photoPath = addPhotoPath,
+                                        decision = decision,
+                                        autoSaved = false
+                                    )
                                 }
-                                showDialog = false
-                                pendingTimestamp = null
-                                newPointSelectedTagIds = emptySet()
-                                pendingAddPhotoPath = null
-                                pendingAddPhotoUri = null
-                                showTagPickerForAdd = false
-                                remainingSeconds = settingsState.timeoutSeconds
-                                isCountdownPaused = false
-                                lastTypingTime = null
-                                newPointTitle = ""
-                                newPointNote = ""
+                            }
+                        }
+                    )
+                }
+
+                pendingManualSaveConfirmation?.let { confirmation ->
+                    AlertDialog(
+                        onDismissRequest = { pendingManualSaveConfirmation = null },
+                        title = { Text(stringResource(R.string.dialog_location_confirmation_title)) },
+                        text = {
+                            Text(
+                                stringResource(
+                                    when (confirmation.decision.quality) {
+                                        LocationSaveQuality.LAST_KNOWN_STALE -> R.string.dialog_location_confirmation_stale
+                                        else -> R.string.dialog_location_confirmation_approximate
+                                    }
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val request = confirmation
+                                    pendingManualSaveConfirmation = null
+                                    scope.launch {
+                                        finalizeAddDialogSave(
+                                            title = request.title,
+                                            note = request.note,
+                                            createdAt = request.createdAt,
+                                            selectedTags = request.selectedTags,
+                                            photoPath = request.photoPath,
+                                            decision = request.decision,
+                                            autoSaved = false
+                                        )
+                                    }
+                                }
+                            ) {
+                                Text(stringResource(R.string.action_save))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingManualSaveConfirmation = null }) {
+                                Text(stringResource(R.string.action_cancel))
                             }
                         }
                     )
@@ -1316,9 +1494,8 @@ class MainActivity : AppCompatActivity() {
                             clearReplacedEditingPhoto()
                             editingPointPhotoPath = null
                         },
-                        onViewPhoto = {
-                            previewPhotoPath = editingPointPhotoPath
-                        },
+                        onViewPhoto = { viewPhoto(editingPointPhotoPath) },
+                        onSharePhoto = { sharePhoto(editingPointPhotoPath) },
                         onSave = { title, note, photoPath ->
                             scope.launch {
                                 val persistedPhotoPath = if (photoPath == point.photoPath) {
@@ -1339,14 +1516,6 @@ class MainActivity : AppCompatActivity() {
                             clearUnsavedEditingPhoto()
                             resetEditingPointState()
                         }
-                    )
-                }
-
-                val activePreviewPhotoPath = previewPhotoPath
-                if (!activePreviewPhotoPath.isNullOrBlank()) {
-                    PhotoPreviewDialog(
-                        photoPath = activePreviewPhotoPath,
-                        onDismiss = { previewPhotoPath = null }
                     )
                 }
 
@@ -1401,6 +1570,22 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        handleQuickAddIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleQuickAddIntent(intent)
+    }
+
+    private fun handleQuickAddIntent(intent: Intent?) {
+        if (intent?.action != ACTION_QUICK_ADD) {
+            return
+        }
+        quickAddRequests.tryEmit(Unit)
+        intent.action = null
+        setIntent(intent)
     }
 
     private fun restartApp() {
@@ -1416,53 +1601,6 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MapWithListSheet(
-    points: List<com.lavacrafter.maptimelinetool.data.PointEntity>,
-    selectedPointId: Long?,
-    onSelectPoint: (com.lavacrafter.maptimelinetool.data.PointEntity) -> Unit,
-    onLongPressPoint: (com.lavacrafter.maptimelinetool.data.PointEntity) -> Unit,
-    onEditPointFromMap: (com.lavacrafter.maptimelinetool.data.PointEntity) -> Unit,
-    isActive: Boolean,
-    zoomBehavior: ZoomButtonBehavior,
-    markerScale: Float,
-    downloadedOnly: Boolean,
-    mapTileSourceId: String,
-    onMapTileSourceChange: (String) -> Unit,
-    scaffoldState: BottomSheetScaffoldState
-) {
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = 72.dp,
-        sheetContent = {
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text(text = stringResource(R.string.tab_list))
-                Spacer(modifier = Modifier.height(8.dp))
-                ListScreen(
-                    points = points,
-                    onSelect = onSelectPoint,
-                    onLongPress = onLongPressPoint
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
-            MapScreen(
-                points = points,
-                selectedPointId = selectedPointId,
-                onEditPoint = onEditPointFromMap,
-                isActive = isActive,
-                zoomBehavior = zoomBehavior,
-                markerScale = markerScale,
-                downloadedOnly = downloadedOnly,
-                mapTileSourceId = mapTileSourceId,
-                onMapTileSourceChange = onMapTileSourceChange
-            )
-        }
-    }
-}
-
 private fun vibrateOnce(context: Context) {
     val vibrator = context.getSystemService(Vibrator::class.java) ?: return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1470,105 +1608,5 @@ private fun vibrateOnce(context: Context) {
     } else {
         @Suppress("DEPRECATION")
         vibrator.vibrate(50)
-    }
-}
-
-@Composable
-private fun PhotoPreviewDialog(
-    photoPath: String,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val photoFile = remember(photoPath) { resolvePointPhotoFile(context, photoPath) }
-    val bitmap = remember(photoFile?.absolutePath) {
-        photoFile?.takeIf { it.exists() && it.isFile && it.canRead() }?.let { file ->
-            decodePreviewBitmap(file)
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_ok)) }
-        },
-        title = { Text(stringResource(R.string.action_view_photo)) },
-        text = {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = stringResource(R.string.action_view_photo),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Text(stringResource(R.string.label_photo_not_added))
-            }
-        }
-    )
-}
-
-private fun decodePreviewBitmap(file: java.io.File): android.graphics.Bitmap? {
-    val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return null
-    val orientation = runCatching {
-        ExifInterface(file.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-    return applyExifOrientation(decoded, orientation)
-}
-
-enum class NetworkStatus { WIFI, CELLULAR, NONE }
-
-@Composable
-fun observeNetworkStatus(context: Context): androidx.compose.runtime.State<NetworkStatus> {
-    val state = remember { mutableStateOf(getNetworkStatus(context)) }
-    DisposableEffect(context) {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) {
-                state.value = getNetworkStatus(context)
-            }
-
-            override fun onLost(network: android.net.Network) {
-                state.value = getNetworkStatus(context)
-            }
-
-            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) {
-                state.value = when {
-                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> NetworkStatus.WIFI
-                    networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkStatus.CELLULAR
-                      networkCapabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> resolveVpnNetworkStatus(connectivityManager)
-                      else -> NetworkStatus.NONE
-                  }
-              }
-          }
-          connectivityManager.registerDefaultNetworkCallback(callback)
-          onDispose {
-              runCatching { connectivityManager.unregisterNetworkCallback(callback) }
-          }
-      }
-      return state
-}
-
-@Suppress("DEPRECATION")
-private fun resolveVpnNetworkStatus(cm: android.net.ConnectivityManager): NetworkStatus {
-    val underlying = cm.allNetworks.find {
-        val c = cm.getNetworkCapabilities(it)
-        c != null && !c.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) && c.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
-    if (underlying != null) {
-        val c = cm.getNetworkCapabilities(underlying)
-        if (c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true) return NetworkStatus.WIFI
-        if (c?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) == true) return NetworkStatus.CELLULAR
-    }
-    return NetworkStatus.CELLULAR
-}
-
-private fun getNetworkStatus(context: Context): NetworkStatus {
-    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-    val network = connectivityManager.activeNetwork ?: return NetworkStatus.NONE
-    val caps = connectivityManager.getNetworkCapabilities(network) ?: return NetworkStatus.NONE
-    return when {
-        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> NetworkStatus.WIFI
-        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkStatus.CELLULAR
-        caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) -> resolveVpnNetworkStatus(connectivityManager)
-        else -> NetworkStatus.NONE
     }
 }

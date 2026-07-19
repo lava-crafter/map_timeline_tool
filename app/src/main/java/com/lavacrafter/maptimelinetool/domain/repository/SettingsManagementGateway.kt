@@ -85,6 +85,11 @@ interface SettingsManagementGateway {
     fun getNoiseEnabled(): Boolean
     fun setNoiseEnabled(enabled: Boolean)
 
+    fun getQuickAddNotificationEnabled(): Boolean
+    fun setQuickAddNotificationEnabled(enabled: Boolean)
+    fun getQuickAddNotificationPermissionRequested(): Boolean
+    fun setQuickAddNotificationPermissionRequested(requested: Boolean)
+
     fun getDownloadedAreas(): List<SettingsDownloadedArea>
     fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea>
     fun removeDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea>

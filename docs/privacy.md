@@ -9,7 +9,7 @@ Map Timeline Tool may access the following user data on your device:
 How we use this data
 
 - Location data is used to display maps, record points, and support location-related features.
-- Photos are used only to associate images with your saved points and to include them in exports or backups when you choose to share your data.
+- Photos are used only to associate images with your saved points and to include them in manual exports, or Android system backup/device transfer when you enable that system feature.
 - Microphone audio is used only to measure environmental noise levels in decibels when you save a point with noise detection enabled.
 
 Data handling
@@ -17,6 +17,7 @@ Data handling
 - The app processes location, photos, and audio locally on your device.
 - We do not sell user data.
 - We do not upload this data to our own servers.
+- If you enable Android system backup or device transfer, Android may copy the app database, settings, and point photos to the system backup or transfer destination configured on your device. This system-managed transfer is separate from the app's manual ZIP export and sharing features.
 - When you choose to export or share a backup, the exported file may contain point data, location data, tags, and photos, and it is shared only to the destination you select.
 - Microphone audio is not recorded as a voice file, saved as an audio file, or retained after the noise calculation is complete.
 
@@ -27,8 +28,8 @@ Third-party services
 
 Security
 
-- User data is stored locally on your device and protected by Android's app sandbox.
-- Exported files are shared only through the sharing action you initiate.
+- User data is stored locally in the app sandbox and protected by Android's app sandbox, subject to any Android system backup or device-transfer setting you enable.
+- Manual exported files are shared only through the export or sharing action you initiate.
 
 Data deletion
 

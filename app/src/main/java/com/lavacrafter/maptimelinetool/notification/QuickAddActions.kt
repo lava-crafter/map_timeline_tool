@@ -35,9 +35,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.appGraph
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.lavacrafter.maptimelinetool.quickadd.hasRequiredLocationPermissionsForQuickAdd
+import com.lavacrafter.maptimelinetool.quickadd.isQuickAddExecutionAllowed
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddResult
+import com.lavacrafter.maptimelinetool.quickadd.requiresBackgroundLocationForQuickAdd
 
 internal const val ACTION_QUICK_ADD = "com.lavacrafter.maptimelinetool.notification.action.QUICK_ADD"
 
@@ -48,57 +49,88 @@ private const val QUICK_ADD_NOTIFICATION_CHANNEL_ID = "quick_add_channel"
 private const val QUICK_ADD_RESULT_CHANNEL_ID = "quick_add_result_channel_v2"
 
 internal fun Context.showQuickAddNotification() {
-    if (!areNotificationsEnabledCompat()) {
+    if (!canPostNotifications()) {
         return
     }
 
     val notification = buildQuickAddNotification()
-    NotificationManagerCompat.from(this).notify(QUICK_ADD_NOTIFICATION_ID, notification)
+    try {
+        NotificationManagerCompat.from(this).notify(QUICK_ADD_NOTIFICATION_ID, notification)
+    } catch (_: SecurityException) {
+        // Notification permission can be revoked after the availability check.
+    }
+}
+
+internal fun Context.cancelQuickAddNotification() {
+    NotificationManagerCompat.from(this).cancel(QUICK_ADD_NOTIFICATION_ID)
+}
+
+internal fun Context.syncQuickAddNotification(enabled: Boolean) {
+    val isQuickAddAvailable = isQuickAddNotificationAvailable(enabled)
+    appGraph().quickAddPassiveLocationUpdater.refreshRegistration(isQuickAddAvailable)
+    if (isQuickAddAvailable) {
+        showQuickAddNotification()
+    } else {
+        cancelQuickAddNotification()
+    }
+}
+
+internal fun Context.isQuickAddNotificationAvailable(enabled: Boolean): Boolean {
+    return enabled &&
+        areNotificationsEnabledCompat() &&
+        hasRequiredLocationPermissionsForQuickAdd(
+            sdkInt = Build.VERSION.SDK_INT,
+            hasPreciseLocationPermission = hasPreciseLocationPermission(),
+            hasBackgroundLocationPermission = hasBackgroundLocationPermissionForQuickAdd()
+        )
 }
 
 internal suspend fun Context.performQuickAdd() {
-    if (!hasLocationPermission()) {
-        showToast(getString(R.string.toast_location_failed))
+    val graph = appGraph()
+    val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
+    if (!isQuickAddExecutionAllowed(
+            enabled = quickAddEnabled,
+            sdkInt = Build.VERSION.SDK_INT,
+            hasPreciseLocationPermission = hasPreciseLocationPermission(),
+            hasBackgroundLocationPermission = hasBackgroundLocationPermissionForQuickAdd()
+        )) {
+        syncQuickAddNotification(quickAddEnabled)
+        showQuickAddResult(quickAddBlockedReasonResId(quickAddEnabled))
         return
     }
 
-    val graph = appGraph()
-    val location = try {
-        graph.locationProvider.getPreciseLocation(QUICK_ADD_LOCATION_TIMEOUT_MS)
+    val clickTimeMs = System.currentTimeMillis()
+    val result = try {
+        graph.quickAddResolver.savePoint(timeoutMs = QUICK_ADD_LOCATION_TIMEOUT_MS, clickTimeMs = clickTimeMs)
     } catch (_: Exception) {
         null
     }
 
-    if (location == null) {
-        showToast(getString(R.string.toast_precise_location_failed))
-        return
-    }
-
-    val eventTime = System.currentTimeMillis()
-    val timestamp = location.fixTimeMs
-        ?.takeIf { it > 0L }
-        ?.let { maxOf(eventTime, it) }
-        ?: eventTime
-    val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-
-    try {
-        graph.pointWriteUseCase.addPointWithTags(
-            title = title,
-            note = "",
-            location = location,
-            timestamp = timestamp,
-            tagIds = graph.settingsManagementUseCase.getDefaultTagIds().toSet()
-        )
-        showToast(getString(R.string.toast_point_added))
-        vibrateOnce()
-        showQuickAddResultNotification()
-    } catch (_: Exception) {
-        showToast(getString(R.string.toast_precise_location_failed))
+    when (result) {
+        QuickAddResult.SAVED_FROM_RECENT_CACHE,
+        QuickAddResult.SAVED_FROM_FRESH_REQUEST -> {
+            val messageResId = messageResForQuickAdd(result)
+            showToast(getString(messageResId))
+            vibrateOnce()
+            showQuickAddResultNotification(getString(messageResId))
+        }
+        QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION -> {
+            showQuickAddResult(R.string.toast_quick_add_failed_no_fresh_accurate_location)
+        }
+        null -> {
+            showQuickAddResult(R.string.toast_location_unavailable_save_failed)
+        }
     }
 }
 
-private fun Context.showQuickAddResultNotification() {
-    if (!areNotificationsEnabledCompat()) {
+private fun Context.showQuickAddResult(messageResId: Int) {
+    val message = getString(messageResId)
+    showToast(message)
+    showQuickAddResultNotification(message)
+}
+
+private fun Context.showQuickAddResultNotification(message: String) {
+    if (!canPostNotifications()) {
         return
     }
 
@@ -112,7 +144,7 @@ private fun Context.showQuickAddResultNotification() {
     val notification = NotificationCompat.Builder(this, channelId)
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle(getString(R.string.notification_title))
-        .setContentText(getString(R.string.toast_point_added))
+        .setContentText(message)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setAutoCancel(true)
@@ -121,7 +153,11 @@ private fun Context.showQuickAddResultNotification() {
         .setTimeoutAfter(2000L)
         .build()
 
-    NotificationManagerCompat.from(this).notify(QUICK_ADD_RESULT_NOTIFICATION_ID, notification)
+    try {
+        NotificationManagerCompat.from(this).notify(QUICK_ADD_RESULT_NOTIFICATION_ID, notification)
+    } catch (_: SecurityException) {
+        // Notification permission can be revoked after the availability check.
+    }
 }
 
 private fun Context.buildQuickAddNotification(): Notification {
@@ -132,7 +168,8 @@ private fun Context.buildQuickAddNotification(): Notification {
         descriptionResId = R.string.notification_channel_desc
     )
 
-    val intent = Intent(this, QuickAddReceiver::class.java).setAction(ACTION_QUICK_ADD)
+    val intent = Intent(this, QuickAddReceiver::class.java)
+        .setAction(ACTION_QUICK_ADD)
     val pendingIntent = PendingIntent.getBroadcast(
         this,
         0,
@@ -167,13 +204,25 @@ private fun Context.vibrateOnce() {
     }
 }
 
-private fun Context.hasLocationPermission(): Boolean {
-    return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+private fun Context.hasPreciseLocationPermission(): Boolean {
+    return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun Context.hasBackgroundLocationPermissionForQuickAdd(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        return true
+    }
+    return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun Context.areNotificationsEnabledCompat(): Boolean {
     return NotificationManagerCompat.from(this).areNotificationsEnabled()
+}
+
+private fun Context.canPostNotifications(): Boolean {
+    if (!areNotificationsEnabledCompat()) return false
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun Context.ensureNotificationChannel(channelId: String, nameResId: Int, descriptionResId: Int) {
@@ -192,4 +241,23 @@ private fun Context.ensureNotificationChannel(channelId: String, nameResId: Int,
     }
     val manager = getSystemService(NotificationManager::class.java)
     manager.createNotificationChannel(channel)
+}
+
+private fun messageResForQuickAdd(result: QuickAddResult): Int {
+    return when (result) {
+        QuickAddResult.SAVED_FROM_RECENT_CACHE -> R.string.toast_quick_add_saved_from_cache
+        QuickAddResult.SAVED_FROM_FRESH_REQUEST -> R.string.toast_quick_add_saved_from_fresh
+        QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION -> R.string.toast_quick_add_failed_no_fresh_accurate_location
+    }
+}
+
+private fun Context.quickAddBlockedReasonResId(enabled: Boolean): Int {
+    return when {
+        !enabled -> R.string.toast_location_unavailable_save_failed
+        !hasPreciseLocationPermission() -> R.string.toast_quick_add_precise_permission_required
+        requiresBackgroundLocationForQuickAdd(Build.VERSION.SDK_INT) && !hasBackgroundLocationPermissionForQuickAdd() -> {
+            R.string.toast_quick_add_background_permission_required
+        }
+        else -> R.string.toast_location_unavailable_save_failed
+    }
 }

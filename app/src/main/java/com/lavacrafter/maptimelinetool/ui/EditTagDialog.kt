@@ -32,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.text.sanitizeTagName
+import com.lavacrafter.maptimelinetool.text.normalizeTagNameForEditing
 
 @Composable
 fun EditTagDialog(
@@ -55,7 +56,7 @@ fun EditTagDialog(
             Column(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = sanitizeTagName(it) },
+                    onValueChange = { name = normalizeTagNameForEditing(it) },
                     label = { Text(stringResource(R.string.label_tag_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true

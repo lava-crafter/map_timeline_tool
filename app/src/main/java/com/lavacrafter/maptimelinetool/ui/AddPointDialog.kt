@@ -44,8 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
-import com.lavacrafter.maptimelinetool.text.sanitizePointNote
-import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
+import com.lavacrafter.maptimelinetool.text.normalizePointNoteForEditing
+import com.lavacrafter.maptimelinetool.text.normalizePointTitleForEditing
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -71,6 +71,7 @@ fun AddPointDialog(
     onRetakePhoto: () -> Unit,
     onRemovePhoto: () -> Unit,
     onViewPhoto: () -> Unit,
+    onSharePhoto: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, String, Long, Set<Long>) -> Unit
 ) {
@@ -105,7 +106,7 @@ fun AddPointDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = {
-                        onTitleChange(sanitizePointTitle(it))
+                        onTitleChange(normalizePointTitleForEditing(it))
                         onUserTyping()
                     },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
@@ -117,7 +118,7 @@ fun AddPointDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = {
-                        onNoteChange(sanitizePointNote(it))
+                        onNoteChange(normalizePointNoteForEditing(it))
                         onUserTyping()
                     },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
@@ -143,6 +144,9 @@ fun AddPointDialog(
                         }
                         OutlinedButton(onClick = onViewPhoto) {
                             Text(stringResource(R.string.action_view_photo))
+                        }
+                        OutlinedButton(onClick = onSharePhoto) {
+                            Text(stringResource(R.string.action_share_photo))
                         }
                     } else {
                         OutlinedButton(onClick = onTakePhoto) {

@@ -41,11 +41,13 @@ object ZipImporter {
         val pointTags: List<ImportedPointTag>,
         val importedPhotoCount: Int,
         val missingPhotoCount: Int,
-        val settingsJson: String? = null
+        val settingsJson: String? = null,
+        val manifest: BackupManifest = BackupManifest.LEGACY
     )
 
     fun importZip(
         inputStream: InputStream,
+        limits: ZipImportLimits = ZipImportLimits(),
         savePhoto: (entryName: String, photoInput: InputStream) -> String?
     ): ImportStats {
         val photoMapping = mutableMapOf<String, String>()
@@ -54,34 +56,66 @@ object ZipImporter {
         var tags = emptyList<ImportedTag>()
         var pointTags = emptyList<ImportedPointTag>()
         var settingsJson: String? = null
+        var manifest: BackupManifest? = null
+        var unrecognizedEntryCount = 0
+        var totalBytes = 0L
         ZipInputStream(inputStream.buffered()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 if (entry.isDirectory) {
+                    unrecognizedEntryCount += 1
+                    if (unrecognizedEntryCount > limits.maxUnrecognizedEntries) {
+                        throw ZipImportLimitExceededException("Archive has too many unrecognized entries")
+                    }
                     zip.closeEntry()
                     continue
                 }
                 val normalizedName = normalizeEntryName(entry.name)
-                if (normalizedName == null) {
+                if (normalizedName == null || normalizedName.length > limits.maxEntryNameLength) {
+                    unrecognizedEntryCount += 1
+                    if (unrecognizedEntryCount > limits.maxUnrecognizedEntries) {
+                        throw ZipImportLimitExceededException("Archive has too many unrecognized entries")
+                    }
                     zip.closeEntry()
                     continue
                 }
+                val maxEntryBytes = when {
+                    normalizedName.equals("backup_manifest.json", ignoreCase = true) -> limits.maxManifestBytes
+                    normalizedName.equals("settings.json", ignoreCase = true) -> limits.maxSettingsBytes
+                    normalizedName.startsWith("photos/") -> limits.maxPhotoBytes
+                    else -> limits.maxDataEntryBytes
+                }
+                val entryInput = BoundedZipEntryInputStream(
+                    source = zip,
+                    maxEntryBytes = maxEntryBytes,
+                    totalBytes = { totalBytes },
+                    addTotalBytes = { count -> totalBytes += count },
+                    maxTotalBytes = limits.maxTotalBytes
+                )
                 if (normalizedName.equals("points.csv", ignoreCase = true)) {
-                    points = CsvImporter.parseCsv(InputStreamReader(zip, Charsets.UTF_8))
+                    points = CsvImporter.parseCsv(InputStreamReader(entryInput, Charsets.UTF_8))
                 } else if (normalizedName.equals("points.geojson", ignoreCase = true) || normalizedName.equals("data.geojson", ignoreCase = true)) {
-                    pointsGeoJsonText = runCatching { zip.readBytes().toString(Charsets.UTF_8) }.getOrNull()
+                    pointsGeoJsonText = entryInput.readTextOrNull()
                 } else if (normalizedName.equals("tags.csv", ignoreCase = true)) {
-                    tags = parseTagsCsv(InputStreamReader(zip, Charsets.UTF_8))
+                    tags = parseTagsCsv(InputStreamReader(entryInput, Charsets.UTF_8))
                 } else if (normalizedName.equals("point_tags.csv", ignoreCase = true)) {
-                    pointTags = parsePointTagsCsv(InputStreamReader(zip, Charsets.UTF_8))
+                    pointTags = parsePointTagsCsv(InputStreamReader(entryInput, Charsets.UTF_8))
                 } else if (normalizedName.startsWith("photos/")) {
-                    val storedPath = runCatching { savePhoto(normalizedName, zip) }.getOrNull()
+                    val storedPath = savePhoto(normalizedName, entryInput)
                     if (!storedPath.isNullOrBlank()) {
                         photoMapping[normalizePhotoRelPath(normalizedName)] = storedPath
                     }
                 } else if (normalizedName.equals("settings.json", ignoreCase = true)) {
-                    settingsJson = runCatching { zip.readBytes().toString(Charsets.UTF_8) }.getOrNull()
+                    settingsJson = entryInput.readTextOrNull()
+                } else if (normalizedName.equals("backup_manifest.json", ignoreCase = true)) {
+                    manifest = BackupManifest.parse(entryInput.readText())
+                } else {
+                    unrecognizedEntryCount += 1
+                    if (unrecognizedEntryCount > limits.maxUnrecognizedEntries) {
+                        throw ZipImportLimitExceededException("Archive has too many unrecognized entries")
+                    }
                 }
+                entryInput.drain()
                 zip.closeEntry()
             }
         }
@@ -111,7 +145,8 @@ object ZipImporter {
             pointTags = pointTags,
             importedPhotoCount = photoMapping.size,
             missingPhotoCount = missingPhotoCount,
-            settingsJson = settingsJson
+            settingsJson = settingsJson,
+            manifest = manifest ?: BackupManifest.LEGACY
         )
     }
 
@@ -127,6 +162,59 @@ object ZipImporter {
     private fun normalizePhotoRelPath(path: String): String {
         val normalized = path.trim().replace('\\', '/')
         return normalized.removePrefix("./")
+    }
+
+    private class BoundedZipEntryInputStream(
+        private val source: InputStream,
+        private val maxEntryBytes: Long,
+        private val totalBytes: () -> Long,
+        private val addTotalBytes: (Long) -> Unit,
+        private val maxTotalBytes: Long
+    ) : InputStream() {
+        private var entryBytes = 0L
+
+        override fun read(): Int {
+            val value = source.read()
+            if (value >= 0) account(1L)
+            return value
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val read = source.read(buffer, offset, length)
+            if (read > 0) account(read.toLong())
+            return read
+        }
+
+        override fun close() = Unit
+
+        fun readText(): String = readBytes().toString(Charsets.UTF_8)
+
+        fun readTextOrNull(): String? = try {
+            readText()
+        } catch (error: ZipImportLimitExceededException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+
+        fun drain() {
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (read(buffer) >= 0) {
+                // Account for every decompressed byte, including ignored entries.
+            }
+        }
+
+        private fun account(count: Long) {
+            entryBytes += count
+            if (entryBytes > maxEntryBytes) {
+                throw ZipImportLimitExceededException("Archive entry exceeds the configured size budget")
+            }
+            val nextTotal = totalBytes() + count
+            if (nextTotal > maxTotalBytes) {
+                throw ZipImportLimitExceededException("Archive exceeds the configured total size budget")
+            }
+            addTotalBytes(count)
+        }
     }
 
     private fun parseTagsCsv(reader: InputStreamReader): List<ImportedTag> {

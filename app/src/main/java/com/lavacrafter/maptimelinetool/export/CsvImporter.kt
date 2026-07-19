@@ -28,6 +28,11 @@ import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 
 object CsvImporter {
+    data class Limits(
+        val maxRecordChars: Int = 1_000_000,
+        val maxFieldChars: Int = 256_000
+    )
+
     fun parseCsv(csv: String): List<Point> {
         return parseCsv(StringReader(csv))
     }
@@ -36,39 +41,43 @@ object CsvImporter {
         reader: Reader,
         resolvePhotoPath: (String) -> String? = { it }
     ): List<Point> {
-        val pushbackReader = PushbackReader(reader, 2)
-        val records = sequence {
-            while (true) {
-                val record = readCsvRecord(pushbackReader) ?: break
-                if (record.isNotEmpty()) {
-                    yield(record)
-                }
-            }
-        }.iterator()
-        if (!records.hasNext()) return emptyList()
+        val points = mutableListOf<Point>()
+        forEachPoint(reader, resolvePhotoPath) { points += it }
+        return points
+    }
 
+    fun forEachPoint(
+        reader: Reader,
+        resolvePhotoPath: (String) -> String? = { it },
+        limits: Limits = Limits(),
+        consume: (Point) -> Unit
+    ) {
+        val pushbackReader = PushbackReader(reader, 2)
         var header: List<String>? = null
-        while (records.hasNext()) {
-            val candidate = records.next().map { it.trim() }
+
+        while (true) {
+            val record = readCsvRecord(pushbackReader, limits) ?: break
+            if (record.isEmpty()) continue
+            val candidate = record.map { it.trim() }
             val normalized = candidate.map { it.lowercase(Locale.US) }
             if (normalized.contains("name") && normalized.contains("latitude") && normalized.contains("longitude")) {
                 header = normalized
                 break
             }
         }
-        val resolvedHeader = header ?: return emptyList()
+        val resolvedHeader = header ?: return
         val indexMap = resolvedHeader.withIndex().associate { it.value to it.index }
 
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
 
-        val points = mutableListOf<Point>()
-        while (records.hasNext()) {
-            val row = records.next()
+        while (true) {
+            val row = readCsvRecord(pushbackReader, limits) ?: break
             if (row.all { it.isBlank() }) continue
             val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull() ?: continue
             val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull() ?: continue
+            if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
             val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), sdf)
             val title = sanitizePointTitle(row.valueOf(indexMap, "name").orEmpty())
                 .ifBlank { formatPointTimestamp(timestamp) }
@@ -76,7 +85,7 @@ object CsvImporter {
             val photoRelPath = row.valueOf(indexMap, "photo_rel_path").orEmpty().trim()
             val resolvedPhotoPath = photoRelPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
 
-            points.add(
+            consume(
                 Point(
                     timestamp = timestamp,
                     latitude = lat,
@@ -102,7 +111,6 @@ object CsvImporter {
                 )
             )
         }
-        return points
     }
 
     private fun parseTimestamp(time: String?, sdf: SimpleDateFormat): Long {
@@ -132,7 +140,7 @@ object CsvImporter {
         return this?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    private fun readCsvRecord(reader: PushbackReader): List<String>? {
+    private fun readCsvRecord(reader: PushbackReader, limits: Limits): List<String>? {
         val record = mutableListOf<String>()
         val field = StringBuilder()
         var inQuotes = false
@@ -145,6 +153,7 @@ object CsvImporter {
                     return null
                 }
                 record.add(field.toString())
+                validateRecord(record, limits)
                 return record
             }
 
@@ -160,6 +169,7 @@ object CsvImporter {
                         val next = reader.read()
                         if (next == '"'.code) {
                             field.append('"')
+                            validateField(field, limits)
                         } else {
                             inQuotes = false
                             if (next != -1) reader.unread(next)
@@ -170,10 +180,12 @@ object CsvImporter {
                 }
                 currentChar == ',' && !inQuotes -> {
                     record.add(field.toString())
+                    validateRecord(record, limits)
                     field.clear()
                 }
                 currentChar == '\n' && !inQuotes -> {
                     record.add(field.toString())
+                    validateRecord(record, limits)
                     return record
                 }
                 currentChar == '\r' && !inQuotes -> {
@@ -182,10 +194,26 @@ object CsvImporter {
                         reader.unread(next)
                     }
                     record.add(field.toString())
+                    validateRecord(record, limits)
                     return record
                 }
-                else -> field.append(currentChar)
+                else -> {
+                    field.append(currentChar)
+                    validateField(field, limits)
+                }
             }
+        }
+    }
+
+    private fun validateField(field: StringBuilder, limits: Limits) {
+        if (field.length > limits.maxFieldChars) {
+            throw IllegalArgumentException("CSV field exceeds the configured size budget")
+        }
+    }
+
+    private fun validateRecord(record: List<String>, limits: Limits) {
+        if (record.sumOf(String::length) > limits.maxRecordChars) {
+            throw IllegalArgumentException("CSV record exceeds the configured size budget")
         }
     }
 }

@@ -17,9 +17,13 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "points")
+@Entity(
+    tableName = "points",
+    indices = [Index(value = ["timestamp", "latitude", "longitude"], name = "index_points_import_key")]
+)
 data class PointEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,

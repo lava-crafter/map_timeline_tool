@@ -16,12 +16,14 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool
 
-import android.annotation.SuppressLint
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.os.CancellationSignal
+import com.lavacrafter.maptimelinetool.quickadd.toQuickAddLocation
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -37,18 +39,22 @@ object LocationUtils {
     private const val MAX_STALE_LAST_KNOWN_ACCURACY_METERS = 300f
     private const val CACHED_PROVIDER = "cached_overlay"
 
-    @SuppressLint("MissingPermission")
     fun getLastKnownLocation(
         context: Context,
         maxAgeMs: Long = MAX_LAST_KNOWN_LOCATION_AGE_MS,
         maxAccuracyMeters: Float = MAX_LAST_KNOWN_ACCURACY_METERS
     ): Location? {
+        if (!hasLocationPermission(context)) return readCachedLocation(context)
         val lm = context.getSystemService(LocationManager::class.java)
         val systemCandidates = lm?.let { locationManager ->
             runCatching { locationManager.getProviders(true) }
                 .getOrDefault(emptyList())
                 .mapNotNull { provider ->
-                    runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+                    try {
+                        locationManager.getLastKnownLocation(provider)
+                    } catch (_: SecurityException) {
+                        null
+                    }
                 }
         }.orEmpty()
 
@@ -74,6 +80,7 @@ object LocationUtils {
             editor.remove(HeadingLocationOverlay.KEY_ACCURACY)
         }
         editor.apply()
+        context.applicationContext.appGraph().quickAddLocationCache.update(location.toQuickAddLocation())
     }
 
     private fun readCachedLocation(context: Context): Location? {
@@ -104,7 +111,8 @@ object LocationUtils {
         maxAccuracyMeters: Float = MAX_POINT_ACCURACY_METERS,
         requireAccuracy: Boolean = false
     ): Location? {
-        val fresh = withTimeoutOrNull(timeoutMs) {
+        if (!hasLocationPermission(context)) return null
+        val fresh = withTimeoutOrNull(timeoutMs.coerceAtLeast(1L)) {
             try {
                 getCurrentLocationOnce(context)
             } catch (_: Exception) {
@@ -147,8 +155,11 @@ object LocationUtils {
             )
     }
 
-    @SuppressLint("MissingPermission")
     private suspend fun getCurrentLocationOnce(context: Context): Location = suspendCancellableCoroutine { cont ->
+        if (!hasLocationPermission(context)) {
+            cont.resumeWithException(SecurityException("Location permission is unavailable"))
+            return@suspendCancellableCoroutine
+        }
         val lm = context.getSystemService(LocationManager::class.java) ?: run {
             cont.resumeWithException(IllegalStateException("No location manager"))
             return@suspendCancellableCoroutine
@@ -163,12 +174,16 @@ object LocationUtils {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val signal = CancellationSignal()
             cont.invokeOnCancellation { signal.cancel() }
-            lm.getCurrentLocation(provider, signal, { runnable -> runnable.run() }) { location ->
-                if (location != null) {
-                    cont.resume(location)
-                } else {
-                    cont.resumeWithException(IllegalStateException("Location unavailable"))
+            try {
+                lm.getCurrentLocation(provider, signal, { runnable -> runnable.run() }) { location ->
+                    if (location != null) {
+                        cont.resume(location)
+                    } else {
+                        cont.resumeWithException(IllegalStateException("Location unavailable"))
+                    }
                 }
+            } catch (error: SecurityException) {
+                cont.resumeWithException(error)
             }
             return@suspendCancellableCoroutine
         }
@@ -179,7 +194,7 @@ object LocationUtils {
             cont.resume(location)
         }
         cont.invokeOnCancellation { lm.removeUpdates(listener) }
-            requestSingleUpdateCompat(lm, provider, listener)
+            requestSingleUpdateCompat(context, lm, provider, listener)
     }
 
     private fun pickSingleUpdateProvider(providers: List<String>): String? {
@@ -247,12 +262,23 @@ object LocationUtils {
         return accuracyScore + recencyScore + providerScore
     }
 
-    @Suppress("DEPRECATION")
     private fun requestSingleUpdateCompat(
+        context: Context,
         locationManager: android.location.LocationManager,
         provider: String,
         listener: android.location.LocationListener,
     ) {
-        locationManager.requestSingleUpdate(provider, listener, null)
+        if (!hasLocationPermission(context)) return
+        try {
+            @Suppress("DEPRECATION")
+            locationManager.requestSingleUpdate(provider, listener, null)
+        } catch (_: SecurityException) {
+            // Permission may be revoked after the preceding check.
+        }
+    }
+
+    private fun hasLocationPermission(context: Context): Boolean {
+        return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 }

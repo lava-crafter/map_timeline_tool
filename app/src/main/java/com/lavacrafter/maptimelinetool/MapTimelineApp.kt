@@ -19,6 +19,7 @@ package com.lavacrafter.maptimelinetool
 import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
+import android.os.SystemClock
 import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.SettingsRepository
@@ -26,9 +27,14 @@ import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveResolver
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
+import com.lavacrafter.maptimelinetool.notification.isQuickAddNotificationAvailable
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +55,10 @@ class MapTimelineApp : Application() {
         val basePath = File(cacheDir, "osmdroid")
         config.osmdroidBasePath = basePath
         config.osmdroidTileCache = File(basePath, "tiles")
+        val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
+        graph.quickAddPassiveLocationUpdater.refreshRegistration(
+            isQuickAddNotificationAvailable(quickAddEnabled)
+        )
     }
 }
 
@@ -57,8 +67,10 @@ class AppGraph(
 ) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private val database: AppDatabase by lazy { AppDatabase.get(app) }
+
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
-        PointRepository(AppDatabase.get(app).pointDao())
+        PointRepository(database, database.pointDao())
     }
 
     val settingsManagementUseCase: SettingsManagementUseCase by lazy {
@@ -66,7 +78,42 @@ class AppGraph(
     }
 
     val locationProvider: LocationProvider by lazy {
-        AndroidLocationProvider(app)
+        val androidProvider = AndroidLocationProvider(app)
+        CompositeLocationProvider(
+            preferred = GoogleFusedLocationProvider(app),
+            fallback = androidProvider
+        )
+    }
+
+    val locationSaveResolver: LocationSaveResolver by lazy {
+        LocationSaveResolver(locationProvider)
+    }
+
+    val quickAddLocationCache: QuickAddLocationCache by lazy {
+        QuickAddLocationCache(
+            elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos
+        )
+    }
+
+    val quickAddPassiveLocationUpdater: QuickAddPassiveLocationUpdater by lazy {
+        QuickAddPassiveLocationUpdater(app, quickAddLocationCache)
+    }
+
+    val quickAddResolver: QuickAddResolver by lazy {
+        QuickAddResolver(
+            locationProvider = locationProvider,
+            locationCache = quickAddLocationCache,
+            elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
+            addPoint = { title, location, timestamp ->
+                pointWriteUseCase.addPointWithTags(
+                    title = title,
+                    note = "",
+                    location = location,
+                    timestamp = timestamp,
+                    tagIds = settingsManagementUseCase.getDefaultTagIds().toSet()
+                )
+            }
+        )
     }
 
     val sensorSnapshotPort: SensorSnapshotPort by lazy {

@@ -51,7 +51,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.activity.compose.BackHandler
@@ -66,10 +65,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.lavacrafter.maptimelinetool.LocationUtils
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.ui.DownloadTileSource
-import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.cachemanager.CacheManager
 import org.osmdroid.util.BoundingBox
@@ -85,10 +82,10 @@ fun MapDownloadScreen(
     tileSource: DownloadTileSource,
     useMultiThreadDownload: Boolean,
     downloadThreadCount: Int,
-    downloadedOnly: Boolean
+    downloadedOnly: Boolean,
+    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var mapView: MapView? by remember { mutableStateOf(null) }
     var cacheManagerRef: CacheManager? by remember { mutableStateOf(null) }
     var minZoom by remember { mutableStateOf(8) }
@@ -215,12 +212,11 @@ fun MapDownloadScreen(
                         .padding(12.dp)
                         .size(44.dp),
                     onClick = {
-                        val map = mapView ?: return@FloatingActionButton
-                        scope.launch {
-                            val loc = LocationUtils.getBestEffortLocation(context, 5_000L)
+                        onResolveCenterLocation { loc ->
+                            val map = mapView ?: return@onResolveCenterLocation
                             if (loc == null) {
                                 Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
-                                return@launch
+                                return@onResolveCenterLocation
                             }
                             map.controller.setZoom(15.0)
                             map.controller.setCenter(GeoPoint(loc.latitude, loc.longitude))

@@ -44,6 +44,8 @@ object SettingsStore {
     private const val KEY_GYROSCOPE_ENABLED = "gyroscope_enabled"
     private const val KEY_MAGNETOMETER_ENABLED = "magnetometer_enabled"
     private const val KEY_NOISE_ENABLED = "noise_enabled"
+    private const val KEY_QUICK_ADD_NOTIFICATION_ENABLED = "quick_add_notification_enabled"
+    private const val KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED = "quick_add_notification_permission_requested"
     private const val SETTINGS_SCHEMA_VERSION = 1
     private const val MAX_RECENT_TAGS = 3
 
@@ -323,6 +325,30 @@ object SettingsStore {
             .apply()
     }
 
+    fun getQuickAddNotificationEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, false)
+    }
+
+    fun setQuickAddNotificationEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, enabled)
+            .apply()
+    }
+
+    fun getQuickAddNotificationPermissionRequested(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, false)
+    }
+
+    fun setQuickAddNotificationPermissionRequested(context: Context, requested: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, requested)
+            .apply()
+    }
+
     fun getDownloadedAreas(context: Context): List<DownloadedArea> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_DOWNLOADED_AREAS, null)
@@ -393,6 +419,7 @@ object SettingsStore {
         root.put(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context))
         root.put(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context))
         root.put(KEY_NOISE_ENABLED, getNoiseEnabled(context))
+        root.put(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
         val downloadedAreas = org.json.JSONArray()
         getDownloadedAreas(context).forEach { area ->
             val areaObj = org.json.JSONObject()
@@ -409,49 +436,60 @@ object SettingsStore {
         return root.toString()
     }
 
-    fun importBackupJson(context: Context, json: String): Boolean {
+    fun importBackupJson(
+        context: Context,
+        json: String,
+        legacyTagIdToActualId: Map<Long, Long> = emptyMap(),
+        restoreTagSettings: Boolean = true
+    ): Boolean {
+        val normalizedJson = sanitizeBackupJsonForImport(json, legacyTagIdToActualId, restoreTagSettings)
+            ?: return false
         return runCatching {
-            val root = org.json.JSONObject(json)
-            if (root.has(KEY_TIMEOUT)) setTimeoutSeconds(context, root.optInt(KEY_TIMEOUT, getTimeoutSeconds(context)))
-            if (root.has(KEY_CACHE_POLICY)) setCachePolicy(context, MapCachePolicy.fromValue(root.optInt(KEY_CACHE_POLICY, getCachePolicy(context).value)))
+            val root = org.json.JSONObject(normalizedJson)
+            val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val editor = preferences.edit()
+            if (root.has(KEY_TIMEOUT)) editor.putInt(KEY_TIMEOUT, root.optInt(KEY_TIMEOUT, getTimeoutSeconds(context)).coerceIn(5, 300))
+            if (root.has(KEY_CACHE_POLICY)) editor.putInt(KEY_CACHE_POLICY, MapCachePolicy.fromValue(root.optInt(KEY_CACHE_POLICY, getCachePolicy(context).value)).value)
             if (root.has(KEY_SATELLITE_CACHE_POLICY)) {
-                setSatelliteCachePolicy(context, MapCachePolicy.fromValue(root.optInt(KEY_SATELLITE_CACHE_POLICY, getSatelliteCachePolicy(context).value)))
+                editor.putInt(KEY_SATELLITE_CACHE_POLICY, MapCachePolicy.fromValue(root.optInt(KEY_SATELLITE_CACHE_POLICY, getSatelliteCachePolicy(context).value)).value)
             }
-            if (root.has(KEY_PINNED_TAGS)) setPinnedTagIds(context, parseLongArray(root.optJSONArray(KEY_PINNED_TAGS)))
+            if (root.has(KEY_PINNED_TAGS)) editor.putString(KEY_PINNED_TAGS, parseLongArray(root.optJSONArray(KEY_PINNED_TAGS)).joinToString(","))
             if (root.has(KEY_RECENT_TAGS)) {
-                // Validate external backup payload and keep in-app recent tags limit.
-                saveLongList(context, KEY_RECENT_TAGS, parseLongArray(root.optJSONArray(KEY_RECENT_TAGS)).take(MAX_RECENT_TAGS))
+                editor.putString(KEY_RECENT_TAGS, parseLongArray(root.optJSONArray(KEY_RECENT_TAGS)).take(MAX_RECENT_TAGS).joinToString(","))
             }
             if (root.has(KEY_ZOOM_BEHAVIOR)) {
-                setZoomButtonBehavior(context, ZoomButtonBehavior.fromValue(root.optInt(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)))
+                editor.putInt(KEY_ZOOM_BEHAVIOR, ZoomButtonBehavior.fromValue(root.optInt(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)).value)
             }
             if (root.has(KEY_LANGUAGE_PREFERENCE)) {
-                setLanguagePreference(context, LanguagePreference.fromValue(root.optInt(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)))
+                editor.putInt(KEY_LANGUAGE_PREFERENCE, LanguagePreference.fromValue(root.optInt(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)).value)
             }
-            if (root.has(KEY_FOLLOW_SYSTEM_THEME)) setFollowSystemTheme(context, root.optBoolean(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context)))
-            if (root.has(KEY_DEFAULT_TAGS)) setDefaultTagIds(context, parseLongArray(root.optJSONArray(KEY_DEFAULT_TAGS)))
-            if (root.has(KEY_MARKER_SCALE)) setMarkerScale(context, root.optDouble(KEY_MARKER_SCALE, getMarkerScale(context).toDouble()).toFloat())
-            if (root.has(KEY_MAP_TILE_SOURCE)) setMapTileSourceId(context, root.optString(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context)))
-            if (root.has(KEY_DOWNLOAD_TILE_SOURCE)) setDownloadTileSourceId(context, root.optString(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context)))
+            if (root.has(KEY_FOLLOW_SYSTEM_THEME)) editor.putBoolean(KEY_FOLLOW_SYSTEM_THEME, root.optBoolean(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context)))
+            if (root.has(KEY_DEFAULT_TAGS)) editor.putString(KEY_DEFAULT_TAGS, parseLongArray(root.optJSONArray(KEY_DEFAULT_TAGS)).joinToString(","))
+            if (root.has(KEY_MARKER_SCALE)) editor.putFloat(KEY_MARKER_SCALE, root.optDouble(KEY_MARKER_SCALE, getMarkerScale(context).toDouble()).toFloat().coerceIn(0.3f, 1.75f))
+            if (root.has(KEY_MAP_TILE_SOURCE)) editor.putString(KEY_MAP_TILE_SOURCE, root.optString(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context)))
+            if (root.has(KEY_DOWNLOAD_TILE_SOURCE)) editor.putString(KEY_DOWNLOAD_TILE_SOURCE, root.optString(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context)))
             if (root.has(KEY_DOWNLOAD_MULTI_THREAD)) {
-                setDownloadMultiThreadEnabled(context, root.optBoolean(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context)))
+                editor.putBoolean(KEY_DOWNLOAD_MULTI_THREAD, root.optBoolean(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context)))
             }
             if (root.has(KEY_DOWNLOAD_THREAD_COUNT)) {
-                setDownloadThreadCount(context, root.optInt(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context)))
+                editor.putInt(KEY_DOWNLOAD_THREAD_COUNT, root.optInt(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context)).coerceIn(2, 32))
             }
             if (root.has(KEY_PHOTO_LOSSLESS_ENABLED)) {
-                setPhotoLosslessEnabled(context, root.optBoolean(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context)))
+                editor.putBoolean(KEY_PHOTO_LOSSLESS_ENABLED, root.optBoolean(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context)))
             }
             if (root.has(KEY_PHOTO_COMPRESS_FORMAT)) {
-                setPhotoCompressFormat(context, PhotoCompressFormat.fromValue(root.optInt(KEY_PHOTO_COMPRESS_FORMAT, getPhotoCompressFormat(context).value)))
+                editor.putInt(KEY_PHOTO_COMPRESS_FORMAT, PhotoCompressFormat.fromValue(root.optInt(KEY_PHOTO_COMPRESS_FORMAT, getPhotoCompressFormat(context).value)).value)
             }
-            if (root.has(KEY_PHOTO_COMPRESS_QUALITY)) setPhotoCompressQuality(context, root.optInt(KEY_PHOTO_COMPRESS_QUALITY, getPhotoCompressQuality(context)))
-            if (root.has(KEY_PRESSURE_ENABLED)) setPressureEnabled(context, root.optBoolean(KEY_PRESSURE_ENABLED, getPressureEnabled(context)))
-            if (root.has(KEY_AMBIENT_LIGHT_ENABLED)) setAmbientLightEnabled(context, root.optBoolean(KEY_AMBIENT_LIGHT_ENABLED, getAmbientLightEnabled(context)))
-            if (root.has(KEY_ACCELEROMETER_ENABLED)) setAccelerometerEnabled(context, root.optBoolean(KEY_ACCELEROMETER_ENABLED, getAccelerometerEnabled(context)))
-            if (root.has(KEY_GYROSCOPE_ENABLED)) setGyroscopeEnabled(context, root.optBoolean(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context)))
-            if (root.has(KEY_MAGNETOMETER_ENABLED)) setMagnetometerEnabled(context, root.optBoolean(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context)))
-            if (root.has(KEY_NOISE_ENABLED)) setNoiseEnabled(context, root.optBoolean(KEY_NOISE_ENABLED, getNoiseEnabled(context)))
+            if (root.has(KEY_PHOTO_COMPRESS_QUALITY)) editor.putInt(KEY_PHOTO_COMPRESS_QUALITY, root.optInt(KEY_PHOTO_COMPRESS_QUALITY, getPhotoCompressQuality(context)).coerceIn(1, 100))
+            if (root.has(KEY_PRESSURE_ENABLED)) editor.putBoolean(KEY_PRESSURE_ENABLED, root.optBoolean(KEY_PRESSURE_ENABLED, getPressureEnabled(context)))
+            if (root.has(KEY_AMBIENT_LIGHT_ENABLED)) editor.putBoolean(KEY_AMBIENT_LIGHT_ENABLED, root.optBoolean(KEY_AMBIENT_LIGHT_ENABLED, getAmbientLightEnabled(context)))
+            if (root.has(KEY_ACCELEROMETER_ENABLED)) editor.putBoolean(KEY_ACCELEROMETER_ENABLED, root.optBoolean(KEY_ACCELEROMETER_ENABLED, getAccelerometerEnabled(context)))
+            if (root.has(KEY_GYROSCOPE_ENABLED)) editor.putBoolean(KEY_GYROSCOPE_ENABLED, root.optBoolean(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context)))
+            if (root.has(KEY_MAGNETOMETER_ENABLED)) editor.putBoolean(KEY_MAGNETOMETER_ENABLED, root.optBoolean(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context)))
+            if (root.has(KEY_NOISE_ENABLED)) editor.putBoolean(KEY_NOISE_ENABLED, root.optBoolean(KEY_NOISE_ENABLED, getNoiseEnabled(context)))
+            if (root.has(KEY_QUICK_ADD_NOTIFICATION_ENABLED)) {
+                editor.putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, root.optBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context)))
+            }
             if (root.has(KEY_DOWNLOADED_AREAS)) {
                 val areasArray = root.optJSONArray(KEY_DOWNLOADED_AREAS) ?: org.json.JSONArray()
                 val areas = buildList {
@@ -470,10 +508,43 @@ object SettingsStore {
                         )
                     }
                 }
-                saveDownloadedAreas(context, dedupeAreas(areas))
+                val array = org.json.JSONArray()
+                dedupeAreas(areas).forEach { area ->
+                    array.put(org.json.JSONObject().apply {
+                        put("north", area.north)
+                        put("south", area.south)
+                        put("east", area.east)
+                        put("west", area.west)
+                        put("minZoom", area.minZoom)
+                        put("maxZoom", area.maxZoom)
+                        put("createdAt", area.createdAt)
+                    })
+                }
+                editor.putString(KEY_DOWNLOADED_AREAS, array.toString())
             }
-            true
+            editor.commit()
         }.getOrDefault(false)
+    }
+
+    internal fun sanitizeBackupJsonForImport(
+        json: String,
+        legacyTagIdToActualId: Map<Long, Long> = emptyMap(),
+        restoreTagSettings: Boolean = true
+    ): String? {
+        return runCatching {
+            val root = org.json.JSONObject(json)
+            root.remove(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED)
+            if (restoreTagSettings) {
+                remapTagIdsForImport(root, KEY_PINNED_TAGS, legacyTagIdToActualId)
+                remapTagIdsForImport(root, KEY_RECENT_TAGS, legacyTagIdToActualId)
+                remapTagIdsForImport(root, KEY_DEFAULT_TAGS, legacyTagIdToActualId)
+            } else {
+                root.remove(KEY_PINNED_TAGS)
+                root.remove(KEY_RECENT_TAGS)
+                root.remove(KEY_DEFAULT_TAGS)
+            }
+            root.toString()
+        }.getOrNull()
     }
 
     private fun saveDownloadedAreas(context: Context, areas: List<DownloadedArea>) {
@@ -547,6 +618,38 @@ object SettingsStore {
                     else -> null
                 }
                 if (value != null) add(value)
+            }
+        }
+    }
+
+    private fun remapTagIdsForImport(
+        root: org.json.JSONObject,
+        key: String,
+        legacyTagIdToActualId: Map<Long, Long>
+    ) {
+        if (!root.has(key)) {
+            return
+        }
+        val remapped = remapImportedTagIds(parseLongArray(root.optJSONArray(key)), legacyTagIdToActualId)
+        val array = org.json.JSONArray()
+        remapped.forEach { tagId -> array.put(tagId) }
+        root.put(key, array)
+    }
+
+    private fun remapImportedTagIds(
+        tagIds: List<Long>,
+        legacyTagIdToActualId: Map<Long, Long>
+    ): List<Long> {
+        if (tagIds.isEmpty()) {
+            return emptyList()
+        }
+        val seen = mutableSetOf<Long>()
+        return buildList {
+            tagIds.forEach { legacyId ->
+                val actualId = legacyTagIdToActualId[legacyId] ?: return@forEach
+                if (seen.add(actualId)) {
+                    add(actualId)
+                }
             }
         }
     }

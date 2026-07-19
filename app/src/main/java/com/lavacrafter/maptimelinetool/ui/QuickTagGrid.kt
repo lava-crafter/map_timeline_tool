@@ -54,7 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
-import com.lavacrafter.maptimelinetool.text.sanitizeTagName
+import com.lavacrafter.maptimelinetool.text.normalizeTagNameForEditing
 
 sealed interface QuickTagSlot
 
@@ -181,7 +181,7 @@ fun TagSelectionDialog(
             Column(modifier = Modifier.height(340.dp)) {
                 OutlinedTextField(
                     value = newTagName,
-                    onValueChange = { newTagName = sanitizeTagName(it) },
+                    onValueChange = { newTagName = normalizeTagNameForEditing(it) },
                     label = { Text(stringResource(R.string.label_new_tag)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true

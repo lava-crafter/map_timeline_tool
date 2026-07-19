@@ -26,6 +26,21 @@ class TextInputSanitizerTest {
     }
 
     @Test
+    fun `editing normalizers preserve typed whitespace`() {
+        assertEquals("Hello ", normalizePointTitleForEditing("Hello "))
+        assertEquals("New  tag ", normalizeTagNameForEditing("New  tag "))
+        assertEquals("Note \n", normalizePointNoteForEditing("Note \r\n"))
+    }
+
+    @Test
+    fun `editing normalizers retain limits and filter controls`() {
+        assertEquals("Hello World ", normalizePointTitleForEditing("Hello\tWorld \u0007"))
+        assertEquals(MAX_POINT_TITLE_LENGTH, normalizePointTitleForEditing("x".repeat(MAX_POINT_TITLE_LENGTH + 20)).length)
+        assertEquals(MAX_POINT_NOTE_LENGTH, normalizePointNoteForEditing("y".repeat(MAX_POINT_NOTE_LENGTH + 20)).length)
+        assertEquals(MAX_TAG_NAME_LENGTH, normalizeTagNameForEditing("z".repeat(MAX_TAG_NAME_LENGTH + 20)).length)
+    }
+
+    @Test
     fun `sanitize helpers cap length`() {
         assertEquals(MAX_POINT_TITLE_LENGTH, sanitizePointTitle("x".repeat(MAX_POINT_TITLE_LENGTH + 20)).length)
         assertEquals(MAX_POINT_NOTE_LENGTH, sanitizePointNote("y".repeat(MAX_POINT_NOTE_LENGTH + 20)).length)

@@ -28,6 +28,11 @@
     <string name="action_retake_photo">Reprendre</string>
     <string name="action_remove_photo">Retirer la photo</string>
     <string name="action_view_photo">Voir la photo</string>
+    <string name="action_share_photo">Partager la photo</string>
+    <string name="photo_share_chooser_title">Partager la photo</string>
+    <string name="toast_photo_unavailable">Le fichier photo n’est pas disponible</string>
+    <string name="toast_no_photo_viewer">Aucune application ne peut afficher cette photo</string>
+    <string name="toast_photo_share_failed">Impossible de partager cette photo</string>
     <string name="action_add">Ajouter</string>
     <string name="action_done">Terminé</string>
     <string name="action_add_point_to_tag">Ajouter des points</string>

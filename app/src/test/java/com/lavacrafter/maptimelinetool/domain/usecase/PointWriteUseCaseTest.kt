@@ -111,7 +111,10 @@ private class FakePointRepository : PointRepositoryGateway {
     }
     override suspend fun delete(point: Point) = Unit
     override suspend fun getAll(): List<Point> = emptyList()
+    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point? = null
+    override suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point> = emptyList()
     override fun observeTags(): Flow<List<Tag>> = flowOf(emptyList())
+    override suspend fun getAllTags(): List<Tag> = emptyList()
     override suspend fun insertTag(tag: Tag): Long = 0L
     override suspend fun updateTag(tag: Tag) = Unit
     override suspend fun deleteTag(tagId: Long) = Unit

@@ -81,6 +81,13 @@ object CsvExporter {
         points: List<Point>,
         writer: Writer,
         photoRelPathResolver: (Point) -> String? = { null }
+    ) = writeCsv(points.asSequence(), writer, photoRelPathResolver)
+
+    /** Writes incrementally so callers can provide a paged source without materializing all rows. */
+    fun writeCsv(
+        points: Sequence<Point>,
+        writer: Writer,
+        photoRelPathResolver: (Point) -> String? = { null }
     ) {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")

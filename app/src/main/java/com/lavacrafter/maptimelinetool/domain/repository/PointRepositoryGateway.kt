@@ -21,14 +21,20 @@ import com.lavacrafter.maptimelinetool.domain.model.Tag
 import kotlinx.coroutines.flow.Flow
 
 interface PointRepositoryGateway {
+    /** Keeps multi-table repository work atomic without exposing Room to callers. */
+    suspend fun <T> inTransaction(block: suspend () -> T): T = block()
+
     fun observeAll(): Flow<List<Point>>
     suspend fun insert(point: Point): Long
     suspend fun update(point: Point)
     suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?)
     suspend fun delete(point: Point)
     suspend fun getAll(): List<Point>
+    suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point?
+    suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point>
 
     fun observeTags(): Flow<List<Tag>>
+    suspend fun getAllTags(): List<Tag>
     suspend fun insertTag(tag: Tag): Long
     suspend fun updateTag(tag: Tag)
     suspend fun deleteTag(tagId: Long)

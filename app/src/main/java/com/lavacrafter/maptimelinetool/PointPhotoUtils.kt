@@ -43,6 +43,45 @@ fun getPointPhotoDir(context: Context): File {
     return dir
 }
 
+fun createPointPhotoImportStagingDir(context: Context): File {
+    val directory = File(context.filesDir, "point_photo_imports/import_${UUID.randomUUID()}")
+    check(directory.mkdirs() || directory.isDirectory) { "Unable to create photo import staging directory" }
+    return directory
+}
+
+fun commitPointPhotoImport(context: Context, stagingFiles: List<File>): List<String> {
+    val destinationDir = getPointPhotoDir(context)
+    val committed = mutableListOf<File>()
+    try {
+        stagingFiles.forEach { stagingFile ->
+            if (!stagingFile.isFile || stagingFile.parentFile?.isDirectory != true) {
+                throw IllegalArgumentException("Invalid staged photo")
+            }
+            val destination = File(destinationDir, stagingFile.name)
+            check(!destination.exists()) { "Generated photo name already exists" }
+            val moved = stagingFile.renameTo(destination)
+            if (!moved) {
+                stagingFile.inputStream().buffered().use { input ->
+                    destination.outputStream().buffered().use { output -> input.copyTo(output) }
+                }
+                if (!stagingFile.delete()) {
+                    destination.delete()
+                    throw IllegalStateException("Unable to remove staged photo")
+                }
+            }
+            committed += destination
+        }
+        return committed.map(::toStoredPhotoPath)
+    } catch (error: Exception) {
+        committed.forEach { it.delete() }
+        throw error
+    }
+}
+
+fun deletePointPhotoImportStagingDir(stagingDir: File?) {
+    stagingDir?.takeIf { it.exists() }?.deleteRecursively()
+}
+
 fun createPendingPointPhotoFile(context: Context): File {
     val fileName = "point_photo_${UUID.randomUUID()}.jpg"
     return File(getPointPhotoDir(context), fileName)
@@ -57,9 +96,15 @@ fun toStoredPhotoPath(file: File): String = file.name
 
 fun resolvePointPhotoFile(context: Context, photoPath: String?): File? {
     val normalized = photoPath?.trim().orEmpty()
-    if (normalized.isEmpty()) return null
-    val file = File(normalized)
-    return if (file.isAbsolute) file else File(getPointPhotoDir(context), normalized)
+    if (normalized.isEmpty() || normalized.contains('/') || normalized.contains('\\') || normalized == "." || normalized == "..") {
+        return null
+    }
+    val photoDirectory = getPointPhotoDir(context).canonicalFile
+    val candidate = File(normalized)
+    val resolved = if (candidate.isAbsolute) candidate.canonicalFile else File(photoDirectory, normalized).canonicalFile
+    return resolved.takeIf { file ->
+        file.parentFile?.canonicalFile == photoDirectory
+    }
 }
 
 fun deletePointPhotoFile(context: Context, photoPath: String?) {
