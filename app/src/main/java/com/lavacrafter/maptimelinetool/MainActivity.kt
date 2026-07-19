@@ -17,9 +17,12 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.Manifest
+import android.app.StatusBarManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -106,11 +109,10 @@ import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
-import com.lavacrafter.maptimelinetool.notification.ACTION_QUICK_ADD
-import com.lavacrafter.maptimelinetool.notification.performQuickAdd
-import com.lavacrafter.maptimelinetool.notification.syncQuickAddNotification
-import com.lavacrafter.maptimelinetool.quickadd.QuickAddEnableAction
-import com.lavacrafter.maptimelinetool.quickadd.resolveQuickAddEnableAction
+import com.lavacrafter.maptimelinetool.quickadd.ACTION_OPEN_QUICK_ADD_SETUP
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddTileService
+import com.lavacrafter.maptimelinetool.quickadd.canShowQuickAddNotifications
+import com.lavacrafter.maptimelinetool.quickadd.ensureQuickAddNotificationChannels
 import com.lavacrafter.maptimelinetool.ui.theme.MapTimelineToolTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -126,7 +128,7 @@ import org.osmdroid.tileprovider.modules.SqlTileWriter
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
     private val graph by lazy { applicationContext.appGraph() }
-    private val quickAddRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val quickAddSetupRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val viewModel: AppViewModel by viewModels {
         AppViewModel.factory(application, graph)
     }
@@ -137,6 +139,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val settingsUseCase = graph.settingsManagementUseCase
+        val openQuickAddSetupInitially = intent?.action == ACTION_OPEN_QUICK_ADD_SETUP
 
         applyLanguagePreference(settingsUseCase.getLanguagePreference().toUi())
 
@@ -145,12 +148,23 @@ class MainActivity : AppCompatActivity() {
             val isSystemDark = isSystemInDarkTheme()
             MapTimelineToolTheme(darkTheme = if (settingsState.followSystemTheme) isSystemDark else settingsState.isDarkTheme) {
                 val context = LocalContext.current
+                val quickAddNotificationRequiredText = stringResource(R.string.quick_add_result_notification_required)
+                val quickAddPermissionRequiredText = stringResource(R.string.quick_add_result_permission_required)
+                val quickAddConfiguredText = stringResource(R.string.settings_quick_add_configured)
+                val quickAddTileLabel = stringResource(R.string.quick_add_tile_label)
+                val quickAddTileAddedText = stringResource(R.string.settings_quick_add_tile_added)
+                val quickAddTileNotAddedText = stringResource(R.string.settings_quick_add_tile_not_added)
+                val quickAddTileManualText = stringResource(R.string.settings_quick_add_tile_manual)
                 var showTagPickerForAdd by remember { mutableStateOf(false) }
                 var showTagPickerForEdit by remember { mutableStateOf(false) }
                 var showMapDownload by remember { mutableStateOf(false) }
                 var showExportFlow by remember { mutableStateOf(false) }
                 var showZipExportOptions by remember { mutableStateOf(false) }
-                var settingsRoute by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Main) }
+                var settingsRoute by remember {
+                    mutableStateOf<SettingsRoute>(
+                        if (openQuickAddSetupInitially) SettingsRoute.QuickAdd else SettingsRoute.Main
+                    )
+                }
                 var newPointSelectedTagIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
                 var showPinLimitDialog by remember { mutableStateOf(false) }
                 var showExitDialog by remember { mutableStateOf(false) }
@@ -164,7 +178,8 @@ class MainActivity : AppCompatActivity() {
                 var lastTypingTime by remember { mutableStateOf<Long?>(null) }
                 val scaffoldState = rememberBottomSheetScaffoldState()
                 val sheetState = scaffoldState.bottomSheetState
-                var tab by remember { mutableStateOf(0) }
+                var tab by remember { mutableStateOf(if (openQuickAddSetupInitially) 2 else 0) }
+                var quickAddInitialized by remember { mutableStateOf(graph.quickAddStateStore.isInitialized()) }
                 var showAbout by remember { mutableStateOf(false) }
                 var showDialog by remember { mutableStateOf(false) }
                 var pendingTimestamp by remember { mutableStateOf<Long?>(null) }
@@ -446,17 +461,18 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                var onQuickAddEnableRequest: () -> Unit = {}
+                var onQuickAddSetupRequest: () -> Unit = {}
                 val notificationPermissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
                 ) { granted ->
                     if (granted) {
-                        onQuickAddEnableRequest()
+                        onQuickAddSetupRequest()
                     } else {
-                        settingsViewModel.setQuickAddNotificationEnabled(false)
+                        graph.quickAddStateStore.setInitialized(false)
+                        quickAddInitialized = false
                         Toast.makeText(
                             context,
-                            context.getString(R.string.toast_quick_add_notification_permission_denied),
+                            quickAddNotificationRequiredText,
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -483,10 +499,6 @@ class MainActivity : AppCompatActivity() {
                     } else if (!granted) {
                         Toast.makeText(context, context.getString(R.string.toast_permission_denied), Toast.LENGTH_SHORT).show()
                     }
-                }
-
-                LaunchedEffect(settingsState.quickAddNotificationEnabled) {
-                    context.syncQuickAddNotification(settingsState.quickAddNotificationEnabled)
                 }
 
                 LaunchedEffect(settingsState.cachePolicy, settingsState.satelliteCachePolicy, settingsState.mapTileSourceId, networkStatus) {
@@ -536,16 +548,6 @@ class MainActivity : AppCompatActivity() {
                     ) == PackageManager.PERMISSION_GRANTED
                 }
 
-                fun hasBackgroundLocationPermission(): Boolean {
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                        return true
-                    }
-                    return ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-                }
-
                 fun openAppSettings() {
                     context.startActivity(
                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -563,50 +565,46 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
 
-                onQuickAddEnableRequest = {
-                    when (
-                        resolveQuickAddEnableAction(
-                            sdkInt = Build.VERSION.SDK_INT,
-                            notificationsGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.POST_NOTIFICATIONS
-                                ) == PackageManager.PERMISSION_GRANTED,
-                            preciseLocationGranted = hasPreciseLocationPermission(),
-                            coarseLocationGranted = hasLocationPermission(),
-                            backgroundLocationGranted = hasBackgroundLocationPermission()
-                        )
-                    ) {
-                        QuickAddEnableAction.ENABLE -> {
-                            settingsViewModel.setQuickAddNotificationEnabled(true)
-                        }
-                        QuickAddEnableAction.REQUEST_NOTIFICATION_PERMISSION -> {
-                            settingsViewModel.setQuickAddNotificationEnabled(false)
-                            settingsViewModel.setQuickAddNotificationPermissionRequested(true)
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        QuickAddEnableAction.REQUEST_FOREGROUND_LOCATION_PERMISSION -> {
-                            settingsViewModel.setQuickAddNotificationEnabled(false)
-                            pendingLocationPermissionAction = { onQuickAddEnableRequest() }
+                onQuickAddSetupRequest = {
+                    val notificationsGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                    when {
+                        !notificationsGranted -> notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        !hasLocationPermission() -> {
+                            pendingLocationPermissionAction = { onQuickAddSetupRequest() }
                             requestLocationPermission()
                         }
-                        QuickAddEnableAction.OPEN_SETTINGS_FOR_PRECISE_LOCATION -> {
-                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                        !hasPreciseLocationPermission() -> {
                             Toast.makeText(
                                 context,
-                                context.getString(R.string.toast_quick_add_precise_permission_required),
+                                quickAddPermissionRequiredText,
                                 Toast.LENGTH_SHORT
                             ).show()
                             openAppSettings()
                         }
-                        QuickAddEnableAction.OPEN_SETTINGS_FOR_BACKGROUND_LOCATION -> {
-                            settingsViewModel.setQuickAddNotificationEnabled(false)
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.toast_quick_add_background_permission_required),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            openAppSettings()
+                        else -> {
+                            context.ensureQuickAddNotificationChannels()
+                            if (context.canShowQuickAddNotifications()) {
+                                graph.quickAddStateStore.setInitialized(true)
+                                quickAddInitialized = true
+                                Toast.makeText(
+                                    context,
+                                    quickAddConfiguredText,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                graph.quickAddStateStore.setInitialized(false)
+                                quickAddInitialized = false
+                                Toast.makeText(
+                                    context,
+                                    quickAddNotificationRequiredText,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                openAppSettings()
+                            }
                         }
                     }
                 }
@@ -703,10 +701,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 LaunchedEffect(Unit) {
-                    quickAddRequests.collectLatest {
-                        runWithLocationPermission {
-                            context.performQuickAdd()
-                        }
+                    quickAddSetupRequests.collectLatest {
+                        tab = 2
+                        showAbout = false
+                        showMapDownload = false
+                        settingsRoute = SettingsRoute.QuickAdd
                     }
                 }
 
@@ -1104,13 +1103,32 @@ class MainActivity : AppCompatActivity() {
                                             restartApp()
                                         }
                                     },
-                                    quickAddNotificationEnabled = settingsState.quickAddNotificationEnabled,
-                                    quickAddNotificationPermissionRequested = settingsState.quickAddNotificationPermissionRequested,
-                                    onQuickAddNotificationEnabledChange = { enabled ->
-                                        if (!enabled) {
-                                            settingsViewModel.setQuickAddNotificationEnabled(false)
+                                    quickAddInitialized = quickAddInitialized,
+                                    onConfigureQuickAdd = onQuickAddSetupRequest,
+                                    onAddQuickAddTile = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            val statusBarManager = context.getSystemService(StatusBarManager::class.java)
+                                            statusBarManager?.requestAddTileService(
+                                                ComponentName(context, QuickAddTileService::class.java),
+                                                quickAddTileLabel,
+                                                Icon.createWithResource(context, R.drawable.ic_quick_add_tile),
+                                                ContextCompat.getMainExecutor(context)
+                                            ) { result ->
+                                                val message = if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ||
+                                                    result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED
+                                                ) {
+                                                    quickAddTileAddedText
+                                                } else {
+                                                    quickAddTileNotAddedText
+                                                }
+                                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                            }
                                         } else {
-                                            onQuickAddEnableRequest()
+                                            Toast.makeText(
+                                                context,
+                                                quickAddTileManualText,
+                                                Toast.LENGTH_LONG
+                                            ).show()
                                         }
                                     },
                                     timeoutSeconds = settingsState.timeoutSeconds,
@@ -1546,22 +1564,17 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        handleQuickAddIntent(intent)
+        intent?.action = null
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleQuickAddIntent(intent)
-    }
-
-    private fun handleQuickAddIntent(intent: Intent?) {
-        if (intent?.action != ACTION_QUICK_ADD) {
-            return
+        if (intent.action == ACTION_OPEN_QUICK_ADD_SETUP) {
+            quickAddSetupRequests.tryEmit(Unit)
+            intent.action = null
+            setIntent(intent)
         }
-        quickAddRequests.tryEmit(Unit)
-        intent.action = null
-        setIntent(intent)
     }
 
     private fun restartApp() {

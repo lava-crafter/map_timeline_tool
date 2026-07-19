@@ -298,7 +298,7 @@ Before publishing:
 7. Export ZIP and import it into a clean install.
 8. Confirm imported points preserve location metadata.
 9. Test manual precise location failure path.
-10. Test quick add / auto add if still enabled.
+10. Test the Quick Settings Quick Add tile and auto add if still enabled.
 11. Test permission denied path.
 12. Test CSV/GeoJSON/KML/KMZ export does not crash.
 

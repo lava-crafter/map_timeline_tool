@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.model.PointCaptureMode
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
@@ -44,8 +45,9 @@ class PointWriteUseCase(
         location: GeoPoint,
         timestamp: Long,
         tagIds: Set<Long>,
-        photoPath: String? = null
-    ) {
+        photoPath: String? = null,
+        captureMode: PointCaptureMode = PointCaptureMode.FULL
+    ): Long {
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { formatPointTimestamp(timestamp) }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
@@ -61,12 +63,13 @@ class PointWriteUseCase(
         tagIds.forEach { tagId ->
             repository.insertPointTag(id, tagId)
         }
-        if (shouldCollectNoise()) {
+        if (captureMode == PointCaptureMode.FULL && shouldCollectNoise()) {
             asyncScope.launch {
                 val noiseDb = runCatching { collectNoiseDb() }.getOrNull()
                 repository.updateNoiseDb(id, noiseDb)
             }.join()
         }
+        return id
     }
 
     suspend fun updatePoint(point: Point, title: String, note: String, photoPath: String?) {

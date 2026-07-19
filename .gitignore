@@ -13,7 +13,7 @@ local.properties
 # Log/OS Files
 *.log
 *.hprof
-/logs/*
+logs/*
 !logs/
 !logs/mklg.sh
 

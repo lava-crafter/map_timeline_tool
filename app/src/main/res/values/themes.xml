@@ -1,3 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.MapTimelineTool" parent="Theme.Material3.DayNight.NoActionBar"/>
+    <style name="Theme.QuickAdd.Transparent" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

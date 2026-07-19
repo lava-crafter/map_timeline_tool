@@ -88,12 +88,6 @@ class SettingsManagementUseCase(
     fun getNoiseEnabled(): Boolean = settingsGateway.getNoiseEnabled()
     fun setNoiseEnabled(enabled: Boolean) = settingsGateway.setNoiseEnabled(enabled)
 
-    fun getQuickAddNotificationEnabled(): Boolean = settingsGateway.getQuickAddNotificationEnabled()
-    fun setQuickAddNotificationEnabled(enabled: Boolean) = settingsGateway.setQuickAddNotificationEnabled(enabled)
-    fun getQuickAddNotificationPermissionRequested(): Boolean = settingsGateway.getQuickAddNotificationPermissionRequested()
-    fun setQuickAddNotificationPermissionRequested(requested: Boolean) =
-        settingsGateway.setQuickAddNotificationPermissionRequested(requested)
-
     fun getDownloadedAreas(): List<SettingsDownloadedArea> = settingsGateway.getDownloadedAreas()
     fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> = settingsGateway.addDownloadedArea(area)
     fun removeDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> = settingsGateway.removeDownloadedArea(area)

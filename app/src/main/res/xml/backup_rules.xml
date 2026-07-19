@@ -2,5 +2,6 @@
 <full-backup-content>
     <include domain="database" path="."/>
     <include domain="sharedpref" path="."/>
+    <exclude domain="sharedpref" path="quick_add_device_state.xml"/>
     <include domain="file" path="point_photos/"/>
 </full-backup-content>

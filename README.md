@@ -6,20 +6,20 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
 
 - Repository: https://github.com/muchenjiang/map_timeline_tool
 - Google Play: https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
-- Current app version: **0.1.7**
+- Current app version: **0.1.8**
 
 ## Highlights
 - Manual point logging with timestamp, coordinates, title, note, tags, optional photo, and location-quality metadata.
 - Map and list views, with cached/downloaded tiles available for offline reuse.
-- Optional Quick Add persistent notification for one-tap logging.
+- Quick Settings Quick Add tile for one-tap logging without a persistent notification.
 - Optional sensor capture: barometer, ambient light, accelerometer, gyroscope, magnetometer, and approximate 3-second dBFS noise.
 - Export: CSV, GeoJSON, KML, KMZ, ZIP.
 - Import: CSV, ZIP.
 - The in-app language picker is currently maintained for **English** and **Simplified Chinese**. Older translation files may still exist for compatibility, but they are not treated as fully supported.
 
 ## Permissions
-- **Location**: used for Add, Quick Add, and map centering. If a fresh precise fix is unavailable, the app may allow an approximate or last-known fallback instead of always failing.
-- **Notifications** (Android 13+): only needed if you enable the optional Quick Add notification.
+- **Location**: used for Add, Quick Add, and map centering. Manual flows may allow an approximate or last-known fallback; Quick Add only saves a fresh, accurate fix.
+- **Notifications** (Android 13+): used for the temporary foreground-service notification while Quick Add obtains a location.
 - **Microphone**: only needed if you enable noise capture. Stored noise is approximate dBFS, not calibrated SPL.
 
 ## Backup / Export / Import
@@ -37,7 +37,7 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
 1. Open the project in Android Studio.
 2. Run on a device or emulator with Android location services available.
 3. Grant location permission to add points or center the map.
-4. Optionally enable Quick Add notification and microphone-based noise capture in Settings.
+4. Configure Quick Add in Settings and add its Quick Settings tile if desired. Microphone-based noise capture remains a separate option.
 5. Use **Settings → Backup and Restore** to export data or create a ZIP backup.
 
 ## Notes
@@ -91,20 +91,20 @@ Map Timeline Tool 是一款离线优先的 Android 手动打点应用。除非�
 
 - 项目仓库：https://github.com/muchenjiang/map_timeline_tool
 - Google Play：https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
-- 当前应用版本：**0.1.7**
+- 当前应用版本：**0.1.8**
 
 ## 主要功能
 - 手动打点：记录时间、经纬度、标题、备注、标签、可选照片，以及定位质量元数据。
 - 地图与列表双视图，缓存/下载后的瓦片可离线复用。
-- 可选的通知栏“快速打点”常驻通知。
+- 无需常驻通知的快捷设置“快速打点”磁贴。
 - 可选传感器采集：气压、环境光、加速度、陀螺仪、磁力计，以及近似 3 秒 dBFS 噪音。
 - 导出：CSV、GeoJSON、KML、KMZ、ZIP。
 - 导入：CSV、ZIP。
 - 应用内语言选择器目前只维护 **English** 和 **简体中文**；旧翻译文件可能仍然存在，但不再视为完整支持。
 
 ## 权限说明
-- **定位权限**：用于新增打点、通知栏快速打点和地图居中。如果暂时拿不到新鲜且精确的定位，应用可能会允许使用近似定位或最近一次已知定位，而不一定直接失败。
-- **通知权限**（Android 13+）：仅在你启用可选的“快速打点”通知时需要。
+- **定位权限**：用于新增打点、快捷设置快速打点和地图居中。手动流程可能允许近似或最近位置；快速打点只保存新鲜且准确的位置。
+- **通知权限**（Android 13+）：用于快速打点获取位置期间的临时前台服务通知。
 - **麦克风权限**：仅在你启用噪音采集时需要。记录值为近似 dBFS，不是经过校准的 SPL。
 
 ## 备份 / 导出 / 导入
@@ -122,7 +122,7 @@ Map Timeline Tool 是一款离线优先的 Android 手动打点应用。除非�
 1. 在 Android Studio 中打开工程。
 2. 运行到设备或模拟器，并确保 Android 定位服务可用。
 3. 授予定位权限后即可新增点位或让地图居中。
-4. 如有需要，可在设置中启用通知栏快速打点和麦克风噪音采集。
+4. 如有需要，可在设置中配置快速打点并添加快捷设置磁贴；麦克风噪音采集仍为独立选项。
 5. 通过 **设置 → 备份与恢复** 导出数据或创建 ZIP 备份。
 
 ## 说明

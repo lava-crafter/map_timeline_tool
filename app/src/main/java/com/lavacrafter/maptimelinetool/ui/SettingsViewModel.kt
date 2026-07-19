@@ -76,8 +76,6 @@ class SettingsViewModel(
             gyroscopeEnabled = settingsUseCase.getGyroscopeEnabled(),
             magnetometerEnabled = settingsUseCase.getMagnetometerEnabled(),
             noiseEnabled = settingsUseCase.getNoiseEnabled(),
-            quickAddNotificationEnabled = settingsUseCase.getQuickAddNotificationEnabled(),
-            quickAddNotificationPermissionRequested = settingsUseCase.getQuickAddNotificationPermissionRequested(),
             mapTileSourceId = validMapTileSourceId
         )
     }
@@ -145,16 +143,6 @@ class SettingsViewModel(
     fun setNoiseEnabled(enabled: Boolean) {
         settingsUseCase.setNoiseEnabled(enabled)
         _uiState.update { it.copy(noiseEnabled = enabled) }
-    }
-
-    fun setQuickAddNotificationEnabled(enabled: Boolean) {
-        settingsUseCase.setQuickAddNotificationEnabled(enabled)
-        _uiState.update { it.copy(quickAddNotificationEnabled = enabled) }
-    }
-
-    fun setQuickAddNotificationPermissionRequested(requested: Boolean) {
-        settingsUseCase.setQuickAddNotificationPermissionRequested(requested)
-        _uiState.update { it.copy(quickAddNotificationPermissionRequested = requested) }
     }
 
     fun setPressureEnabled(enabled: Boolean) {

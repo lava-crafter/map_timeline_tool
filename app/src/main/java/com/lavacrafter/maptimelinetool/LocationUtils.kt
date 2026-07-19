@@ -22,7 +22,6 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.os.CancellationSignal
-import com.lavacrafter.maptimelinetool.quickadd.toQuickAddLocation
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -75,7 +74,6 @@ object LocationUtils {
             editor.remove(HeadingLocationOverlay.KEY_ACCURACY)
         }
         editor.apply()
-        context.applicationContext.appGraph().quickAddLocationCache.update(location.toQuickAddLocation())
     }
 
     private fun readCachedLocation(context: Context): Location? {
