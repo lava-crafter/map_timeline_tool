@@ -3,147 +3,156 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Map Timeline Tool project homepage and developer profile." />
-    <title>Map Timeline Tool | Lava Crafter</title>
+    <meta name="description" content="Map Timeline Tool: an offline-first Android app for logging places." />
+    <meta name="theme-color" content="#126b5a" />
+    <title>Map Timeline Tool — Offline point logging</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <div class="bg-orb orb-a" aria-hidden="true"></div>
-    <div class="bg-orb orb-b" aria-hidden="true"></div>
-
-    <header class="hero shell reveal">
-        <nav class="topbar">
-            <a class="brand" href="./">Map Timeline Tool</a>
+    <header class="site-header">
+        <div class="shell topbar">
+            <a class="brand" href="./" aria-label="Map Timeline Tool 首页">
+                <span class="brand-mark" aria-hidden="true">⌖</span>
+                <span>Map Timeline Tool</span>
+            </a>
+            <nav class="nav-links" aria-label="Primary navigation">
+                <a href="#features" data-i18n="navFeatures">功能</a>
+                <a href="#how-it-works" data-i18n="navHowItWorks">使用方式</a>
+                <a href="privacy.md" data-i18n="navPrivacy">隐私</a>
+                <a href="https://github.com/muchenjiang/map_timeline_tool" target="_blank" rel="noopener noreferrer" data-i18n="navSource">源码</a>
+            </nav>
             <div class="top-actions">
-                <div class="language-controls">
-                    <details class="lang-menu" id="langMenu">
-                        <summary aria-label="Language selector" title="Language selector">文/EN</summary>
-                        <div class="lang-list" role="listbox" aria-label="Language options">
-                            <button type="button" data-lang="en">English</button>
-                            <button type="button" data-lang="zh-CN">简体中文</button>
-                            <button type="button" data-lang="zh-TW">繁體中文</button>
-                            <button type="button" data-lang="fr">Français</button>
-                            <button type="button" data-lang="es">Español</button>
-                            <button type="button" data-lang="ar">العربية</button>
-                        </div>
-                    </details>
-                </div>
-                <div class="top-links">
-                    <a href="https://github.com/lava-crafter/map_timeline_tool" target="_blank" rel="noopener noreferrer" data-i18n="navRepo">GitHub Repo</a>
-                    <a href="privacy.md" data-i18n="navPrivacy">Privacy Policy</a>
-                </div>
+                <details class="lang-menu" id="langMenu">
+                    <summary aria-label="Language selector" title="Language selector">中 / EN</summary>
+                    <div class="lang-list" role="listbox" aria-label="Language options">
+                        <button type="button" data-lang="zh-CN">简体中文</button>
+                        <button type="button" data-lang="en">English</button>
+                    </div>
+                </details>
+                <a class="btn btn-small" href="https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool" target="_blank" rel="noopener noreferrer" data-i18n="navDownload">下载应用</a>
             </div>
-        </nav>
-
-        <section class="hero-grid">
-            <div>
-                <p class="eyebrow" data-i18n="eyebrow">Personal Site · GitHub Pages</p>
-                <h1><span data-i18n="heroGreeting">Hi, I'm</span> <span class="accent">Lava Crafter</span></h1>
-                <p class="lede" data-i18n="lede">
-                    Map Timeline Tool is an offline-first Android app for manual point logging. It keeps points, photos, and settings in the app sandbox, with map and list views plus CSV and ZIP import and CSV, GeoJSON, KML, KMZ, and ZIP export.
-                </p>
-                <p class="release-version" data-i18n="releaseVersion">Current app version: 0.1.9</p>
-                <div class="cta-row">
-                    <a class="btn primary" href="https://github.com/lava-crafter/map_timeline_tool" target="_blank" rel="noopener noreferrer" data-i18n="ctaSource">View Source</a>
-                    <a class="btn ghost" href="#project" data-i18n="ctaHighlights">Highlights</a>
-                    <a class="btn testing" href="https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool" target="_blank" rel="noopener noreferrer" data-i18n="ctaDownload">Download on Google Play</a>
-                </div>
-            </div>
-            <div class="hero-art" aria-hidden="true">
-                <img class="hero-icon" src="data:image/webp;base64,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" alt="Map Timeline Tool icon" />
-            </div>
-        </section>
+        </div>
     </header>
 
-    <main class="shell">
-        <section class="panel reveal" id="project">
-            <h2 data-i18n="projectTitle">Project Highlights</h2>
+    <main>
+        <section class="hero">
+            <div class="shell hero-grid">
+                <div class="hero-copy">
+                    <p class="eyebrow" data-i18n="eyebrow">ANDROID · 离线优先 · 开源</p>
+                    <h1 data-i18n="heroTitle">把每一个地点，留在你的时间线上。</h1>
+                    <p class="lede" data-i18n="heroLede">Map Timeline Tool 是一款离线优先的 Android 打点记录应用。记录坐标、时间、笔记、标签和照片；需要时，将数据带到其他地图或 GIS 工具中。</p>
+                    <div class="cta-row">
+                        <a class="btn btn-download" href="https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool" target="_blank" rel="noopener noreferrer">
+                            <span class="play-icon" aria-hidden="true">▶</span>
+                            <span><small data-i18n="downloadOverline">在 Google Play 获取</small><strong data-i18n="downloadLabel">下载 Map Timeline Tool</strong></span>
+                        </a>
+                        <a class="text-link" href="#features" data-i18n="heroSecondary">探索功能 <span aria-hidden="true">↓</span></a>
+                    </div>
+                    <p class="release-note" data-i18n="releaseNote">当前版本 0.1.9 · 适用于 Android 7.0 及以上设备</p>
+                </div>
+
+                <div class="app-preview" aria-label="Map Timeline Tool app preview">
+                    <div class="phone">
+                        <div class="phone-status"><span>9:41</span><span>● ● ●</span></div>
+                        <div class="app-bar"><span>Map Timeline Tool</span><span>•••</span></div>
+                        <div class="map-canvas" aria-hidden="true">
+                            <span class="road road-one"></span><span class="road road-two"></span><span class="road road-three"></span>
+                            <span class="water"></span>
+                            <span class="pin pin-one"></span><span class="pin pin-two"></span><span class="pin pin-three"></span><span class="pin pin-four"></span>
+                            <span class="map-label label-one">River Park</span><span class="map-label label-two">Cedar St.</span>
+                        </div>
+                        <div class="timeline-card">
+                            <div class="timeline-dot"></div>
+                            <div><strong data-i18n="previewPoint">晨间散步</strong><small data-i18n="previewMeta">今天 · 08:42 · 3 个标签</small></div>
+                            <span class="preview-arrow">›</span>
+                        </div>
+                        <div class="bottom-tabs"><span class="active">⌖</span><span>☷</span><span>⌑</span><span>⚙</span></div>
+                    </div>
+                    <div class="preview-caption"><span class="live-dot"></span><span data-i18n="previewCaption">地图与时间线，在同一个地方</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="trust-strip" aria-label="App capabilities">
+            <div class="shell trust-items">
+                <span data-i18n="trustOffline">离线可用</span><span data-i18n="trustPrivate">数据留在设备上</span><span data-i18n="trustOpen">Apache-2.0 开源</span>
+            </div>
+        </section>
+
+        <section class="shell section" id="features">
+            <div class="section-heading">
+                <p class="eyebrow" data-i18n="featuresEyebrow">为现实世界的记录而做</p>
+                <h2 data-i18n="featuresTitle">从一个坐标开始，保留完整的现场脉络。</h2>
+            </div>
             <div class="feature-grid">
-                <article class="feature-card">
-                    <h3 data-i18n="featureOfflineTitle">Offline First</h3>
-                    <p data-i18n="featureOfflineText">Point data stays on-device. Tile caching and area downloads keep core map usage available in weak networks.</p>
+                <article class="feature-card feature-map">
+                    <span class="feature-number">01</span>
+                    <div class="feature-icon" aria-hidden="true">⌖</div>
+                    <h3 data-i18n="featureOneTitle">随时打点</h3>
+                    <p data-i18n="featureOneText">手动记录时间、坐标、标题、笔记和标签。地图与列表两种视图，回看更直观。</p>
                 </article>
-                <article class="feature-card">
-                    <h3 data-i18n="featurePortableTitle">Portable Data</h3>
-                    <p data-i18n="featurePortableText">Import CSV and ZIP backups, then export CSV, GeoJSON, KML, KMZ, or ZIP files for other tools.</p>
+                <article class="feature-card feature-photo">
+                    <span class="feature-number">02</span>
+                    <div class="feature-icon" aria-hidden="true">◫</div>
+                    <h3 data-i18n="featureTwoTitle">记录现场细节</h3>
+                    <p data-i18n="featureTwoText">为点位附上照片，也可按需采集气压、光照、方向、噪音等传感器信息。</p>
                 </article>
-                <article class="feature-card">
-                    <h3 data-i18n="featureQuickTitle">Fast Capture</h3>
-                    <p data-i18n="featureQuickText">Quick-add notification, photo attachments, and tag management make field collection much smoother.</p>
+                <article class="feature-card feature-export">
+                    <span class="feature-number">03</span>
+                    <div class="feature-icon" aria-hidden="true">⇄</div>
+                    <h3 data-i18n="featureThreeTitle">数据由你带走</h3>
+                    <p data-i18n="featureThreeText">导出 CSV、GeoJSON、KML、KMZ 或 ZIP；导入 CSV 与 ZIP，方便备份和迁移。</p>
                 </article>
             </div>
         </section>
 
-        <section class="panel reveal" id="feature-details">
-            <h2 data-i18n="allFunctionsTitle">All Functions</h2>
-            <ul class="detail-list">
-                <li data-i18n="allFunc1">Display marks on either normal map or satellite map.</li>
-                <li data-i18n="allFunc2">Take photos or record phone sensor data when adding points.</li>
-                <li data-i18n="allFunc3">Download selected map areas so they can be displayed offline.</li>
-                <li data-i18n="allFunc4">Create tags to sort points.</li>
-                <li data-i18n="allFunc5">Backup, restore, and share full records.</li>
-                <li data-i18n="allFunc6">Optimized for quick adding.</li>
-            </ul>
-
-            <!-- <h3 data-i18n="optimizationTitle">Optimization</h3>
-            <ul class="detail-list">
-                <li data-i18n="opt1">Auto-save a point after touching "Add".</li>
-                <li data-i18n="opt2">Also available in notifications, so you can quick-add without unlocking the phone.</li>
-                <li data-i18n="opt3">Use different colors to show the order of points in a day.</li>
-                <li data-i18n="opt4">Allow quick adding tags or applying default tags.</li>
-                <li data-i18n="opt5">Backup and restore are also available for sharing with friends, with no worries about losing records.</li>
-                <li data-i18n="opt6">Download certain map areas for offline use.</li>
-                <li data-i18n="opt7">Photo compression saves storage space.</li>
-                <li data-i18n="opt8">Stop caching maps on mobile data (if enabled).</li>
-                <li data-i18n="opt9">Add points even without any internet connection.</li>
-                <li data-i18n="opt10">No uploads, no privacy worries.</li>
-                <li data-i18n="opt11">Multiple languages supported.</li>
-            </ul> -->
-
-            <h3 data-i18n="advantagesTitle">Advantages</h3>
-            <ul class="detail-list">
-                <li data-i18n="adv1">Available on Android devices.</li>
-                <li data-i18n="adv2">Very lightweight and really fast.</li>
-                <li data-i18n="adv3">Core data features work offline; network is only needed for live map tiles, external links, or sharing.</li>
-                <li data-i18n="adv4">Apache-2.0 open source, free to use, modify, and distribute under the license terms.</li>
-            </ul>
+        <section class="section section-tinted" id="how-it-works">
+            <div class="shell workflow-grid">
+                <div class="section-heading">
+                    <p class="eyebrow" data-i18n="workflowEyebrow">简单、可靠、属于你</p>
+                    <h2 data-i18n="workflowTitle">记录、整理、带着数据继续前行。</h2>
+                    <p class="section-copy" data-i18n="workflowCopy">无论是旅行足迹、现场采样，还是个人地图时间线，核心数据都能在弱网或无网环境下继续使用。</p>
+                </div>
+                <ol class="steps">
+                    <li><span>1</span><div><h3 data-i18n="stepOneTitle">在地点留下记录</h3><p data-i18n="stepOneText">新增一个点位，补充文字、标签或照片。</p></div></li>
+                    <li><span>2</span><div><h3 data-i18n="stepTwoTitle">离线查看与整理</h3><p data-i18n="stepTwoText">缓存或下载地图区域，在途中继续查看和管理。</p></div></li>
+                    <li><span>3</span><div><h3 data-i18n="stepThreeTitle">备份或导出</h3><p data-i18n="stepThreeText">使用 ZIP 创建完整备份，或导出通用格式给其他工具。</p></div></li>
+                </ol>
+            </div>
         </section>
 
-        <section class="panel reveal">
-            <h2 data-i18n="stackTitle">Tech Stack</h2>
-            <ul class="chip-list">
-                <li data-i18n="chipAndroid">Android</li>
-                <li data-i18n="chipKotlin">Kotlin</li>
-                <li data-i18n="chipCompose">Jetpack Compose</li>
-                <li data-i18n="chipRoom">Room</li>
-                <li data-i18n="chipOsmdroid">osmdroid</li>
-                <li data-i18n="chipOsm">OpenStreetMap</li>
-            </ul>
+        <section class="shell section data-section">
+            <div class="data-copy">
+                <p class="eyebrow" data-i18n="dataEyebrow">隐私与掌控</p>
+                <h2 data-i18n="dataTitle">你的点位，不必离开你的设备。</h2>
+                <p data-i18n="dataText">点位、照片和设置保存在应用沙箱中。应用不以云同步为前提；如需迁移或备份，可由你主动创建 ZIP 文件。</p>
+                <a class="text-link" href="privacy.md" data-i18n="dataLink">阅读隐私政策 <span aria-hidden="true">→</span></a>
+            </div>
+            <div class="data-badges" aria-label="Data features">
+                <div><strong>ZIP</strong><span data-i18n="badgeBackup">完整备份</span></div>
+                <div><strong>CSV</strong><span data-i18n="badgeTable">表格数据</span></div>
+                <div><strong>GIS</strong><span data-i18n="badgeMap">地图格式</span></div>
+            </div>
         </section>
 
-        <section class="panel reveal">
-            <h2 data-i18n="snapshotTitle">Project Snapshot</h2>
-            <p data-i18n="snapshotText1">
-                Map Timeline Tool records timestamps, coordinates, notes, tags, optional photos, and optional sensor metadata.
-            </p>
-            <p>
-                <span data-i18n="snapshotSourceLabel">Source code:</span>
-                <a href="https://github.com/lava-crafter/map_timeline_tool" target="_blank" rel="noopener noreferrer">github.com/lava-crafter/map_timeline_tool</a>
-            </p>
-        </section>
- 
-        <section class="panel reveal">
-            <h2 data-i18n="contactTitle">Contact &amp; Links</h2>
-            <ul class="link-list">
-                <li><a href="https://github.com/lava-crafter" target="_blank" rel="noopener noreferrer" data-i18n="linkProfile">GitHub Profile</a></li>
-                <li><a href="https://github.com/lava-crafter/map_timeline_tool" target="_blank" rel="noopener noreferrer" data-i18n="linkRepo">Map Timeline Tool Repo</a></li>
-                <li><a href="privacy.md" data-i18n="linkPrivacy">Privacy Policy</a></li>
-            </ul>
+        <section class="shell download-section" id="download">
+            <div>
+                <p class="eyebrow" data-i18n="downloadEyebrow">准备开始了吗？</p>
+                <h2 data-i18n="downloadTitle">从下一个地点开始记录。</h2>
+                <p data-i18n="downloadText">免费获取 Map Timeline Tool，开始建立属于自己的地图时间线。</p>
+            </div>
+            <a class="btn btn-download" href="https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool" target="_blank" rel="noopener noreferrer">
+                <span class="play-icon" aria-hidden="true">▶</span>
+                <span><small data-i18n="downloadOverline">在 Google Play 获取</small><strong data-i18n="downloadLabel">下载 Map Timeline Tool</strong></span>
+            </a>
         </section>
     </main>
 
-    <footer class="shell footer reveal">
-        <p>© <span id="year"></span> Lava Crafter. <span data-i18n="footerBuilt">Built for GitHub Pages.</span></p>
+    <footer class="site-footer">
+        <div class="shell footer-content">
+            <p>© <span id="year"></span> Map Timeline Tool</p>
+            <div><a href="privacy.md" data-i18n="navPrivacy">隐私</a><a href="https://github.com/muchenjiang/map_timeline_tool" target="_blank" rel="noopener noreferrer" data-i18n="navSource">源码</a></div>
+        </div>
     </footer>
     <script type="module" src="scripts/app.js"></script>
 </body>
