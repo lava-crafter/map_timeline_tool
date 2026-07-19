@@ -69,6 +69,7 @@ import androidx.core.content.ContextCompat
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.NetworkStatus
 import com.lavacrafter.maptimelinetool.data.TagEntity
+import com.lavacrafter.maptimelinetool.quickadd.requiresBackgroundLocationForQuickAdd
 import kotlin.math.roundToInt
 
 private val supportedLanguageOptions = listOf(
@@ -110,9 +111,9 @@ fun SettingsScreen(
     onFollowSystemThemeChange: (Boolean) -> Unit,
     languagePreference: LanguagePreference,
     onLanguagePreferenceChange: (LanguagePreference) -> Unit,
-    quickAddInitialized: Boolean,
-    onConfigureQuickAdd: () -> Unit,
-    onAddQuickAddTile: () -> Unit,
+    quickAddNotificationEnabled: Boolean,
+    quickAddNotificationPermissionRequested: Boolean,
+    onQuickAddNotificationEnabledChange: (Boolean) -> Unit,
     timeoutSeconds: Int,
     onTimeoutSecondsChange: (Int) -> Unit,
     cachePolicy: MapCachePolicy,
@@ -201,12 +202,10 @@ fun SettingsScreen(
             onLanguagePreferenceChange = onLanguagePreferenceChange,
             onNavigateBack = onNavigateBack
         )
-        SettingsRoute.QuickAdd -> QuickAddSettings(
-            initialized = quickAddInitialized,
-            defaultTags = defaultTags,
-            selectedDefaultTagIds = selectedDefaultTagIds,
-            onConfigure = onConfigureQuickAdd,
-            onAddTile = onAddQuickAddTile,
+        SettingsRoute.Notification -> NotificationSettings(
+            quickAddNotificationEnabled = quickAddNotificationEnabled,
+            quickAddNotificationPermissionRequested = quickAddNotificationPermissionRequested,
+            onQuickAddNotificationEnabledChange = onQuickAddNotificationEnabledChange,
             onBack = onNavigateBack
         )
         SettingsRoute.Sensors -> SensorSettings(
@@ -320,9 +319,9 @@ private fun SettingsOverviewScreen(
                 onClick = { onNavigateTo(SettingsRoute.Language) }
             )
             SettingsOverviewItem(
-                title = stringResource(R.string.settings_quick_add_title),
-                description = stringResource(R.string.settings_quick_add_desc),
-                onClick = { onNavigateTo(SettingsRoute.QuickAdd) }
+                title = stringResource(R.string.settings_notifications_title),
+                description = stringResource(R.string.settings_notifications_desc),
+                onClick = { onNavigateTo(SettingsRoute.Notification) }
             )
             SettingsOverviewItem(
                 title = stringResource(R.string.settings_sensors_title),
@@ -534,12 +533,10 @@ private fun MapOperationsSettings(
 }
 
 @Composable
-private fun QuickAddSettings(
-    initialized: Boolean,
-    defaultTags: List<TagEntity>,
-    selectedDefaultTagIds: Set<Long>,
-    onConfigure: () -> Unit,
-    onAddTile: () -> Unit,
+private fun NotificationSettings(
+    quickAddNotificationEnabled: Boolean,
+    quickAddNotificationPermissionRequested: Boolean,
+    onQuickAddNotificationEnabledChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -547,57 +544,43 @@ private fun QuickAddSettings(
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     val preciseLocationGranted =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    val selectedDefaultTags = defaultTags.filter { it.id in selectedDefaultTagIds }
+    val backgroundLocationRequired = requiresBackgroundLocationForQuickAdd(Build.VERSION.SDK_INT)
+    val backgroundLocationGranted = !backgroundLocationRequired ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     SettingsSubpageScaffold(
-        title = stringResource(R.string.settings_quick_add_title),
-        tutorialText = stringResource(R.string.settings_help_quick_add),
+        title = stringResource(R.string.settings_notifications_title),
+        tutorialText = stringResource(R.string.settings_help_notifications),
         onBack = onBack
     ) { modifier ->
         Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = stringResource(
-                    if (initialized) R.string.settings_quick_add_ready else R.string.settings_quick_add_not_ready
-                ),
-                style = MaterialTheme.typography.bodySmall
+            SensorToggleRow(
+                label = stringResource(R.string.settings_quick_add_notification_label),
+                checked = quickAddNotificationEnabled,
+                onCheckedChange = onQuickAddNotificationEnabledChange
             )
             Text(
-                text = if (selectedDefaultTags.isEmpty()) {
-                    stringResource(R.string.settings_quick_add_default_tags_none)
-                } else {
-                    stringResource(
-                        R.string.settings_quick_add_default_tags_value,
-                        selectedDefaultTags.joinToString { it.name }
-                    )
-                },
+                text = stringResource(R.string.settings_quick_add_notification_desc),
                 style = MaterialTheme.typography.bodySmall
             )
             if (!preciseLocationGranted) {
                 Text(
-                    text = stringResource(R.string.settings_quick_add_precise_location_hint),
+                    text = stringResource(R.string.settings_quick_add_notification_precise_location_hint),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (!notificationPermissionGranted) {
+            if (!backgroundLocationGranted) {
                 Text(
-                    text = stringResource(R.string.settings_quick_add_notification_required_hint),
+                    text = stringResource(R.string.settings_quick_add_notification_background_location_hint),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            Button(onClick = onConfigure, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.settings_quick_add_configure))
+            if (quickAddNotificationPermissionRequested && !quickAddNotificationEnabled && !notificationPermissionGranted) {
+                Text(
+                    text = stringResource(R.string.settings_quick_add_notification_permission_hint),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
-            OutlinedButton(
-                onClick = onAddTile,
-                enabled = initialized && preciseLocationGranted && notificationPermissionGranted,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.settings_quick_add_add_tile))
-            }
-            Text(
-                text = stringResource(R.string.settings_quick_add_privacy_note),
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }

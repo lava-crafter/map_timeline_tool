@@ -19,8 +19,7 @@ package com.lavacrafter.maptimelinetool
 import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
-import android.location.LocationManager
-import androidx.core.location.LocationManagerCompat
+import android.os.SystemClock
 import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.SettingsRepository
@@ -32,16 +31,14 @@ import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveResolver
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
-import com.lavacrafter.maptimelinetool.quickadd.QuickAddCoordinator
-import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationAvailability
-import com.lavacrafter.maptimelinetool.quickadd.QuickAddStateStore
-import com.lavacrafter.maptimelinetool.quickadd.cleanupLegacyQuickAddNotification
-import com.lavacrafter.maptimelinetool.ui.SettingsStore
+import com.lavacrafter.maptimelinetool.notification.isQuickAddNotificationAvailable
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
+import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import org.osmdroid.config.Configuration
 
 class MapTimelineApp : Application() {
@@ -58,8 +55,10 @@ class MapTimelineApp : Application() {
         val basePath = File(cacheDir, "osmdroid")
         config.osmdroidBasePath = basePath
         config.osmdroidTileCache = File(basePath, "tiles")
-        cleanupLegacyQuickAddNotification()
-        SettingsStore.removeLegacyQuickAddNotificationSettings(this)
+        val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
+        graph.quickAddPassiveLocationUpdater.refreshRegistration(
+            isQuickAddNotificationAvailable(quickAddEnabled)
+        )
     }
 }
 
@@ -88,31 +87,29 @@ class AppGraph(
         LocationSaveResolver(locationProvider)
     }
 
-    val quickAddStateStore: QuickAddStateStore by lazy {
-        QuickAddStateStore(app)
+    val quickAddLocationCache: QuickAddLocationCache by lazy {
+        QuickAddLocationCache(
+            elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos
+        )
     }
 
-    val quickAddCoordinator: QuickAddCoordinator by lazy {
-        QuickAddCoordinator(
+    val quickAddPassiveLocationUpdater: QuickAddPassiveLocationUpdater by lazy {
+        QuickAddPassiveLocationUpdater(app, quickAddLocationCache)
+    }
+
+    val quickAddResolver: QuickAddResolver by lazy {
+        QuickAddResolver(
             locationProvider = locationProvider,
-            pointWriteUseCase = pointWriteUseCase,
-            stateStore = quickAddStateStore,
-            getDefaultTagIds = { settingsManagementUseCase.getDefaultTagIds().toSet() },
-            getExistingTagIds = {
-                tagManagementUseCase.observeTags().first().mapTo(mutableSetOf()) { it.id }
-            },
-            locationAvailability = {
-                val manager = app.getSystemService(LocationManager::class.java)
-                    ?: return@QuickAddCoordinator QuickAddLocationAvailability.NO_PROVIDER
-                if (!LocationManagerCompat.isLocationEnabled(manager)) {
-                    QuickAddLocationAvailability.SERVICES_DISABLED
-                } else if (runCatching { manager.getProviders(true).any { it != LocationManager.PASSIVE_PROVIDER } }
-                        .getOrDefault(false)
-                ) {
-                    QuickAddLocationAvailability.AVAILABLE
-                } else {
-                    QuickAddLocationAvailability.NO_PROVIDER
-                }
+            locationCache = quickAddLocationCache,
+            elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
+            addPoint = { title, location, timestamp ->
+                pointWriteUseCase.addPointWithTags(
+                    title = title,
+                    note = "",
+                    location = location,
+                    timestamp = timestamp,
+                    tagIds = settingsManagementUseCase.getDefaultTagIds().toSet()
+                )
             }
         )
     }

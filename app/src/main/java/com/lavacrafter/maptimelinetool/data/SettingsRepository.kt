@@ -92,6 +92,12 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
     override fun setMagnetometerEnabled(enabled: Boolean) = SettingsStore.setMagnetometerEnabled(appContext, enabled)
     override fun getNoiseEnabled(): Boolean = SettingsStore.getNoiseEnabled(appContext)
     override fun setNoiseEnabled(enabled: Boolean) = SettingsStore.setNoiseEnabled(appContext, enabled)
+    override fun getQuickAddNotificationEnabled(): Boolean = SettingsStore.getQuickAddNotificationEnabled(appContext)
+    override fun setQuickAddNotificationEnabled(enabled: Boolean) = SettingsStore.setQuickAddNotificationEnabled(appContext, enabled)
+    override fun getQuickAddNotificationPermissionRequested(): Boolean = SettingsStore.getQuickAddNotificationPermissionRequested(appContext)
+    override fun setQuickAddNotificationPermissionRequested(requested: Boolean) =
+        SettingsStore.setQuickAddNotificationPermissionRequested(appContext, requested)
+
     override fun getDownloadedAreas(): List<SettingsDownloadedArea> = SettingsStore.getDownloadedAreas(appContext).map { it.toDomain() }
     override fun addDownloadedArea(area: SettingsDownloadedArea): List<SettingsDownloadedArea> =
         SettingsStore.addDownloadedArea(appContext, area.toUi()).map { it.toDomain() }

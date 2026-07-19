@@ -1,7 +1,5 @@
 # Final Maintenance Release Plan (0.1.7)
 
-> Historical note: persistent-notification, background-location, and cached Quick Add details in this checklist have been superseded by the Quick Settings tile implementation.
-
 Target: one final maintenance release before feature freeze.
 
 Branch baseline: `precise_location`

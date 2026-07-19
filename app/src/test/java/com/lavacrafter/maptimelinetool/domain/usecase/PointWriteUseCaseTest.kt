@@ -18,7 +18,6 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
-import com.lavacrafter.maptimelinetool.domain.model.PointCaptureMode
 import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.model.Tag
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
@@ -93,39 +92,6 @@ class PointWriteUseCaseTest {
         val inserted = fakeRepository.inserted.single()
         assertEquals(formatPointTimestamp(timestamp), inserted.title)
         assertEquals("Line1\nLine2 Line3", inserted.note)
-    }
-
-    @Test
-    fun `quick capture skips noise while keeping sensor snapshot`() = runBlocking {
-        val fakeRepository = FakePointRepository()
-        var noiseCaptureCalls = 0
-        val useCase = PointWriteUseCase(
-            repository = fakeRepository,
-            sensorSnapshotPort = object : SensorSnapshotPort {
-                override suspend fun readSnapshot(): PointSensorSnapshot = PointSensorSnapshot(pressureHpa = 998f)
-            },
-            deletePhoto = {},
-            shouldCollectNoise = { true },
-            collectNoiseDb = {
-                noiseCaptureCalls += 1
-                -10f
-            },
-            asyncScope = this
-        )
-
-        val pointId = useCase.addPointWithTags(
-            title = "",
-            note = "",
-            location = GeoPoint(1.0, 2.0, 5f, 100L, "gps"),
-            timestamp = 200L,
-            tagIds = emptySet(),
-            captureMode = PointCaptureMode.QUICK
-        )
-
-        assertEquals(10L, pointId)
-        assertEquals(998f, fakeRepository.inserted.single().pressureHpa)
-        assertEquals(0, noiseCaptureCalls)
-        assertEquals(emptyList<Pair<Long, Float?>>(), fakeRepository.updatedNoiseDb)
     }
 }
 

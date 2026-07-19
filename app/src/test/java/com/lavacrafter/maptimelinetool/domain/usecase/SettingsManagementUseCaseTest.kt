@@ -60,6 +60,18 @@ class SettingsManagementUseCaseTest {
     }
 
     @Test
+    fun `quick add notification settings delegate read and write`() {
+        val fake = FakeSettingsGateway()
+        val useCase = SettingsManagementUseCase(fake)
+
+        useCase.setQuickAddNotificationEnabled(true)
+        useCase.setQuickAddNotificationPermissionRequested(true)
+
+        assertEquals(true, useCase.getQuickAddNotificationEnabled())
+        assertEquals(true, useCase.getQuickAddNotificationPermissionRequested())
+    }
+
+    @Test
     fun `sensor switches delegate read and write`() {
         val fake = FakeSettingsGateway()
         val useCase = SettingsManagementUseCase(fake)
@@ -116,6 +128,8 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     private var gyroscopeEnabled: Boolean = true
     private var magnetometerEnabled: Boolean = true
     private var noiseEnabled: Boolean = false
+    private var quickAddNotificationEnabled: Boolean = false
+    private var quickAddNotificationPermissionRequested: Boolean = false
     private var downloadedAreas: List<SettingsDownloadedArea> = emptyList()
 
     override fun getTimeoutSeconds(): Int = timeoutSeconds
@@ -225,6 +239,16 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     override fun getNoiseEnabled(): Boolean = noiseEnabled
     override fun setNoiseEnabled(enabled: Boolean) {
         noiseEnabled = enabled
+    }
+
+    override fun getQuickAddNotificationEnabled(): Boolean = quickAddNotificationEnabled
+    override fun setQuickAddNotificationEnabled(enabled: Boolean) {
+        quickAddNotificationEnabled = enabled
+    }
+
+    override fun getQuickAddNotificationPermissionRequested(): Boolean = quickAddNotificationPermissionRequested
+    override fun setQuickAddNotificationPermissionRequested(requested: Boolean) {
+        quickAddNotificationPermissionRequested = requested
     }
 
     override fun getDownloadedAreas(): List<SettingsDownloadedArea> = downloadedAreas
