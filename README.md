@@ -6,7 +6,7 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
 
 - Repository: https://github.com/muchenjiang/map_timeline_tool
 - Google Play: https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
-- Current app version: **0.1.8**
+- Current app version: **0.1.9**
 
 ## Highlights
 - Manual point logging with timestamp, coordinates, title, note, tags, optional photo, and location-quality metadata.
@@ -91,7 +91,7 @@ Map Timeline Tool 是一款离线优先的 Android 手动打点应用。点位�
 
 - 项目仓库：https://github.com/muchenjiang/map_timeline_tool
 - Google Play：https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
-- 当前应用版本：**0.1.8**
+- 当前应用版本：**0.1.9**
 
 ## 主要功能
 - 手动打点：记录时间、经纬度、标题、备注、标签、可选照片，以及定位质量元数据。
