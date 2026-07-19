@@ -246,6 +246,13 @@ h1 {
     color: var(--ink-soft);
 }
 
+.release-version {
+    margin: 12px 0 0;
+    color: var(--ink-soft);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.88rem;
+}
+
 .cta-row {
     margin-top: 20px;
     display: flex;

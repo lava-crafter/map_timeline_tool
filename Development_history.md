@@ -24,8 +24,12 @@ At the same time, the architecture was tightened. Point writing logic was separa
 
 From late March into early April, the app was tuned for release. Language loading was fixed on startup, language-switch restarts were stabilized, and about/licenses copy was localized more completely. Location accuracy and quick-add background behavior were refined, and later commits focused on quick-add notifications, ZIP export tests, crash fixes, and location-fetching logic.
 
-This stage also covered public release work. A closed-testing call-to-action and instruction block were added, contact information was simplified, a webpage and Google verification file were introduced, the repository layout was cleaned, and the project license was switched to Apache 2.0. Version codes continued to move forward through version code 19 as the app was hardened.
+This stage also covered public release work. A closed-testing call-to-action and instruction block were added, contact information was simplified, a webpage and Google verification file were introduced, the repository layout was cleaned, and the project license was switched to Apache 2.0.
 
-## 5. Overall trajectory
+## 5. Current maintenance release
+
+The current repository configuration is version **0.1.9** (version code 22). The maintenance work through June and July 2026 refreshed the Quick Add permission and location flow, including its precise-location cache and Android background-location requirements. The release keeps the app's offline-first model while supporting manual point logging, optional photos and sensor metadata, downloadable map tiles, CSV/ZIP import, CSV/GeoJSON/KML/KMZ/ZIP export, and full ZIP backup and restore.
+
+## 6. Overall trajectory
 
 The project evolved from a simple map-based point logger into a fuller timeline tool with tags, photos, sensor data, export/import, offline maps, localization, backup/restore, and release-ready web assets.
