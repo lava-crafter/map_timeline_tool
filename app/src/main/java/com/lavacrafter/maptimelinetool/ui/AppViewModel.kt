@@ -125,16 +125,18 @@ class AppViewModel(
     suspend fun importZipData(importStats: ZipImporter.ImportStats): ZipImportResult {
         return repo.inTransaction {
             val pointIdByIndex = if (importStats.manifest.sections.tags) mutableMapOf<Int, Long>() else null
+            val existingPointsByKey = repo.getAll().groupBy { Triple(it.timestamp, it.latitude, it.longitude) }
+            val matchedPointIds = mutableSetOf<Long>()
             importStats.points.forEachIndexed { index, point ->
                 val normalizedPoint = point.copy(
                     title = sanitizePointTitle(point.title).ifBlank { formatPointTimestamp(point.timestamp) },
                     note = sanitizePointNote(point.note)
                 )
-                val existing = repo.findByImportKey(
-                    timestamp = normalizedPoint.timestamp,
-                    latitude = normalizedPoint.latitude,
-                    longitude = normalizedPoint.longitude
-                )
+                val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
+                val candidates = existingPointsByKey[key].orEmpty().filterNot { it.id in matchedPointIds }
+                val existing = candidates.firstOrNull {
+                    it.title == normalizedPoint.title && it.note == normalizedPoint.note
+                } ?: candidates.firstOrNull()
                 val actualId = if (existing != null) {
                     val merged = mergeImportedPoint(existing, normalizedPoint, importStats.manifest)
                     repo.update(merged)
@@ -143,26 +145,29 @@ class AppViewModel(
                     val newId = repo.insert(normalizedPoint.copy(id = 0))
                     newId
                 }
+                matchedPointIds += actualId
                 pointIdByIndex?.set(index, actualId)
             }
 
             val legacyTagIdToActualId = mutableMapOf<Long, Long>()
             if (importStats.manifest.sections.tags) {
-                val existingTags = repo.getAllTags()
-                val existingTagByName = existingTags.associateBy { sanitizeTagName(it.name).lowercase(Locale.US) }.toMutableMap()
+                val existingTagsByName = repo.getAllTags().groupBy { sanitizeTagName(it.name).lowercase(Locale.US) }
+                val matchedTagIds = mutableSetOf<Long>()
                 importStats.tags.forEach { importedTag ->
                     val normalizedName = sanitizeTagName(importedTag.name)
                     if (normalizedName.isBlank()) return@forEach
                     val normalizedKey = normalizedName.lowercase(Locale.US)
-                    val actualId = existingTagByName[normalizedKey]?.id ?: repo.insertTag(Tag(name = normalizedName))
-                    existingTagByName.putIfAbsent(normalizedKey, Tag(id = actualId, name = normalizedName))
+                    val actualId = existingTagsByName[normalizedKey].orEmpty()
+                        .firstOrNull { it.id !in matchedTagIds }?.id
+                        ?: repo.insertTag(Tag(name = normalizedName))
+                    matchedTagIds += actualId
                     legacyTagIdToActualId[importedTag.legacyId] = actualId
                 }
 
                 val insertedPairs = mutableSetOf<Pair<Long, Long>>()
                 importStats.pointTags.forEach { importedPointTag ->
-                    val pointId = pointIdByIndex?.get(importedPointTag.pointIndex) ?: return@forEach
-                    val tagId = legacyTagIdToActualId[importedPointTag.legacyTagId] ?: return@forEach
+                    val pointId = requireNotNull(pointIdByIndex?.get(importedPointTag.pointIndex)) { "Invalid point-tag point index" }
+                    val tagId = requireNotNull(legacyTagIdToActualId[importedPointTag.legacyTagId]) { "Invalid point-tag tag ID" }
                     val key = pointId to tagId
                     if (insertedPairs.add(key)) {
                         repo.insertPointTag(pointId, tagId)

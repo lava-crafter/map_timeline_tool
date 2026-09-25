@@ -49,6 +49,8 @@ class SettingsManagementUseCase(
 
     fun getFollowSystemTheme(): Boolean = settingsGateway.getFollowSystemTheme()
     fun setFollowSystemTheme(enabled: Boolean) = settingsGateway.setFollowSystemTheme(enabled)
+    fun getDarkTheme(): Boolean = settingsGateway.getDarkTheme()
+    fun setDarkTheme(enabled: Boolean) = settingsGateway.setDarkTheme(enabled)
 
     fun getDefaultTagIds(): List<Long> = settingsGateway.getDefaultTagIds()
     fun setDefaultTagIds(tagIds: List<Long>) = settingsGateway.setDefaultTagIds(tagIds)

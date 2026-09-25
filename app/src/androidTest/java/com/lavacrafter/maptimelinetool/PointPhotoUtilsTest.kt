@@ -19,8 +19,13 @@ package com.lavacrafter.maptimelinetool
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import java.io.File
+import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -37,5 +42,46 @@ class PointPhotoUtilsTest {
         assertNull(resolvePointPhotoFile(context, "../shared_prefs/map_timeline_settings.xml"))
         assertNull(resolvePointPhotoFile(context, "nested/photo-test.jpg"))
         assertNull(resolvePointPhotoFile(context, context.filesDir.absolutePath))
+    }
+
+    @Test
+    fun committingStagedPhotoMovesItIntoTheDedicatedDirectory() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val staging = createPointPhotoImportStagingDir(context)
+        val staged = File(staging, "verification_${UUID.randomUUID()}.jpg")
+        val destination = File(getPointPhotoDir(context), staged.name)
+        try {
+            staged.writeBytes(byteArrayOf(1, 2, 3))
+
+            assertEquals(listOf(staged.name), commitPointPhotoImport(context, listOf(staged)))
+
+            assertFalse(staged.exists())
+            assertTrue(destination.readBytes().contentEquals(byteArrayOf(1, 2, 3)))
+        } finally {
+            destination.delete()
+            deletePointPhotoImportStagingDir(staging)
+        }
+    }
+
+    @Test
+    fun invalidSecondStagedPhotoRollsBackFirstCommittedPhoto() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val staging = createPointPhotoImportStagingDir(context)
+        val staged = File(staging, "verification_${UUID.randomUUID()}.jpg")
+        val destination = File(getPointPhotoDir(context), staged.name)
+        try {
+            staged.writeBytes(byteArrayOf(1, 2, 3))
+            val invalid = File(staging, "missing.jpg")
+
+            assertThrows(IllegalArgumentException::class.java) {
+                commitPointPhotoImport(context, listOf(staged, invalid))
+            }
+
+            assertFalse(destination.exists())
+            assertFalse(staged.exists())
+        } finally {
+            destination.delete()
+            deletePointPhotoImportStagingDir(staging)
+        }
     }
 }

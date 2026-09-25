@@ -35,6 +35,7 @@ import com.lavacrafter.maptimelinetool.notification.isQuickAddNotificationAvaila
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
+import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -153,7 +154,7 @@ class AppGraph(
     }
 
     val tagManagementUseCase: TagManagementUseCase by lazy {
-        TagManagementUseCase(pointRepositoryGateway)
+        TagManagementUseCase(pointRepositoryGateway, onTagDeleted = { SettingsStore.removeTagId(app, it) })
     }
 
     val pointWriteUseCase: PointWriteUseCase by lazy {

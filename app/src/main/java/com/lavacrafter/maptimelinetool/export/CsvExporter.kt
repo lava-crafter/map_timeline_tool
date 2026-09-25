@@ -89,7 +89,7 @@ object CsvExporter {
         writer: Writer,
         photoRelPathResolver: (Point) -> String? = { null }
     ) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         writeRow(writer, headers)

@@ -36,6 +36,15 @@ interface PointDao {
     @Delete
     suspend fun delete(point: PointEntity)
 
+    @Query("DELETE FROM point_tags WHERE pointId = :pointId")
+    suspend fun deleteTagsForPoint(pointId: Long)
+
+    @Query("DELETE FROM point_tags WHERE tagId = :tagId")
+    suspend fun deletePointsForTag(tagId: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM points WHERE photoPath = :photoPath)")
+    suspend fun isPhotoReferenced(photoPath: String): Boolean
+
     @Query("SELECT * FROM points ORDER BY timestamp DESC")
     fun observeAll(): Flow<List<PointEntity>>
 

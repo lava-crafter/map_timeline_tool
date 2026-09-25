@@ -101,7 +101,7 @@ class ZipExportImportTest {
     }
 
     @Test
-    fun `zip export manifest reports filtered tag count`() {
+    fun `zip export manifest reports all saved tag records`() {
         val point = Point(
             id = 10L,
             timestamp = 1710000000000L,
@@ -136,7 +136,7 @@ class ZipExportImportTest {
         }
 
         val manifest = manifestJson ?: error("manifest missing")
-        assertTrue(manifest.contains("\"counts\":{\"points\":1,\"tags\":1,\"photos\":0}"))
+        assertTrue(manifest.contains("\"counts\":{\"points\":1,\"tags\":2,\"photos\":0}"))
     }
 
     @Test

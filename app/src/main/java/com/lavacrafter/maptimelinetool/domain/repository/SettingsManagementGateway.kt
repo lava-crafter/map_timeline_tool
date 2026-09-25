@@ -46,6 +46,8 @@ interface SettingsManagementGateway {
 
     fun getFollowSystemTheme(): Boolean
     fun setFollowSystemTheme(enabled: Boolean)
+    fun getDarkTheme(): Boolean
+    fun setDarkTheme(enabled: Boolean)
 
     fun getDefaultTagIds(): List<Long>
     fun setDefaultTagIds(tagIds: List<Long>)

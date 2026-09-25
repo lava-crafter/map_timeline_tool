@@ -63,21 +63,12 @@ object ZipExporter {
         settingsJsonProvider: (() -> String?)? = null,
         appVersion: String? = null
     ): ExportStats {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         val includeTagsInArchive = options.includePoints && options.includeTags
-        val usedTagIds = if (includeTagsInArchive) {
-            val exportedPointIds = points.asSequence().map { it.id }.toSet()
-            pointTagIdsByPointId
-                .filterKeys { exportedPointIds.contains(it) }
-                .values
-                .flatten()
-                .toSet()
-        } else {
-            emptySet()
-        }
-        val filteredTags = tags.filter { usedTagIds.contains(it.id) }
+        val exportedTags = if (includeTagsInArchive) tags else emptyList()
+        val exportedTagIds = exportedTags.mapTo(mutableSetOf()) { it.id }
         val photoEntries = mutableMapOf<String, File>()
         val pointPhotoMeta = points.map { point ->
             buildPhotoMeta(
@@ -99,7 +90,7 @@ object ZipExporter {
                 includePhotos = options.includePhotos,
                 includeSettings = settingsJson != null,
                 pointCount = if (options.includePoints) points.size else 0,
-                tagCount = filteredTags.size,
+                tagCount = exportedTags.size,
                 photoCount = photoEntries.size
             )
             zip.putNextEntry(ZipEntry("backup_manifest.json"))
@@ -162,7 +153,7 @@ object ZipExporter {
                 zip.putNextEntry(ZipEntry("tags.csv"))
                 val tagWriter = OutputStreamWriter(zip, Charsets.UTF_8)
                 CsvExporter.writeRow(tagWriter, listOf("tag_id", "name"))
-                filteredTags.forEach { tag ->
+                exportedTags.forEach { tag ->
                     CsvExporter.writeRow(tagWriter, listOf(tag.id.toString(), tag.name))
                 }
                 tagWriter.flush()
@@ -173,7 +164,7 @@ object ZipExporter {
                 CsvExporter.writeRow(pointTagWriter, listOf("point_index", "tag_id"))
                 points.forEachIndexed { pointIndex, point ->
                     val tagIds = pointTagIdsByPointId[point.id].orEmpty()
-                    tagIds.filter { usedTagIds.contains(it) }.forEach { tagId ->
+                    tagIds.filter { it in exportedTagIds }.forEach { tagId ->
                         CsvExporter.writeRow(pointTagWriter, listOf(pointIndex.toString(), tagId.toString()))
                     }
                 }

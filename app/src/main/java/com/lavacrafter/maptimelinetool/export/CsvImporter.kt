@@ -21,6 +21,7 @@ import java.io.Reader
 import java.io.StringReader
 import java.io.PushbackReader
 import java.text.SimpleDateFormat
+import java.text.ParsePosition
 import java.util.Locale
 import java.util.TimeZone
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
@@ -39,10 +40,12 @@ object CsvImporter {
 
     fun parseCsv(
         reader: Reader,
+        strictRows: Boolean = false,
+        onPhotoMetadata: (relPath: String, sizeBytes: Long?, sha256: String?) -> Unit = { _, _, _ -> },
         resolvePhotoPath: (String) -> String? = { it }
     ): List<Point> {
         val points = mutableListOf<Point>()
-        forEachPoint(reader, resolvePhotoPath) { points += it }
+        forEachPoint(reader, resolvePhotoPath, strictRows = strictRows, onPhotoMetadata = onPhotoMetadata) { points += it }
         return points
     }
 
@@ -50,6 +53,8 @@ object CsvImporter {
         reader: Reader,
         resolvePhotoPath: (String) -> String? = { it },
         limits: Limits = Limits(),
+        strictRows: Boolean = false,
+        onPhotoMetadata: (relPath: String, sizeBytes: Long?, sha256: String?) -> Unit = { _, _, _ -> },
         consume: (Point) -> Unit
     ) {
         val pushbackReader = PushbackReader(reader, 2)
@@ -68,22 +73,39 @@ object CsvImporter {
         val resolvedHeader = header ?: return
         val indexMap = resolvedHeader.withIndex().associate { it.value to it.index }
 
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
-
         while (true) {
             val row = readCsvRecord(pushbackReader, limits) ?: break
             if (row.all { it.isBlank() }) continue
-            val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull() ?: continue
-            val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull() ?: continue
-            if (!lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) continue
-            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), sdf)
+            val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull()
+            val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull()
+            if (lat == null || lon == null || !lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) {
+                if (strictRows) throw IllegalArgumentException("Invalid point coordinates in CSV")
+                continue
+            }
+            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"))
+            if (timestamp == null) {
+                if (strictRows) throw IllegalArgumentException("Invalid point timestamp in CSV")
+                continue
+            }
             val title = sanitizePointTitle(row.valueOf(indexMap, "name").orEmpty())
                 .ifBlank { formatPointTimestamp(timestamp) }
             val note = sanitizePointNote(row.valueOf(indexMap, "description").orEmpty())
             val photoRelPath = row.valueOf(indexMap, "photo_rel_path").orEmpty().trim()
             val resolvedPhotoPath = photoRelPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
+            if (photoRelPath.isNotEmpty()) {
+                val rawSize = row.valueOf(indexMap, "photo_size_bytes")?.trim().orEmpty()
+                val size = rawSize.toLongOrNull()
+                val hash = row.valueOf(indexMap, "photo_sha256")?.trim()?.takeIf { it.isNotEmpty() }
+                if (strictRows && (rawSize.isNotEmpty() && (size == null || size < 0) ||
+                        hash != null && !hash.matches(Regex("[a-fA-F0-9]{64}")))) {
+                    throw IllegalArgumentException("Invalid photo metadata in CSV")
+                }
+                onPhotoMetadata(
+                    photoRelPath,
+                    size,
+                    hash
+                )
+            }
 
             consume(
                 Point(
@@ -113,12 +135,21 @@ object CsvImporter {
         }
     }
 
-    private fun parseTimestamp(time: String?, sdf: SimpleDateFormat): Long {
-        val value = time?.trim().orEmpty()
-        if (value.isEmpty()) return System.currentTimeMillis()
-        val parsedDate = runCatching { sdf.parse(value) }.getOrNull()
-        if (parsedDate != null) return parsedDate.time
-        return value.toLongOrNull() ?: System.currentTimeMillis()
+    private fun parseTimestamp(time: String?): Long? {
+        if (time == null) return System.currentTimeMillis() // Older CSV files may omit time_utc.
+        val value = time.trim()
+        if (value.isEmpty()) return null
+        value.toLongOrNull()?.let { return it }
+        for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'")) {
+            val sdf = SimpleDateFormat(pattern, Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }
+            val position = ParsePosition(0)
+            val parsedDate = sdf.parse(value, position)
+            if (parsedDate != null && position.index == value.length) return parsedDate.time
+        }
+        return null
     }
 
     private fun List<String>.valueOf(indexMap: Map<String, Int>, key: String): String? {

@@ -22,7 +22,8 @@ import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import kotlinx.coroutines.flow.Flow
 
 class TagManagementUseCase(
-    private val repository: PointRepositoryGateway
+    private val repository: PointRepositoryGateway,
+    private val onTagDeleted: (Long) -> Unit = {}
 ) {
     fun observeTags(): Flow<List<Tag>> = repository.observeTags()
 
@@ -38,7 +39,10 @@ class TagManagementUseCase(
         repository.updateTag(tag.copy(name = normalizedName))
     }
 
-    suspend fun deleteTag(tagId: Long) = repository.deleteTag(tagId)
+    suspend fun deleteTag(tagId: Long) {
+        repository.deleteTag(tagId)
+        onTagDeleted(tagId)
+    }
 
     suspend fun setTagForPoint(pointId: Long, tagId: Long, enabled: Boolean) {
         if (enabled) {

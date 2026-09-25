@@ -113,6 +113,7 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     private var zoomBehavior: SettingsZoomButtonBehavior = SettingsZoomButtonBehavior.HIDE
     private var languagePreference: SettingsLanguagePreference = SettingsLanguagePreference.FOLLOW_SYSTEM
     private var followSystemTheme: Boolean = true
+    private var darkTheme: Boolean = false
     private var defaultTagIds: List<Long> = emptyList()
     private var markerScale: Float = 1f
     private var mapTileSourceId: String = "osm"
@@ -171,6 +172,11 @@ private class FakeSettingsGateway : SettingsManagementGateway {
     override fun getFollowSystemTheme(): Boolean = followSystemTheme
     override fun setFollowSystemTheme(enabled: Boolean) {
         followSystemTheme = enabled
+    }
+
+    override fun getDarkTheme(): Boolean = darkTheme
+    override fun setDarkTheme(enabled: Boolean) {
+        darkTheme = enabled
     }
 
     override fun getDefaultTagIds(): List<Long> = defaultTagIds

@@ -20,11 +20,15 @@ import com.lavacrafter.maptimelinetool.domain.model.Point
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.PushbackReader
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.zip.ZipInputStream
 import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 
 object ZipImporter {
+    private data class PhotoMetadata(val sizeBytes: Long?, val sha256: String?)
+
     data class ImportedTag(
         val legacyId: Long,
         val name: String
@@ -51,7 +55,14 @@ object ZipImporter {
         savePhoto: (entryName: String, photoInput: InputStream) -> String?
     ): ImportStats {
         val photoMapping = mutableMapOf<String, String>()
+        val photoMetadata = mutableMapOf<String, PhotoMetadata>()
+        val importedPhotoMetadata = mutableMapOf<String, PhotoMetadata>()
+        val seenEntries = mutableSetOf<String>()
         var points = emptyList<Point>()
+        var hasPointsEntry = false
+        var hasTagsEntry = false
+        var hasPointTagsEntry = false
+        var hasSettingsEntry = false
         var pointsGeoJsonText: String? = null
         var tags = emptyList<ImportedTag>()
         var pointTags = emptyList<ImportedPointTag>()
@@ -79,10 +90,16 @@ object ZipImporter {
                     zip.closeEntry()
                     continue
                 }
+                val logicalName = normalizedName.lowercase(Locale.ROOT)
+                val recognized = logicalName in setOf(
+                    "points.csv", "points.geojson", "data.geojson", "tags.csv", "point_tags.csv",
+                    "settings.json", "backup_manifest.json"
+                ) || logicalName.startsWith("photos/")
+                if (recognized) require(seenEntries.add(logicalName)) { "Duplicate backup entry: $normalizedName" }
                 val maxEntryBytes = when {
                     normalizedName.equals("backup_manifest.json", ignoreCase = true) -> limits.maxManifestBytes
                     normalizedName.equals("settings.json", ignoreCase = true) -> limits.maxSettingsBytes
-                    normalizedName.startsWith("photos/") -> limits.maxPhotoBytes
+                    normalizedName.startsWith("photos/", ignoreCase = true) -> limits.maxPhotoBytes
                     else -> limits.maxDataEntryBytes
                 }
                 val entryInput = BoundedZipEntryInputStream(
@@ -93,19 +110,41 @@ object ZipImporter {
                     maxTotalBytes = limits.maxTotalBytes
                 )
                 if (normalizedName.equals("points.csv", ignoreCase = true)) {
-                    points = CsvImporter.parseCsv(InputStreamReader(entryInput, Charsets.UTF_8))
+                    hasPointsEntry = true
+                    points = CsvImporter.parseCsv(
+                        InputStreamReader(entryInput, Charsets.UTF_8),
+                        strictRows = true,
+                        onPhotoMetadata = { relPath, size, sha ->
+                            val key = normalizePhotoRelPath(relPath)
+                            val metadata = PhotoMetadata(size, sha)
+                            val previous = photoMetadata.putIfAbsent(key, metadata)
+                            require(previous == null || previous == metadata) { "Conflicting photo metadata: $relPath" }
+                        }
+                    )
                 } else if (normalizedName.equals("points.geojson", ignoreCase = true) || normalizedName.equals("data.geojson", ignoreCase = true)) {
+                    hasPointsEntry = true
                     pointsGeoJsonText = entryInput.readTextOrNull()
                 } else if (normalizedName.equals("tags.csv", ignoreCase = true)) {
+                    hasTagsEntry = true
                     tags = parseTagsCsv(InputStreamReader(entryInput, Charsets.UTF_8))
                 } else if (normalizedName.equals("point_tags.csv", ignoreCase = true)) {
+                    hasPointTagsEntry = true
                     pointTags = parsePointTagsCsv(InputStreamReader(entryInput, Charsets.UTF_8))
-                } else if (normalizedName.startsWith("photos/")) {
-                    val storedPath = savePhoto(normalizedName, entryInput)
+                } else if (normalizedName.startsWith("photos/", ignoreCase = true)) {
+                    val photoName = "photos/" + normalizedName.substringAfter('/')
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val digestInput = DigestInputStream(entryInput, digest)
+                    val storedPath = savePhoto(photoName, digestInput)
+                    digestInput.drain()
+                    importedPhotoMetadata[normalizePhotoRelPath(photoName)] = PhotoMetadata(
+                        entryInput.entryBytes,
+                        digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+                    )
                     if (!storedPath.isNullOrBlank()) {
-                        photoMapping[normalizePhotoRelPath(normalizedName)] = storedPath
+                        photoMapping[normalizePhotoRelPath(photoName)] = storedPath
                     }
                 } else if (normalizedName.equals("settings.json", ignoreCase = true)) {
+                    hasSettingsEntry = true
                     settingsJson = entryInput.readTextOrNull()
                 } else if (normalizedName.equals("backup_manifest.json", ignoreCase = true)) {
                     manifest = BackupManifest.parse(entryInput.readText())
@@ -123,6 +162,32 @@ object ZipImporter {
         if (points.isEmpty() && !pointsGeoJsonText.isNullOrBlank()) {
             points = GeoJsonExporter.parsePointsFromGeoJson(requireNotNull(pointsGeoJsonText)) { relPath ->
                 photoMapping[normalizePhotoRelPath(relPath)]
+            }
+        }
+
+        manifest?.takeIf { it.version >= 2 }?.let { declared ->
+            val sections = declared.sections
+            require(sections.points == hasPointsEntry) { "Points section does not match backup manifest" }
+            require(sections.tags == (hasTagsEntry && hasPointTagsEntry) && hasTagsEntry == hasPointTagsEntry) {
+                "Tags section does not match backup manifest"
+            }
+            require(sections.photos || importedPhotoMetadata.isEmpty()) { "Unexpected photos in backup" }
+            require(sections.settings == hasSettingsEntry) { "Settings section does not match backup manifest" }
+            declared.counts.points?.let { require(it == points.size) { "Incorrect backup point count" } }
+            declared.counts.tags?.let { require(it == tags.size) { "Incorrect backup tag count" } }
+            declared.counts.photos?.let { require(it == importedPhotoMetadata.size) { "Incorrect backup photo count" } }
+        }
+        require(pointTags.all { it.pointIndex in points.indices && tags.any { tag -> tag.legacyId == it.legacyTagId } }) {
+            "Invalid point-tag reference in backup"
+        }
+        photoMetadata.forEach { (path, declared) ->
+            importedPhotoMetadata[path]?.let { actual ->
+                require(declared.sha256 == null || declared.sha256.equals(actual.sha256, ignoreCase = true)) {
+                    "Photo hash mismatch: $path"
+                }
+                require(declared.sizeBytes == null || declared.sizeBytes == actual.sizeBytes) {
+                    "Photo size mismatch: $path"
+                }
             }
         }
 
@@ -154,7 +219,7 @@ object ZipImporter {
         val normalized = name.replace('\\', '/').trim()
         if (normalized.isEmpty()) return null
         if (normalized.startsWith("/")) return null
-        val segments = normalized.split('/')
+        val segments = normalized.split('/').filterNot { it == "." || it.isEmpty() }
         if (segments.any { it == ".." }) return null
         return segments.joinToString("/")
     }
@@ -171,7 +236,8 @@ object ZipImporter {
         private val addTotalBytes: (Long) -> Unit,
         private val maxTotalBytes: Long
     ) : InputStream() {
-        private var entryBytes = 0L
+        var entryBytes = 0L
+            private set
 
         override fun read(): Int {
             val value = source.read()
@@ -215,6 +281,11 @@ object ZipImporter {
             }
             addTotalBytes(count)
         }
+    }
+
+    private fun InputStream.drain() {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (read(buffer) >= 0) { /* Finish hashing bytes not consumed by savePhoto. */ }
     }
 
     private fun parseTagsCsv(reader: InputStreamReader): List<ImportedTag> {

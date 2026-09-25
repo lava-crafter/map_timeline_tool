@@ -49,17 +49,17 @@ class PointWriteUseCase(
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { formatPointTimestamp(timestamp) }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
-        val id = repository.insert(
-            buildPoint(
-                title = normalizedTitle,
-                note = normalizedNote,
-                location = location,
-                timestamp = timestamp,
-                photoPath = photoPath
-            )
+        val point = buildPoint(
+            title = normalizedTitle,
+            note = normalizedNote,
+            location = location,
+            timestamp = timestamp,
+            photoPath = photoPath
         )
-        tagIds.forEach { tagId ->
-            repository.insertPointTag(id, tagId)
+        val id = repository.inTransaction {
+            val insertedId = repository.insert(point)
+            tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
+            insertedId
         }
         if (shouldCollectNoise()) {
             asyncScope.launch {
@@ -74,37 +74,58 @@ class PointWriteUseCase(
             .ifBlank { point.title }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
         repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
-        if (point.photoPath != photoPath) {
+        if (point.photoPath != photoPath && point.photoPath != null && !repository.isPhotoReferenced(point.photoPath)) {
             deletePhoto(point.photoPath)
         }
     }
 
     suspend fun deletePoint(point: Point) {
         repository.delete(point)
-        deletePhoto(point.photoPath)
+        if (point.photoPath != null && !repository.isPhotoReferenced(point.photoPath)) {
+            deletePhoto(point.photoPath)
+        }
     }
 
     suspend fun importPoints(pointsList: List<Point>) {
-        val existingPoints = repository.getAll()
-        val existingMap = existingPoints.associateBy {
-            Triple(it.timestamp, it.latitude, it.longitude)
-        }.toMutableMap()
+        repository.inTransaction {
+            val existingMap = repository.getAll().associateBy {
+                Triple(it.timestamp, it.latitude, it.longitude)
+            }.toMutableMap()
 
-        pointsList.forEach { p ->
-            val normalizedPoint = p.copy(
-                title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
-                    .ifBlank { formatPointTimestamp(p.timestamp) },
-                note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
-            )
-            val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
-            val existing = existingMap[key]
-            if (existing != null) {
-                val merged = normalizedPoint.copy(id = existing.id)
-                repository.update(merged)
-                existingMap[key] = merged
-            } else {
-                val newId = repository.insert(normalizedPoint)
-                existingMap[key] = normalizedPoint.copy(id = newId)
+            pointsList.forEach { p ->
+                val normalizedPoint = p.copy(
+                    title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
+                        .ifBlank { formatPointTimestamp(p.timestamp) },
+                    note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
+                )
+                val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
+                val existing = existingMap[key]
+                if (existing != null) {
+                    val merged = normalizedPoint.copy(
+                        id = existing.id,
+                        photoPath = normalizedPoint.photoPath ?: existing.photoPath,
+                        locationAccuracyMeters = normalizedPoint.locationAccuracyMeters ?: existing.locationAccuracyMeters,
+                        locationFixTimeMs = normalizedPoint.locationFixTimeMs ?: existing.locationFixTimeMs,
+                        locationProvider = normalizedPoint.locationProvider ?: existing.locationProvider,
+                        pressureHpa = normalizedPoint.pressureHpa ?: existing.pressureHpa,
+                        ambientLightLux = normalizedPoint.ambientLightLux ?: existing.ambientLightLux,
+                        accelerometerX = normalizedPoint.accelerometerX ?: existing.accelerometerX,
+                        accelerometerY = normalizedPoint.accelerometerY ?: existing.accelerometerY,
+                        accelerometerZ = normalizedPoint.accelerometerZ ?: existing.accelerometerZ,
+                        gyroscopeX = normalizedPoint.gyroscopeX ?: existing.gyroscopeX,
+                        gyroscopeY = normalizedPoint.gyroscopeY ?: existing.gyroscopeY,
+                        gyroscopeZ = normalizedPoint.gyroscopeZ ?: existing.gyroscopeZ,
+                        magnetometerX = normalizedPoint.magnetometerX ?: existing.magnetometerX,
+                        magnetometerY = normalizedPoint.magnetometerY ?: existing.magnetometerY,
+                        magnetometerZ = normalizedPoint.magnetometerZ ?: existing.magnetometerZ,
+                        noiseDb = normalizedPoint.noiseDb ?: existing.noiseDb
+                    )
+                    repository.update(merged)
+                    existingMap[key] = merged
+                } else {
+                    val newId = repository.insert(normalizedPoint.copy(id = 0))
+                    existingMap[key] = normalizedPoint.copy(id = newId)
+                }
             }
         }
     }

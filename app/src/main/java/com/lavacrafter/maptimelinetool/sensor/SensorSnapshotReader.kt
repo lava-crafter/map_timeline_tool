@@ -90,41 +90,9 @@ suspend fun captureSensorSnapshot(
             continuation.resume(snapshot)
         }
 
-        fun SensorSnapshot.hasReadingFor(sensorType: Int): Boolean =
-            when (sensorType) {
-                Sensor.TYPE_PRESSURE -> pressureHpa != null
-                Sensor.TYPE_LIGHT -> ambientLightLux != null
-                Sensor.TYPE_ACCELEROMETER -> accelerometerX != null && accelerometerY != null && accelerometerZ != null
-                Sensor.TYPE_GYROSCOPE -> gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null
-                Sensor.TYPE_MAGNETIC_FIELD -> magnetometerX != null && magnetometerY != null && magnetometerZ != null
-                else -> false
-            }
-
-        fun SensorSnapshot.updateFrom(event: SensorEvent): SensorSnapshot =
-            when (event.sensor.type) {
-                Sensor.TYPE_PRESSURE -> copy(pressureHpa = event.values.firstOrNull())
-                Sensor.TYPE_LIGHT -> copy(ambientLightLux = event.values.firstOrNull())
-                Sensor.TYPE_ACCELEROMETER -> copy(
-                    accelerometerX = event.values.getOrNull(0),
-                    accelerometerY = event.values.getOrNull(1),
-                    accelerometerZ = event.values.getOrNull(2)
-                )
-                Sensor.TYPE_GYROSCOPE -> copy(
-                    gyroscopeX = event.values.getOrNull(0),
-                    gyroscopeY = event.values.getOrNull(1),
-                    gyroscopeZ = event.values.getOrNull(2)
-                )
-                Sensor.TYPE_MAGNETIC_FIELD -> copy(
-                    magnetometerX = event.values.getOrNull(0),
-                    magnetometerY = event.values.getOrNull(1),
-                    magnetometerZ = event.values.getOrNull(2)
-                )
-                else -> this
-            }
-
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                snapshot = snapshot.updateFrom(event)
+                snapshot = snapshot.updateFrom(event.sensor.type, event.values)
                 if (registeredTypes.isNotEmpty() && registeredTypes.all(snapshot::hasReadingFor)) {
                     finish(this)
                 }
@@ -160,3 +128,34 @@ suspend fun captureSensorSnapshot(
             callbackHandler.removeCallbacks(timeoutRunnable)
         }
     }
+
+internal fun SensorSnapshot.hasReadingFor(sensorType: Int): Boolean = when (sensorType) {
+    Sensor.TYPE_PRESSURE -> pressureHpa != null
+    Sensor.TYPE_LIGHT -> ambientLightLux != null
+    Sensor.TYPE_ACCELEROMETER -> accelerometerX != null && accelerometerY != null && accelerometerZ != null
+    Sensor.TYPE_GYROSCOPE -> gyroscopeX != null && gyroscopeY != null && gyroscopeZ != null
+    Sensor.TYPE_MAGNETIC_FIELD -> magnetometerX != null && magnetometerY != null && magnetometerZ != null
+    else -> false
+}
+
+/** Same mapping used by the listener; accepts sample values without constructing Android SensorEvent. */
+internal fun SensorSnapshot.updateFrom(sensorType: Int, values: FloatArray): SensorSnapshot = when (sensorType) {
+    Sensor.TYPE_PRESSURE -> copy(pressureHpa = values.firstOrNull())
+    Sensor.TYPE_LIGHT -> copy(ambientLightLux = values.firstOrNull())
+    Sensor.TYPE_ACCELEROMETER -> copy(
+        accelerometerX = values.getOrNull(0),
+        accelerometerY = values.getOrNull(1),
+        accelerometerZ = values.getOrNull(2)
+    )
+    Sensor.TYPE_GYROSCOPE -> copy(
+        gyroscopeX = values.getOrNull(0),
+        gyroscopeY = values.getOrNull(1),
+        gyroscopeZ = values.getOrNull(2)
+    )
+    Sensor.TYPE_MAGNETIC_FIELD -> copy(
+        magnetometerX = values.getOrNull(0),
+        magnetometerY = values.getOrNull(1),
+        magnetometerZ = values.getOrNull(2)
+    )
+    else -> this
+}

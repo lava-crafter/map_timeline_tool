@@ -28,6 +28,7 @@ object SettingsStore {
     private const val KEY_ZOOM_BEHAVIOR = "zoom_behavior"
     private const val KEY_LANGUAGE_PREFERENCE = "language_preference"
     private const val KEY_FOLLOW_SYSTEM_THEME = "follow_system_theme"
+    private const val KEY_DARK_THEME = "dark_theme"
     private const val KEY_DEFAULT_TAGS = "default_tags"
     private const val KEY_MARKER_SCALE = "marker_scale"
     private const val KEY_MAP_TILE_SOURCE = "map_tile_source"
@@ -148,12 +149,29 @@ object SettingsStore {
             .apply()
     }
 
+    fun getDarkTheme(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, false)
+
+    fun setDarkTheme(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_DARK_THEME, enabled)
+            .apply()
+    }
+
     fun getDefaultTagIds(context: Context): List<Long> {
         return parseLongList(context, KEY_DEFAULT_TAGS)
     }
 
     fun setDefaultTagIds(context: Context, tagIds: List<Long>) {
         saveLongList(context, KEY_DEFAULT_TAGS, tagIds)
+    }
+
+    fun removeTagId(context: Context, tagId: Long) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_PINNED_TAGS, getPinnedTagIds(context).filterNot { it == tagId }.joinToString(","))
+            .putString(KEY_RECENT_TAGS, getRecentTagIds(context).filterNot { it == tagId }.joinToString(","))
+            .putString(KEY_DEFAULT_TAGS, getDefaultTagIds(context).filterNot { it == tagId }.joinToString(","))
+            .commit()
     }
 
     fun getMarkerScale(context: Context): Float {
@@ -404,6 +422,7 @@ object SettingsStore {
         root.put(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)
         root.put(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)
         root.put(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context))
+        root.put(KEY_DARK_THEME, getDarkTheme(context))
         root.put(KEY_DEFAULT_TAGS, org.json.JSONArray(getDefaultTagIds(context)))
         root.put(KEY_MARKER_SCALE, getMarkerScale(context).toDouble())
         root.put(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context))
@@ -464,6 +483,7 @@ object SettingsStore {
                 editor.putInt(KEY_LANGUAGE_PREFERENCE, LanguagePreference.fromValue(root.optInt(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)).value)
             }
             if (root.has(KEY_FOLLOW_SYSTEM_THEME)) editor.putBoolean(KEY_FOLLOW_SYSTEM_THEME, root.optBoolean(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context)))
+            if (root.has(KEY_DARK_THEME)) editor.putBoolean(KEY_DARK_THEME, root.optBoolean(KEY_DARK_THEME, getDarkTheme(context)))
             if (root.has(KEY_DEFAULT_TAGS)) editor.putString(KEY_DEFAULT_TAGS, parseLongArray(root.optJSONArray(KEY_DEFAULT_TAGS)).joinToString(","))
             if (root.has(KEY_MARKER_SCALE)) editor.putFloat(KEY_MARKER_SCALE, root.optDouble(KEY_MARKER_SCALE, getMarkerScale(context).toDouble()).toFloat().coerceIn(0.3f, 1.75f))
             if (root.has(KEY_MAP_TILE_SOURCE)) editor.putString(KEY_MAP_TILE_SOURCE, root.optString(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context)))
@@ -567,45 +587,8 @@ object SettingsStore {
     }
 
     private fun dedupeAreas(areas: List<DownloadedArea>): List<DownloadedArea> {
-        if (areas.isEmpty()) return emptyList()
-        val sorted = areas.sortedBy { it.createdAt }
-        val merged = mutableListOf<DownloadedArea>()
-        for (area in sorted) {
-            val existingIndex = merged.indexOfFirst { candidate ->
-                zoomOverlaps(candidate, area) && bboxOverlaps(candidate, area)
-            }
-            if (existingIndex >= 0) {
-                val candidate = merged[existingIndex]
-                merged[existingIndex] = mergeAreas(candidate, area)
-            } else {
-                merged.add(area)
-            }
-        }
-        return merged
-    }
-
-    private fun zoomOverlaps(a: DownloadedArea, b: DownloadedArea): Boolean {
-        return a.minZoom <= b.maxZoom && b.minZoom <= a.maxZoom
-    }
-
-    private fun bboxOverlaps(a: DownloadedArea, b: DownloadedArea): Boolean {
-        val north = minOf(a.north, b.north)
-        val south = maxOf(a.south, b.south)
-        val west = maxOf(a.west, b.west)
-        val east = minOf(a.east, b.east)
-        return north >= south && east >= west
-    }
-
-    private fun mergeAreas(a: DownloadedArea, b: DownloadedArea): DownloadedArea {
-        return DownloadedArea(
-            north = maxOf(a.north, b.north),
-            south = minOf(a.south, b.south),
-            east = maxOf(a.east, b.east),
-            west = minOf(a.west, b.west),
-            minZoom = minOf(a.minZoom, b.minZoom),
-            maxZoom = maxOf(a.maxZoom, b.maxZoom),
-            createdAt = minOf(a.createdAt, b.createdAt)
-        )
+        // Bounding overlapping downloads would advertise tiles (or zoom levels) never cached.
+        return areas.sortedBy { it.createdAt }.distinctBy { it.boundsKey() }
     }
 
     private fun parseLongArray(array: org.json.JSONArray?): List<Long> {

@@ -101,7 +101,7 @@ private fun ExportOptionsScreen(includeTags: Boolean, onIncludeTagsChange: (Bool
                 Text(text = stringResource(R.string.export_option_points_and_tags))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = true, onClick = {})
+                RadioButton(selected = !includeTags, onClick = { onIncludeTagsChange(false) })
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = stringResource(R.string.export_option_points_only))
             }

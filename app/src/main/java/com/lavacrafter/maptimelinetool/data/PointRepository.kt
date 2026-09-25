@@ -33,8 +33,12 @@ class PointRepository(
     override suspend fun insert(point: com.lavacrafter.maptimelinetool.domain.model.Point): Long = dao.insert(point.toEntity())
     override suspend fun update(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.update(point.toEntity())
     override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = dao.updateNoiseDb(pointId, noiseDb)
-    override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.delete(point.toEntity())
+    override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = inTransaction {
+        dao.deleteTagsForPoint(point.id)
+        dao.delete(point.toEntity())
+    }
     override suspend fun getAll() = dao.getAll().map { it.toDomain() }
+    override suspend fun isPhotoReferenced(photoPath: String) = dao.isPhotoReferenced(photoPath)
     override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double) =
         dao.findByImportKey(timestamp, latitude, longitude)?.toDomain()
     override suspend fun getPageAfterId(afterId: Long, limit: Int) =
@@ -44,7 +48,10 @@ class PointRepository(
     override suspend fun getAllTags() = dao.getAllTags().map { it.toDomain() }
     override suspend fun insertTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.insertTag(tag.toEntity())
     override suspend fun updateTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.updateTag(tag.toEntity())
-    override suspend fun deleteTag(tagId: Long) = dao.deleteTag(tagId)
+    override suspend fun deleteTag(tagId: Long) = inTransaction {
+        dao.deletePointsForTag(tagId)
+        dao.deleteTag(tagId)
+    }
     override suspend fun insertPointTag(pointId: Long, tagId: Long) = dao.insertPointTag(PointTagCrossRef(pointId, tagId))
     override suspend fun deletePointTag(pointId: Long, tagId: Long) = dao.deletePointTag(pointId, tagId)
     override suspend fun getTagIdsForPoint(pointId: Long) = dao.getTagIdsForPoint(pointId)

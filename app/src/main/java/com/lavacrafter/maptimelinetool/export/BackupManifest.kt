@@ -26,9 +26,16 @@ data class BackupSections(
     val settings: Boolean = false
 )
 
+data class BackupCounts(
+    val points: Int? = null,
+    val tags: Int? = null,
+    val photos: Int? = null
+)
+
 data class BackupManifest(
     val version: Int,
-    val sections: BackupSections
+    val sections: BackupSections,
+    val counts: BackupCounts = BackupCounts()
 ) {
     companion object {
         /** Old archives did not declare optional sections, so preserve their historical semantics. */
@@ -37,10 +44,18 @@ data class BackupManifest(
             sections = BackupSections(points = true, tags = true, sensors = true, photos = true, settings = true)
         )
 
-        fun parse(json: String): BackupManifest? = runCatching {
+        fun parse(json: String): BackupManifest = runCatching {
             val root = JSONObject(json)
-            val version = root.optInt("backup_version", 1).coerceAtLeast(1)
+            val version = root.getInt("backup_version")
+            require(version in 1..2) { "Unsupported backup version" }
             val rawSections = root.optJSONObject("sections")
+            require(!root.has("sections") || rawSections != null) { "Invalid backup sections" }
+            if (version >= 2) requireNotNull(rawSections) { "Missing backup sections" }
+            val rawCounts = root.optJSONObject("counts")
+            require(!root.has("counts") || rawCounts != null) { "Invalid backup counts" }
+            fun count(name: String): Int? = rawCounts?.takeIf { it.has(name) }?.getInt(name)?.also {
+                require(it >= 0) { "Negative backup count: $name" }
+            }
             BackupManifest(
                 version = version,
                 sections = BackupSections(
@@ -49,9 +64,10 @@ data class BackupManifest(
                     sensors = rawSections?.optBoolean("sensors", version < 2) ?: (version < 2),
                     photos = rawSections?.optBoolean("photos", false) ?: false,
                     settings = rawSections?.optBoolean("settings", false) ?: false
-                )
+                ),
+                counts = BackupCounts(points = count("points"), tags = count("tags"), photos = count("photos"))
             )
-        }.getOrNull()
+        }.getOrElse { throw IllegalArgumentException("Invalid backup manifest", it) }
     }
 }
 

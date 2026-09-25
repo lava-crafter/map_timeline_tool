@@ -153,6 +153,38 @@ class QuickAddResolverTest {
         assertEquals(1, provider.preciseCalls)
     }
 
+    @Test
+    fun savePointChecksFixAgeAfterPreciseRequestInsteadOfAtClickTime() = runBlocking {
+        var nowMs = 100_000L
+        val cached = QuickAddLocation(8.0, 9.0, 18f, 99_000L, "gps")
+        val cache = QuickAddLocationCache(wallClockMs = { nowMs }).apply { update(cached) }
+        val provider = object : LocationProvider {
+            override fun getLastKnownLocation(): GeoPoint? = null
+            override suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint {
+                nowMs = 113_000L // The request took 13 seconds; its fix is now 18 seconds old.
+                return GeoPoint(1.0, 2.0, accuracyMeters = 5f, fixTimeMs = 95_000L, provider = "gps")
+            }
+            override suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? = null
+            override suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? = null
+        }
+        var savedLocation: GeoPoint? = null
+        var savedTime: Long? = null
+
+        val result = QuickAddResolver(
+            locationProvider = provider,
+            locationCache = cache,
+            addPoint = { _, location, timestamp ->
+                savedLocation = location
+                savedTime = timestamp
+            },
+            wallClockMs = { nowMs }
+        ).savePoint(timeoutMs = 15_000L, clickTimeMs = 100_000L)
+
+        assertEquals(QuickAddResult.SAVED_FROM_RECENT_CACHE, result)
+        assertEquals(cached.toGeoPoint(), savedLocation)
+        assertEquals(100_000L, savedTime)
+    }
+
     private class FakeLocationProvider(
         val preciseLocation: GeoPoint? = null
     ) : LocationProvider {

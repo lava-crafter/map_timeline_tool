@@ -77,14 +77,15 @@ suspend fun captureNoiseDb(context: Context): Float? {
             audioRecord.release()
         }
 
-        if (samplesRead <= 0) {
-            return@runCatching null
-        }
-        val rms = sqrt(sumSquares / samplesRead)
-        if (rms <= 0.0) {
-            return@runCatching null
-        }
-        val noiseDbfs = 20.0 * log10(rms / Short.MAX_VALUE.toDouble())
-        if (noiseDbfs.isFinite()) noiseDbfs.toFloat() else null
+        pcm16SumSquaresToDbfs(sumSquares, samplesRead)
     }.getOrNull()
+}
+
+/** Pure final conversion for deterministic PCM tests; no microphone calibration is implied. */
+internal fun pcm16SumSquaresToDbfs(sumSquares: Double, sampleCount: Int): Float? {
+    if (sampleCount <= 0) return null
+    val rms = sqrt(sumSquares / sampleCount)
+    if (rms <= 0.0) return null
+    val noiseDbfs = 20.0 * log10(rms / Short.MAX_VALUE.toDouble())
+    return if (noiseDbfs.isFinite()) noiseDbfs.toFloat() else null
 }

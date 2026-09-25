@@ -18,7 +18,8 @@ package com.lavacrafter.maptimelinetool
 
 /** A single monotonic timeout budget shared by nested location fallbacks. */
 internal class LocationDeadline private constructor(
-    private val deadlineElapsedMs: Long
+    private val deadlineElapsedMs: Long,
+    private val monotonicNowMs: () -> Long
 ) {
     fun remainingMs(): Long = (deadlineElapsedMs - monotonicNowMs()).coerceAtLeast(0L)
 
@@ -29,11 +30,12 @@ internal class LocationDeadline private constructor(
     }
 
     companion object {
-        fun after(timeoutMs: Long): LocationDeadline {
+        fun after(
+            timeoutMs: Long,
+            monotonicNowMs: () -> Long = { System.nanoTime() / 1_000_000L }
+        ): LocationDeadline {
             val now = monotonicNowMs()
-            return LocationDeadline(now + timeoutMs.coerceAtLeast(1L))
+            return LocationDeadline(now + timeoutMs.coerceAtLeast(1L), monotonicNowMs)
         }
-
-        private fun monotonicNowMs(): Long = System.nanoTime() / 1_000_000L
     }
 }

@@ -57,6 +57,32 @@ class SettingsAndOfflineVerificationTest {
         assertEquals(listOf(first, second).map { it.boundsKey() }.toSet(), saved.map { it.boundsKey() }.toSet())
     }
 
+    @Test
+    fun partiallyOverlappingAreasAtTheSameZoomDoNotDeclareMissingCornersDownloaded() {
+        val context = isolatedSettingsContext()
+        val first = DownloadedArea(north = 10.0, south = 0.0, east = 10.0, west = 0.0, minZoom = 8, maxZoom = 9)
+        val second = DownloadedArea(north = 15.0, south = 5.0, east = 15.0, west = 5.0, minZoom = 8, maxZoom = 9)
+
+        SettingsStore.addDownloadedArea(context, first)
+        val saved = SettingsStore.addDownloadedArea(context, second)
+
+        assertEquals(setOf(first.boundsKey(), second.boundsKey()), saved.map { it.boundsKey() }.toSet())
+    }
+
+    @Test
+    fun removingAreaMetadataDoesNotRemoveAnUnrelatedRegion() {
+        val context = isolatedSettingsContext()
+        val first = DownloadedArea(north = 10.0, south = 0.0, east = 10.0, west = 0.0, minZoom = 8, maxZoom = 9)
+        val other = DownloadedArea(north = 30.0, south = 20.0, east = 30.0, west = 20.0, minZoom = 8, maxZoom = 9)
+        SettingsStore.addDownloadedArea(context, first)
+        SettingsStore.addDownloadedArea(context, other)
+
+        val remaining = SettingsStore.removeDownloadedArea(context, first)
+
+        assertEquals(listOf(other.boundsKey()), remaining.map { it.boundsKey() })
+        assertEquals(listOf(other.boundsKey()), SettingsStore.getDownloadedAreas(context).map { it.boundsKey() })
+    }
+
     private fun isolatedSettingsContext(): Context {
         val testContext = InstrumentationRegistry.getInstrumentation().context
         val suffix = UUID.randomUUID().toString()

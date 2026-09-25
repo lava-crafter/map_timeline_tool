@@ -53,6 +53,7 @@ class SettingsViewModel(
 
     private fun buildSettingsUiState(validMapTileSourceId: String): SettingsUiState {
         return SettingsUiState(
+            isDarkTheme = settingsUseCase.getDarkTheme(),
             followSystemTheme = settingsUseCase.getFollowSystemTheme(),
             languagePreference = settingsUseCase.getLanguagePreference().toUi(),
             timeoutSeconds = settingsUseCase.getTimeoutSeconds(),
@@ -83,6 +84,7 @@ class SettingsViewModel(
     }
 
     fun setDarkTheme(enabled: Boolean) {
+        settingsUseCase.setDarkTheme(enabled)
         _uiState.update { it.copy(isDarkTheme = enabled) }
     }
 

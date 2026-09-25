@@ -17,12 +17,17 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.data
 
 import android.app.Application
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
+import com.lavacrafter.maptimelinetool.domain.model.Tag
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
@@ -33,8 +38,10 @@ import com.lavacrafter.maptimelinetool.export.BackupSections
 import com.lavacrafter.maptimelinetool.export.CsvImporter
 import com.lavacrafter.maptimelinetool.export.ZipImporter
 import com.lavacrafter.maptimelinetool.ui.AppViewModel
+import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.runBlocking
@@ -108,6 +115,24 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
+    fun importingTheSameLegacyCsvTwiceDoesNotCreateExtraRows() = runBlocking {
+        val imported = CsvImporter.parseCsv(
+            "name,description,latitude,longitude,time_utc\n" +
+                "Old format,Some notes,10.0,20.0,2024-01-01T00:00:00Z\n"
+        )
+        val writer = pointWriter()
+
+        writer.importPoints(imported)
+        writer.importPoints(imported)
+
+        val saved = database.pointDao().getAll().single()
+        assertEquals("Old format", saved.title)
+        assertEquals("Some notes", saved.note)
+        assertEquals(null, saved.pressureHpa)
+        assertEquals(null, saved.photoPath)
+    }
+
+    @Test
     fun failedTagInsertDoesNotLeavePointOrPartialTags() = runBlocking {
         val failingRepository = object : PointRepositoryGateway by repository {
             override suspend fun <T> inTransaction(block: suspend () -> T): T = repository.inTransaction(block)
@@ -155,6 +180,29 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
+    fun deletingTagDoesNotLeaveItsIdInPinnedRecentOrDefaultSettings() = runBlocking {
+        val testContext = InstrumentationRegistry.getInstrumentation().context
+        val prefix = "tag_deletion_${UUID.randomUUID()}_"
+        val settingsContext = object : ContextWrapper(testContext) {
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
+                testContext.getSharedPreferences(prefix + name, mode)
+        }
+        val deleted = database.pointDao().insertTag(TagEntity(name = "Delete me"))
+        val kept = database.pointDao().insertTag(TagEntity(name = "Keep me"))
+        SettingsStore.setPinnedTagIds(settingsContext, listOf(deleted, kept))
+        SettingsStore.setDefaultTagIds(settingsContext, listOf(deleted, kept))
+        SettingsStore.addRecentTagId(settingsContext, kept)
+        SettingsStore.addRecentTagId(settingsContext, deleted)
+
+        TagManagementUseCase(repository, onTagDeleted = { SettingsStore.removeTagId(settingsContext, it) }).deleteTag(deleted)
+
+        assertEquals(listOf(kept), database.pointDao().getAllTags().map { it.id })
+        assertEquals(listOf(kept), SettingsStore.getPinnedTagIds(settingsContext))
+        assertEquals(listOf(kept), SettingsStore.getDefaultTagIds(settingsContext))
+        assertEquals(listOf(kept), SettingsStore.getRecentTagIds(settingsContext))
+    }
+
+    @Test
     fun zipRestoreKeepsTwoDistinctPointsWithTheSameImportKey() = runBlocking {
         val imported = ZipImporter.ImportStats(
             points = listOf(point(title = "First"), point(title = "Second")),
@@ -184,6 +232,111 @@ class DataIntegrityVerificationTest {
         viewModel().importZipData(imported)
 
         assertEquals(2, database.pointDao().getAllTags().size)
+    }
+
+    @Test
+    fun failingZipTagInsertRollsBackPointAndPreviouslyInsertedTag() = runBlocking {
+        val failingRepository = object : PointRepositoryGateway by repository {
+            override suspend fun insertTag(tag: Tag): Long {
+                if (tag.name == "Second") throw IllegalStateException("Injected tag insert failure")
+                return repository.insertTag(tag)
+            }
+        }
+        val imported = ZipImporter.ImportStats(
+            points = listOf(point()),
+            tags = listOf(ZipImporter.ImportedTag(1L, "First"), ZipImporter.ImportedTag(2L, "Second")),
+            pointTags = listOf(ZipImporter.ImportedPointTag(0, 1L)),
+            importedPhotoCount = 0,
+            missingPhotoCount = 0,
+            manifest = BackupManifest(version = 2, sections = BackupSections(tags = true))
+        )
+
+        val failure = runCatching { viewModel(failingRepository).importZipData(imported) }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertTrue(database.pointDao().getAll().isEmpty())
+        assertTrue(database.pointDao().getAllTags().isEmpty())
+    }
+
+    @Test
+    fun restoringTheSameZipDataTwiceDoesNotMultiplyItsPointOrTagRelations() = runBlocking {
+        val imported = ZipImporter.ImportStats(
+            points = listOf(point()),
+            tags = listOf(ZipImporter.ImportedTag(7L, "Work")),
+            pointTags = listOf(ZipImporter.ImportedPointTag(0, 7L)),
+            importedPhotoCount = 0,
+            missingPhotoCount = 0,
+            manifest = BackupManifest(version = 2, sections = BackupSections(tags = true))
+        )
+        val model = viewModel()
+
+        model.importZipData(imported)
+        model.importZipData(imported)
+
+        val saved = database.pointDao().getAll().single()
+        val tag = database.pointDao().getAllTags().single()
+        assertEquals("Work", tag.name)
+        assertEquals(listOf(tag.id), database.pointDao().getTagIdsForPoint(saved.id))
+    }
+
+    @Test
+    fun validArchivePointTagIndexReachesTheCorrectRoomRow() = runBlocking {
+        val output = ByteArrayOutputStream()
+        val csv = "name,description,latitude,longitude,time_utc\n" +
+            "First,,10.0,20.0,2024-01-01T00:00:00Z\n" +
+            "Second,,11.0,21.0,2024-01-01T00:00:01Z\n"
+        ZipOutputStream(output).use { zip ->
+            listOf(
+                "points.csv" to csv,
+                "tags.csv" to "tag_id,name\n5,Work\n",
+                "point_tags.csv" to "point_index,tag_id\n1,5\n"
+            ).forEach { (name, text) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(text.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+        }
+
+        val parsed = ZipImporter.importZip(ByteArrayInputStream(output.toByteArray())) { _, _ -> null }
+        viewModel().importZipData(parsed)
+
+        val saved = database.pointDao().getAll().associateBy { it.title }
+        val tag = database.pointDao().getAllTags().single()
+        assertTrue(database.pointDao().getTagIdsForPoint(saved.getValue("First").id).isEmpty())
+        assertEquals(listOf(tag.id), database.pointDao().getTagIdsForPoint(saved.getValue("Second").id))
+    }
+
+    @Test
+    fun skippedInvalidArchiveRowCannotReassignItsTagToTheNextRoomPoint() = runBlocking {
+        val csv = "name,description,latitude,longitude,time_utc\n" +
+            "First,,10.0,20.0,2024-01-01T00:00:00Z\n" +
+            "Invalid,,bad,20.0,2024-01-01T00:00:01Z\n" +
+            "Third,,11.0,21.0,2024-01-01T00:00:02Z\n"
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            listOf(
+                "points.csv" to csv,
+                "tags.csv" to "tag_id,name\n5,Work\n",
+                "point_tags.csv" to "point_index,tag_id\n1,5\n"
+            ).forEach { (name, text) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(text.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+        }
+
+        val failure = runCatching {
+            val parsed = ZipImporter.importZip(ByteArrayInputStream(output.toByteArray())) { _, _ -> null }
+            viewModel().importZipData(parsed)
+        }.exceptionOrNull()
+
+        // Either reject the archive or leave the valid third point untagged; never move row 1's tag to it.
+        if (failure != null) {
+            assertTrue(failure is IllegalArgumentException)
+        } else {
+            val third = database.pointDao().getAll().single { it.title == "Third" }
+            assertTrue(database.pointDao().getTagIdsForPoint(third.id).isEmpty())
+        }
     }
 
     @Test
@@ -217,11 +370,11 @@ class DataIntegrityVerificationTest {
         }
     }
 
-    private fun viewModel(): AppViewModel = AppViewModel(
+    private fun viewModel(gateway: PointRepositoryGateway = repository): AppViewModel = AppViewModel(
         app = ApplicationProvider.getApplicationContext(),
-        repo = repository,
-        pointWriteUseCase = pointWriter(),
-        tagManagementUseCase = TagManagementUseCase(repository),
+        repo = gateway,
+        pointWriteUseCase = pointWriter(gateway),
+        tagManagementUseCase = TagManagementUseCase(gateway),
         locationProvider = object : LocationProvider {
             override fun getLastKnownLocation(): GeoPoint? = null
             override suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint? = null
