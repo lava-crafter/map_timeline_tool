@@ -33,7 +33,7 @@ class PointPhotoUtilsTest {
         val valid = java.io.File(photoDir, "photo-test.jpg")
 
         assertEquals(valid.canonicalFile, requireNotNull(resolvePointPhotoFile(context, valid.name)))
-        assertEquals(valid.canonicalFile, requireNotNull(resolvePointPhotoFile(context, valid.absolutePath)))
+        assertNull(resolvePointPhotoFile(context, valid.absolutePath))
         assertNull(resolvePointPhotoFile(context, "../shared_prefs/map_timeline_settings.xml"))
         assertNull(resolvePointPhotoFile(context, "nested/photo-test.jpg"))
         assertNull(resolvePointPhotoFile(context, context.filesDir.absolutePath))
