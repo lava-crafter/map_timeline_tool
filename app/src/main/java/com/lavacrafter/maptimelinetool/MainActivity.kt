@@ -64,6 +64,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
@@ -76,9 +77,9 @@ import com.lavacrafter.maptimelinetool.data.toUi
 import com.lavacrafter.maptimelinetool.export.CsvExporter
 import com.lavacrafter.maptimelinetool.export.CsvImporter
 import com.lavacrafter.maptimelinetool.export.GeoJsonExporter
+import com.lavacrafter.maptimelinetool.export.FullBackupAssembler
 import com.lavacrafter.maptimelinetool.export.KmlExporter
 import com.lavacrafter.maptimelinetool.export.KmzExporter
-import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.export.ZipImporter
 import com.lavacrafter.maptimelinetool.export.ZipImportLimits
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
@@ -149,6 +150,7 @@ class MainActivity : AppCompatActivity() {
             val isSystemDark = isSystemInDarkTheme()
             MapTimelineToolTheme(darkTheme = if (settingsState.followSystemTheme) isSystemDark else settingsState.isDarkTheme) {
                 val context = LocalContext.current
+                val resources = LocalResources.current
                 var showTagPickerForAdd by remember { mutableStateOf(false) }
                 var showTagPickerForEdit by remember { mutableStateOf(false) }
                 var showMapDownload by remember { mutableStateOf(false) }
@@ -377,16 +379,11 @@ class MainActivity : AppCompatActivity() {
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    ZipExporter.export(
-                                        points = pending.points,
+                                    pending.writeOrdinaryZip(
                                         outputStream = output,
                                         resolvePhotoFile = { photoPath ->
                                             resolvePointPhotoFile(context, photoPath)
                                         },
-                                        options = pending.zipOptions,
-                                        tags = pending.zipTags,
-                                        pointTagIdsByPointId = pending.pointTagIdsByPointId,
-                                        settingsJsonProvider = { SettingsStore.exportBackupJson(context) },
                                         appVersion = packageManager.getPackageInfo(packageName, 0).versionName
                                     )
                                 } ?: throw IOException("Failed to open output stream")
@@ -998,43 +995,18 @@ class MainActivity : AppCompatActivity() {
                 val shareBackupZip: () -> Unit = {
                     scope.launch {
                         runCatching {
-                            val totalPointCount = pointsState.size
-                            val shareUri = withContext(Dispatchers.IO) {
-                                val allPointsDomain = pointsState.map { it.toDomain() }
-                                val pointTagMap = mutableMapOf<Long, List<Long>>()
-                                allPointsDomain.forEach { point ->
-                                    val tagIds = viewModel.getTagIdsForPoint(point.id)
-                                    if (tagIds.isNotEmpty()) {
-                                        pointTagMap[point.id] = tagIds
-                                    }
-                                }
-                                val usedTagIds = pointTagMap.values.flatten().toSet()
-                                val zipTags = tagsState
-                                    .filter { usedTagIds.contains(it.id) }
-                                    .map { ZipExporter.TagRecord(it.id, it.name) }
-                                val backupDir = java.io.File(context.filesDir, "shared_backups").apply { mkdirs() }
-                                val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
-                                val backupZip = java.io.File(backupDir, "map_timeline_backup_${sdf.format(java.util.Date())}.zip")
-                                backupZip.outputStream().buffered().use { output ->
-                                    ZipExporter.export(
-                                        points = allPointsDomain,
+                            val (shareUri, totalPointCount) = withContext(Dispatchers.IO) {
+                                val backup = FullBackupAssembler(context.appGraph().pointRepositoryGateway).assemble()
+                                val portableSettings = SettingsStore.exportBackupJson(context)
+                                val backupZip = createSharedBackupFile(java.io.File(context.filesDir, "shared_backups")) { output ->
+                                    backup.writeZip(
                                         outputStream = output,
-                                        resolvePhotoFile = { photoPath ->
-                                            resolvePointPhotoFile(context, photoPath)
-                                        },
-                                        options = ZipExporter.ExportOptions(
-                                            includePoints = true,
-                                            includeTags = true,
-                                            includeSensors = true,
-                                            includePhotos = true
-                                        ),
-                                        tags = zipTags,
-                                        pointTagIdsByPointId = pointTagMap,
-                                        settingsJsonProvider = { SettingsStore.exportBackupJson(context) },
+                                        resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
+                                        settingsJson = portableSettings,
                                         appVersion = packageManager.getPackageInfo(packageName, 0).versionName
                                     )
                                 }
-                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", backupZip)
+                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", backupZip) to backup.points.size
                             }
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "application/zip"
@@ -1304,7 +1276,7 @@ class MainActivity : AppCompatActivity() {
                                             } else {
                                                 R.string.toast_cache_clear_failed
                                             }
-                                            Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     onOpenAbout = { showAbout = true },
@@ -1434,7 +1406,7 @@ class MainActivity : AppCompatActivity() {
                                         val addPhotoPath = pendingAddPhotoPath
                                         val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.MANUAL_ADD, 5_000L)
                                         if (!decision.canSave || decision.location == null) {
-                                            Toast.makeText(context, context.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, resources.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
                                             isCountdownPaused = true
                                             lastTypingTime = null
                                         } else if (decision.requiresManualConfirmation) {
@@ -1461,7 +1433,7 @@ class MainActivity : AppCompatActivity() {
                                         throw cancelled
                                     } catch (error: Exception) {
                                         Log.e("MainActivity", "Manual location resolution failed", error)
-                                        Toast.makeText(context, context.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, resources.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
                                         isCountdownPaused = true
                                         lastTypingTime = null
                                     } finally {
@@ -1618,7 +1590,7 @@ class MainActivity : AppCompatActivity() {
                                         throw cancelled
                                     } catch (error: Exception) {
                                         Log.e("MainActivity", "Point update failed", error)
-                                        Toast.makeText(context, context.getString(R.string.toast_point_update_failed), Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, resources.getString(R.string.toast_point_update_failed), Toast.LENGTH_SHORT).show()
                                         return@launch
                                     } finally {
                                         if (!coreSaved) {
@@ -1650,7 +1622,7 @@ class MainActivity : AppCompatActivity() {
                                         throw cancelled
                                     } catch (error: Exception) {
                                         Log.e("MainActivity", "Point delete failed", error)
-                                        Toast.makeText(context, context.getString(R.string.toast_point_delete_failed), Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, resources.getString(R.string.toast_point_delete_failed), Toast.LENGTH_SHORT).show()
                                     } finally {
                                         editWriteInProgress = false
                                     }
@@ -1674,7 +1646,7 @@ class MainActivity : AppCompatActivity() {
                         onRename = { name ->
                             if (!tagWriteInProgress) {
                                 if (name.isBlank()) {
-                                    Toast.makeText(context, context.getString(R.string.toast_tag_save_failed), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, resources.getString(R.string.toast_tag_save_failed), Toast.LENGTH_SHORT).show()
                                 } else {
                                     tagWriteInProgress = true
                                     scope.launch {
@@ -1685,7 +1657,7 @@ class MainActivity : AppCompatActivity() {
                                             throw cancelled
                                         } catch (error: Exception) {
                                             Log.e("MainActivity", "Tag rename failed", error)
-                                            Toast.makeText(context, context.getString(R.string.toast_tag_save_failed), Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, resources.getString(R.string.toast_tag_save_failed), Toast.LENGTH_SHORT).show()
                                         } finally {
                                             tagWriteInProgress = false
                                         }
@@ -1705,7 +1677,7 @@ class MainActivity : AppCompatActivity() {
                                         throw cancelled
                                     } catch (error: Exception) {
                                         Log.e("MainActivity", "Tag delete failed", error)
-                                        Toast.makeText(context, context.getString(R.string.toast_tag_delete_failed), Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, resources.getString(R.string.toast_tag_delete_failed), Toast.LENGTH_SHORT).show()
                                     } finally {
                                         tagWriteInProgress = false
                                     }

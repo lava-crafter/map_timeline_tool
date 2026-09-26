@@ -84,6 +84,9 @@ interface PointDao {
     @Query("SELECT tagId FROM point_tags WHERE pointId = :pointId")
     suspend fun getTagIdsForPoint(pointId: Long): List<Long>
 
+    @Query("SELECT * FROM point_tags ORDER BY pointId, tagId")
+    suspend fun getAllPointTagRelations(): List<PointTagCrossRef>
+
     @Transaction
     @Query("SELECT * FROM tags WHERE id = :tagId")
     fun observeTagWithPoints(tagId: Long): Flow<TagWithPoints?>

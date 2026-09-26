@@ -17,15 +17,93 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.core.app.ApplicationProvider
+import android.content.Context
+import android.content.ContextWrapper
+import java.util.UUID
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 import org.junit.Test
 
 @RunWith(AndroidJUnit4::class)
 class SettingsStoreBackupJsonTest {
+    private val preferencesName = "settings_backup_test_${UUID.randomUUID()}"
+    private val baseContext: Context = ApplicationProvider.getApplicationContext()
+    private val context: Context = object : ContextWrapper(baseContext) {
+        override fun getSharedPreferences(name: String, mode: Int) =
+            baseContext.getSharedPreferences(preferencesName, mode)
+    }
+
+    @After
+    fun deleteTestPreferences() {
+        baseContext.deleteSharedPreferences(preferencesName)
+    }
+
+    @Test
+    fun exportBackupJson_containsPortablePreferencesAndExcludesDeviceState() {
+        SettingsStore.setTimeoutSeconds(context, 42)
+        SettingsStore.setFollowSystemTheme(context, false)
+        SettingsStore.setMarkerScale(context, 1.4f)
+        SettingsStore.setMapTileSourceId(context, "osm")
+        SettingsStore.setQuickAddNotificationEnabled(context, true)
+        SettingsStore.setQuickAddNotificationPermissionRequested(context, true)
+        SettingsStore.setDownloadTileSourceId(context, "download-source")
+        SettingsStore.setDownloadMultiThreadEnabled(context, true)
+        SettingsStore.setDownloadThreadCount(context, 12)
+        SettingsStore.addDownloadedArea(context, DownloadedArea(1.0, 0.0, 1.0, 0.0, 3, 8))
+
+        val backup = SettingsStore.exportBackupJson(context)
+        val root = JSONObject(backup)
+
+        assertEquals(42, root.getInt("timeout_seconds"))
+        assertEquals(false, root.getBoolean("follow_system_theme"))
+        assertEquals(1.4, root.getDouble("marker_scale"), 0.001)
+        assertEquals("osm", root.getString("map_tile_source"))
+        assertFalse(root.has("quick_add_notification_enabled"))
+        assertFalse(root.has("quick_add_notification_permission_requested"))
+        assertFalse(root.has("download_tile_source"))
+        assertFalse(root.has("download_multi_thread"))
+        assertFalse(root.has("download_thread_count"))
+        assertFalse(root.has("downloaded_areas"))
+
+        context.getSharedPreferences("map_timeline_settings", Context.MODE_PRIVATE).edit().clear().commit()
+        assertTrue(SettingsStore.importBackupJson(context, backup))
+        assertEquals(42, SettingsStore.getTimeoutSeconds(context))
+        assertEquals(false, SettingsStore.getFollowSystemTheme(context))
+        assertEquals(1.4f, SettingsStore.getMarkerScale(context), 0.001f)
+        assertEquals("osm", SettingsStore.getMapTileSourceId(context))
+        assertTrue(SettingsStore.getDownloadedAreas(context).isEmpty())
+    }
+
+    @Test
+    fun importBackupJson_ignoresLegacyExcludedPreferencesAndPreservesLocalValues() {
+        SettingsStore.setQuickAddNotificationEnabled(context, true)
+        SettingsStore.setQuickAddNotificationPermissionRequested(context, true)
+        SettingsStore.setDownloadTileSourceId(context, "local-source")
+        SettingsStore.setDownloadMultiThreadEnabled(context, true)
+        SettingsStore.setDownloadThreadCount(context, 11)
+        SettingsStore.addDownloadedArea(context, DownloadedArea(2.0, 1.0, 2.0, 1.0, 4, 9))
+
+        val imported = SettingsStore.importBackupJson(
+            context,
+            """{"timeout_seconds":55,"quick_add_notification_enabled":false,"quick_add_notification_permission_requested":false,"download_tile_source":"legacy-source","download_multi_thread":false,"download_thread_count":2,"downloaded_areas":[]}"""
+        )
+
+        assertTrue(imported)
+        assertEquals(55, SettingsStore.getTimeoutSeconds(context))
+        assertTrue(SettingsStore.getQuickAddNotificationEnabled(context))
+        assertTrue(SettingsStore.getQuickAddNotificationPermissionRequested(context))
+        assertEquals("local-source", SettingsStore.getDownloadTileSourceId(context))
+        assertTrue(SettingsStore.getDownloadMultiThreadEnabled(context))
+        assertEquals(11, SettingsStore.getDownloadThreadCount(context))
+        assertEquals(1, SettingsStore.getDownloadedAreas(context).size)
+    }
+
     @Test
     fun sanitizeBackupJsonForImport_remapsTagPreferencesAndDropsDevicePermissionFlag() {
         val sanitized = SettingsStore.sanitizeBackupJsonForImport(

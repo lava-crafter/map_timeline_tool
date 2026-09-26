@@ -20,6 +20,8 @@ import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.model.Tag
 import kotlinx.coroutines.flow.Flow
 
+data class PointTagRelation(val pointId: Long, val tagId: Long)
+
 interface PointRepositoryGateway {
     /** Keeps multi-table repository work atomic without exposing Room to callers. */
     suspend fun <T> inTransaction(block: suspend () -> T): T = block()
@@ -42,5 +44,6 @@ interface PointRepositoryGateway {
     suspend fun insertPointTag(pointId: Long, tagId: Long)
     suspend fun deletePointTag(pointId: Long, tagId: Long)
     suspend fun getTagIdsForPoint(pointId: Long): List<Long>
+    suspend fun getAllPointTagRelations(): List<PointTagRelation>
     fun observePointsForTag(tagId: Long): Flow<List<Point>>
 }

@@ -44,6 +44,11 @@
     <string name="toast_cache_cleared">地圖快取已清除</string>
     <string name="toast_cache_skip_downloaded">已下載區域會被保留。請先刪除再清除快取。</string>
     <string name="toast_point_added">打點已新增</string>
+    <string name="toast_point_save_failed">無法儲存打點。您的編輯內容仍在此處，請重試。</string>
+    <string name="toast_point_update_failed">無法更新打點，請重試。</string>
+    <string name="toast_point_delete_failed">無法刪除打點，請重試。</string>
+    <string name="toast_tag_save_failed">無法儲存標籤，請重試。</string>
+    <string name="toast_tag_delete_failed">無法刪除標籤，請重試。</string>
     <string name="toast_noise_permission_denied">麥克風權限已拒絕。噪音擷取仍保持關閉。</string>
     <string name="toast_location_loading">位置載入中</string>
     <string name="label_tags">標籤</string>

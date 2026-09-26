@@ -47,6 +47,11 @@
     <string name="toast_cache_cleared">地图缓存已清除</string>
     <string name="toast_cache_skip_downloaded">已下载区域将被保留，请先删除已下载区域再清缓存。</string>
     <string name="toast_point_added">打点完成</string>
+    <string name="toast_point_save_failed">无法保存打点。您的编辑内容仍在此处，请重试。</string>
+    <string name="toast_point_update_failed">无法更新打点，请重试。</string>
+    <string name="toast_point_delete_failed">无法删除打点，请重试。</string>
+    <string name="toast_tag_save_failed">无法保存标签，请重试。</string>
+    <string name="toast_tag_delete_failed">无法删除标签，请重试。</string>
     <string name="toast_quick_add_saved_from_cache">快速打点已使用近期且准确的缓存定位保存</string>
     <string name="toast_quick_add_saved_from_fresh">快速打点已使用新的精确定位保存</string>
     <string name="toast_quick_add_failed_no_fresh_accurate_location">快速打点未能获取新的准确定位，未保存点位。</string>

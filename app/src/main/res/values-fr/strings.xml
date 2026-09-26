@@ -44,6 +44,11 @@
     <string name="toast_cache_cleared">Cache de la carte vidé</string>
     <string name="toast_cache_skip_downloaded">Les zones téléchargées seront conservées. Supprimez-les avant de vider le cache.</string>
     <string name="toast_point_added">Point ajouté</string>
+    <string name="toast_point_save_failed">Impossible d’enregistrer le point. Vos modifications sont toujours là ; veuillez réessayer.</string>
+    <string name="toast_point_update_failed">Impossible de mettre à jour le point. Veuillez réessayer.</string>
+    <string name="toast_point_delete_failed">Impossible de supprimer le point. Veuillez réessayer.</string>
+    <string name="toast_tag_save_failed">Impossible d’enregistrer la balise. Veuillez réessayer.</string>
+    <string name="toast_tag_delete_failed">Impossible de supprimer la balise. Veuillez réessayer.</string>
     <string name="toast_noise_permission_denied">Autorisation micro refusée. La capture du bruit reste désactivée.</string>
     <string name="toast_location_loading">Chargement de la position</string>
     <string name="label_tags">Balises</string>

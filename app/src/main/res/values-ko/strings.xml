@@ -44,6 +44,11 @@
     <string name="toast_cache_cleared">지도 캐시가 지워졌습니다</string>
     <string name="toast_cache_skip_downloaded">다운로드된 영역은 유지됩니다. 캐시를 지우기 전에 삭제하세요.</string>
     <string name="toast_point_added">지점이 추가되었습니다</string>
+    <string name="toast_point_save_failed">지점을 저장하지 못했습니다. 수정한 내용은 그대로 남아 있으니 다시 시도해 주세요.</string>
+    <string name="toast_point_update_failed">지점을 업데이트하지 못했습니다. 다시 시도해 주세요.</string>
+    <string name="toast_point_delete_failed">지점을 삭제하지 못했습니다. 다시 시도해 주세요.</string>
+    <string name="toast_tag_save_failed">태그를 저장하지 못했습니다. 다시 시도해 주세요.</string>
+    <string name="toast_tag_delete_failed">태그를 삭제하지 못했습니다. 다시 시도해 주세요.</string>
     <string name="toast_noise_permission_denied">마이크 권한이 거부되었습니다. 소음 수집은 계속 꺼져 있습니다.</string>
     <string name="toast_location_loading">위치 불러오는 중</string>
     <string name="label_tags">태그</string>

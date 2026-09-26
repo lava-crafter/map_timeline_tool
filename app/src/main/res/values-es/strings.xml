@@ -44,6 +44,11 @@
     <string name="toast_cache_cleared">Caché del mapa borrada</string>
     <string name="toast_cache_skip_downloaded">Se conservarán las áreas descargadas. Elimínalas antes de borrar la caché.</string>
     <string name="toast_point_added">Punto añadido</string>
+    <string name="toast_point_save_failed">No se pudo guardar el punto. Tus cambios siguen aquí; inténtalo de nuevo.</string>
+    <string name="toast_point_update_failed">No se pudo actualizar el punto. Inténtalo de nuevo.</string>
+    <string name="toast_point_delete_failed">No se pudo eliminar el punto. Inténtalo de nuevo.</string>
+    <string name="toast_tag_save_failed">No se pudo guardar la etiqueta. Inténtalo de nuevo.</string>
+    <string name="toast_tag_delete_failed">No se pudo eliminar la etiqueta. Inténtalo de nuevo.</string>
     <string name="toast_noise_permission_denied">Permiso de micrófono denegado. La captura de ruido sigue desactivada.</string>
     <string name="toast_location_loading">Cargando ubicación</string>
     <string name="label_tags">Etiquetas</string>

@@ -49,6 +49,14 @@ object SettingsStore {
     private const val KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED = "quick_add_notification_permission_requested"
     private const val SETTINGS_SCHEMA_VERSION = 1
     private const val MAX_RECENT_TAGS = 3
+    private val NON_PORTABLE_BACKUP_KEYS = setOf(
+        KEY_DOWNLOADED_AREAS,
+        KEY_DOWNLOAD_TILE_SOURCE,
+        KEY_DOWNLOAD_MULTI_THREAD,
+        KEY_DOWNLOAD_THREAD_COUNT,
+        KEY_QUICK_ADD_NOTIFICATION_ENABLED,
+        KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED
+    )
 
     fun getTimeoutSeconds(context: Context): Int {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -426,9 +434,6 @@ object SettingsStore {
         root.put(KEY_DEFAULT_TAGS, org.json.JSONArray(getDefaultTagIds(context)))
         root.put(KEY_MARKER_SCALE, getMarkerScale(context).toDouble())
         root.put(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context))
-        root.put(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context))
-        root.put(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context))
-        root.put(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context))
         root.put(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context))
         root.put(KEY_PHOTO_COMPRESS_FORMAT, getPhotoCompressFormat(context).value)
         root.put(KEY_PHOTO_COMPRESS_QUALITY, getPhotoCompressQuality(context))
@@ -438,20 +443,6 @@ object SettingsStore {
         root.put(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context))
         root.put(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context))
         root.put(KEY_NOISE_ENABLED, getNoiseEnabled(context))
-        root.put(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
-        val downloadedAreas = org.json.JSONArray()
-        getDownloadedAreas(context).forEach { area ->
-            val areaObj = org.json.JSONObject()
-            areaObj.put("north", area.north)
-            areaObj.put("south", area.south)
-            areaObj.put("east", area.east)
-            areaObj.put("west", area.west)
-            areaObj.put("minZoom", area.minZoom)
-            areaObj.put("maxZoom", area.maxZoom)
-            areaObj.put("createdAt", area.createdAt)
-            downloadedAreas.put(areaObj)
-        }
-        root.put(KEY_DOWNLOADED_AREAS, downloadedAreas)
         return root.toString()
     }
 
@@ -487,13 +478,6 @@ object SettingsStore {
             if (root.has(KEY_DEFAULT_TAGS)) editor.putString(KEY_DEFAULT_TAGS, parseLongArray(root.optJSONArray(KEY_DEFAULT_TAGS)).joinToString(","))
             if (root.has(KEY_MARKER_SCALE)) editor.putFloat(KEY_MARKER_SCALE, root.optDouble(KEY_MARKER_SCALE, getMarkerScale(context).toDouble()).toFloat().coerceIn(0.3f, 1.75f))
             if (root.has(KEY_MAP_TILE_SOURCE)) editor.putString(KEY_MAP_TILE_SOURCE, root.optString(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context)))
-            if (root.has(KEY_DOWNLOAD_TILE_SOURCE)) editor.putString(KEY_DOWNLOAD_TILE_SOURCE, root.optString(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context)))
-            if (root.has(KEY_DOWNLOAD_MULTI_THREAD)) {
-                editor.putBoolean(KEY_DOWNLOAD_MULTI_THREAD, root.optBoolean(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context)))
-            }
-            if (root.has(KEY_DOWNLOAD_THREAD_COUNT)) {
-                editor.putInt(KEY_DOWNLOAD_THREAD_COUNT, root.optInt(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context)).coerceIn(2, 32))
-            }
             if (root.has(KEY_PHOTO_LOSSLESS_ENABLED)) {
                 editor.putBoolean(KEY_PHOTO_LOSSLESS_ENABLED, root.optBoolean(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context)))
             }
@@ -507,41 +491,6 @@ object SettingsStore {
             if (root.has(KEY_GYROSCOPE_ENABLED)) editor.putBoolean(KEY_GYROSCOPE_ENABLED, root.optBoolean(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context)))
             if (root.has(KEY_MAGNETOMETER_ENABLED)) editor.putBoolean(KEY_MAGNETOMETER_ENABLED, root.optBoolean(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context)))
             if (root.has(KEY_NOISE_ENABLED)) editor.putBoolean(KEY_NOISE_ENABLED, root.optBoolean(KEY_NOISE_ENABLED, getNoiseEnabled(context)))
-            if (root.has(KEY_QUICK_ADD_NOTIFICATION_ENABLED)) {
-                editor.putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, root.optBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context)))
-            }
-            if (root.has(KEY_DOWNLOADED_AREAS)) {
-                val areasArray = root.optJSONArray(KEY_DOWNLOADED_AREAS) ?: org.json.JSONArray()
-                val areas = buildList {
-                    for (i in 0 until areasArray.length()) {
-                        val obj = areasArray.optJSONObject(i) ?: continue
-                        add(
-                            DownloadedArea(
-                                north = obj.optDouble("north"),
-                                south = obj.optDouble("south"),
-                                east = obj.optDouble("east"),
-                                west = obj.optDouble("west"),
-                                minZoom = obj.optInt("minZoom", 0),
-                                maxZoom = obj.optInt("maxZoom", 0),
-                                createdAt = obj.optLong("createdAt", System.currentTimeMillis())
-                            )
-                        )
-                    }
-                }
-                val array = org.json.JSONArray()
-                dedupeAreas(areas).forEach { area ->
-                    array.put(org.json.JSONObject().apply {
-                        put("north", area.north)
-                        put("south", area.south)
-                        put("east", area.east)
-                        put("west", area.west)
-                        put("minZoom", area.minZoom)
-                        put("maxZoom", area.maxZoom)
-                        put("createdAt", area.createdAt)
-                    })
-                }
-                editor.putString(KEY_DOWNLOADED_AREAS, array.toString())
-            }
             editor.commit()
         }.getOrDefault(false)
     }
@@ -553,7 +502,7 @@ object SettingsStore {
     ): String? {
         return runCatching {
             val root = org.json.JSONObject(json)
-            root.remove(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED)
+            NON_PORTABLE_BACKUP_KEYS.forEach { root.remove(it) }
             if (restoreTagSettings) {
                 remapTagIdsForImport(root, KEY_PINNED_TAGS, legacyTagIdToActualId)
                 remapTagIdsForImport(root, KEY_RECENT_TAGS, legacyTagIdToActualId)

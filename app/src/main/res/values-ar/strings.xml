@@ -44,6 +44,11 @@
     <string name="toast_cache_cleared">تم مسح ذاكرة التخزين المؤقت للخريطة</string>
     <string name="toast_cache_skip_downloaded">سيتم الاحتفاظ بالمناطق المحمّلة. احذفها قبل المسح.</string>
     <string name="toast_point_added">تمت إضافة النقطة</string>
+    <string name="toast_point_save_failed">تعذر حفظ النقطة. لا تزال تعديلاتك موجودة؛ يرجى المحاولة مرة أخرى.</string>
+    <string name="toast_point_update_failed">تعذر تحديث النقطة. يرجى المحاولة مرة أخرى.</string>
+    <string name="toast_point_delete_failed">تعذر حذف النقطة. يرجى المحاولة مرة أخرى.</string>
+    <string name="toast_tag_save_failed">تعذر حفظ الوسم. يرجى المحاولة مرة أخرى.</string>
+    <string name="toast_tag_delete_failed">تعذر حذف الوسم. يرجى المحاولة مرة أخرى.</string>
     <string name="toast_noise_permission_denied">تم رفض إذن الميكروفون. سيبقى التقاط الضوضاء متوقفًا.</string>
     <string name="toast_location_loading">جارٍ تحميل الموقع</string>
     <string name="label_tags">الوسوم</string>

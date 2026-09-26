@@ -293,5 +293,7 @@ private class FakePointRepository : PointRepositoryGateway {
         insertedTags.remove(pointId to tagId)
     }
     override suspend fun getTagIdsForPoint(pointId: Long): List<Long> = insertedTags.filter { it.first == pointId }.map { it.second }
+    override suspend fun getAllPointTagRelations(): List<com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation> =
+        insertedTags.map { com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation(it.first, it.second) }
     override fun observePointsForTag(tagId: Long): Flow<List<Point>> = flowOf(emptyList())
 }

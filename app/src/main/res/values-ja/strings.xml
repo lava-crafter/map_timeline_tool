@@ -43,6 +43,11 @@
     <string name="toast_cache_cleared">地図キャッシュを消去しました</string>
     <string name="toast_cache_skip_downloaded">ダウンロード済みエリアは保持されます。消去する前に削除してください。</string>
     <string name="toast_point_added">地点を追加しました</string>
+    <string name="toast_point_save_failed">地点を保存できませんでした。編集内容は残っています。もう一度お試しください。</string>
+    <string name="toast_point_update_failed">地点を更新できませんでした。もう一度お試しください。</string>
+    <string name="toast_point_delete_failed">地点を削除できませんでした。もう一度お試しください。</string>
+    <string name="toast_tag_save_failed">タグを保存できませんでした。もう一度お試しください。</string>
+    <string name="toast_tag_delete_failed">タグを削除できませんでした。もう一度お試しください。</string>
     <string name="toast_noise_permission_denied">マイク権限が拒否されました。ノイズ取得はオフのままです。</string>
     <string name="toast_location_loading">位置情報を読み込み中です</string>
     <string name="label_tags">タグ</string>

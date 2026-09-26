@@ -44,6 +44,11 @@
     <string name="toast_cache_cleared">Кэш карты очищен</string>
     <string name="toast_cache_skip_downloaded">Загруженные области будут сохранены. Удалите их перед очисткой кэша.</string>
     <string name="toast_point_added">Точка добавлена</string>
+    <string name="toast_point_save_failed">Не удалось сохранить точку. Ваши изменения по-прежнему здесь; попробуйте ещё раз.</string>
+    <string name="toast_point_update_failed">Не удалось обновить точку. Попробуйте ещё раз.</string>
+    <string name="toast_point_delete_failed">Не удалось удалить точку. Попробуйте ещё раз.</string>
+    <string name="toast_tag_save_failed">Не удалось сохранить тег. Попробуйте ещё раз.</string>
+    <string name="toast_tag_delete_failed">Не удалось удалить тег. Попробуйте ещё раз.</string>
     <string name="toast_noise_permission_denied">Разрешение на микрофон запрещено. Сбор шума остаётся выключенным.</string>
     <string name="toast_location_loading">Загрузка местоположения</string>
     <string name="label_tags">Теги</string>

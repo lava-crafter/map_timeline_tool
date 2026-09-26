@@ -22,6 +22,8 @@ import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.ui.AppViewModel
 import kotlinx.coroutines.flow.first
+import java.io.File
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +62,24 @@ internal data class PendingExportPayload(
     val zipTags: List<ZipExporter.TagRecord> = emptyList(),
     val pointTagIdsByPointId: Map<Long, List<Long>> = emptyMap()
 )
+
+/** A selected-point ZIP never carries device settings; Full Backup has its own writer. */
+internal fun PendingExportPayload.writeOrdinaryZip(
+    outputStream: OutputStream,
+    resolvePhotoFile: (String) -> File?,
+    appVersion: String?
+): ZipExporter.ExportStats {
+    check(zip && kind == ExportFileKind.ZIP)
+    return ZipExporter.export(
+        points = points,
+        outputStream = outputStream,
+        resolvePhotoFile = resolvePhotoFile,
+        options = zipOptions,
+        tags = zipTags,
+        pointTagIdsByPointId = pointTagIdsByPointId,
+        appVersion = appVersion
+    )
+}
 
 internal data class PendingManualSaveConfirmation(
     val title: String,
