@@ -16,9 +16,14 @@ limitations under the License.
 
 import java.io.File
 import java.io.ByteArrayOutputStream
+import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
+import org.gradle.api.DefaultTask
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.OutputDirectory
 import org.w3c.dom.Element
+import org.xml.sax.SAXException
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -40,7 +45,17 @@ data class OssManualNotice(
 fun parsePomLicenses(pomFile: File): List<Pair<String, String?>> {
     return runCatching {
         val factory = DocumentBuilderFactory.newInstance()
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+        factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+        factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+        factory.isXIncludeAware = false
+        factory.isExpandEntityReferences = false
         val builder = factory.newDocumentBuilder()
+        builder.setEntityResolver { _, _ -> throw SAXException("External entities are not allowed in POM files") }
         val document = pomFile.inputStream().use { input -> builder.parse(input) }
         val licenseNodes = document.getElementsByTagName("license")
         buildList {
@@ -87,9 +102,15 @@ fun parseManualOssNotices(file: File): List<OssManualNotice> {
     }
 }
 
-val generateOssMenuResources by tasks.registering {
-    val outputResDir = layout.buildDirectory.dir("generated/oss_menu_resources/res")
-    
+abstract class GenerateOssMenuResourcesTask : DefaultTask() {
+    @get:OutputDirectory
+    abstract val outputResDir: DirectoryProperty
+}
+
+val generateOssMenuResources = tasks.register<GenerateOssMenuResourcesTask>("generateOssMenuResources") {
+    outputResDir.set(layout.buildDirectory.dir("generated/oss_menu_resources/res"))
+    inputs.files(configurations.getByName("releaseRuntimeClasspath"))
+    inputs.file(projectDir.resolve("src/main/oss/manual_notices.csv"))
 
     doLast {
         val runtimeConfig = configurations.getByName("releaseRuntimeClasspath")
@@ -110,7 +131,7 @@ val generateOssMenuResources by tasks.registering {
         }
         val manualNotices = parseManualOssNotices(projectDir.resolve("src/main/oss/manual_notices.csv"))
 
-        val outputDir = projectDir.resolve("src/main/res/raw")
+        val outputDir = outputResDir.get().dir("raw").asFile
         outputDir.mkdirs()
         val licensesFile = File(outputDir, "third_party_licenses")
         val metadataFile = File(outputDir, "third_party_license_metadata")
@@ -236,21 +257,23 @@ android {
         }
     }
 
+    lint {
+        // Track existing findings without hiding new lint regressions in subsequent changes.
+        baseline = file("lint-baseline.xml")
+    }
+
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
-            check(releaseSigningReady) {
-                "Release signing is not configured. Create ~/.android/release-signing.properties with storePassword, keyAlias, and keyPassword, or set RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD. The keystore defaults to ~/.android/my-release-key.jks."
-            }
-
-            val resolvedReleaseStorePassword = requireNotNull(releaseStorePassword)
-            val resolvedReleaseKeyAlias = requireNotNull(releaseKeyAlias)
-            val resolvedReleaseKeyPassword = requireNotNull(releaseKeyPassword)
-
-            signingConfig = signingConfigs.create("release").apply {
-                storeFile = releaseStoreFile
-                storePassword = resolvedReleaseStorePassword
-                keyAlias = resolvedReleaseKeyAlias
-                keyPassword = resolvedReleaseKeyPassword
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.create("release").apply {
+                    storeFile = releaseStoreFile
+                    storePassword = requireNotNull(releaseStorePassword)
+                    keyAlias = requireNotNull(releaseKeyAlias)
+                    keyPassword = requireNotNull(releaseKeyPassword)
+                }
             }
 
             isMinifyEnabled = true
@@ -266,6 +289,26 @@ android {
         getByName("androidTest") {
             assets.directories.add("schemas")
         }
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(
+            generateOssMenuResources,
+            GenerateOssMenuResourcesTask::outputResDir
+        )
+    }
+}
+
+// Gradle must not configure release signing for debug/test, but must never emit an unsigned release.
+gradle.taskGraph.whenReady {
+    if (!releaseSigningReady && allTasks.any { task ->
+            task.project == project && task.name in setOf("packageRelease", "signReleaseBundle", "packageReleaseBundle")
+        }) {
+        error(
+            "Release signing is not configured. Create ~/.android/release-signing.properties with storePassword, keyAlias, and keyPassword, or set RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD. The keystore defaults to ~/.android/my-release-key.jks."
+        )
     }
 }
 
@@ -312,14 +355,4 @@ dependencies {
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
-}
-
-
-tasks.whenTaskAdded {
-    if (name.startsWith("generate") && name.endsWith("Resources")) {
-        dependsOn("generateOssMenuResources")
-    }
-    if (name.startsWith("process") && name.endsWith("NavigationResources")) {
-        dependsOn("generateOssMenuResources")
-    }
 }

@@ -56,6 +56,8 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
   - `RELEASE_STORE_PASSWORD`
   - `RELEASE_KEY_ALIAS`
   - `RELEASE_KEY_PASSWORD`
+- Debug builds and instrumentation tests use `com.lavacrafter.maptimelinetool.debug`, a separate app sandbox, and do not require release signing. Release APKs/bundles require the signing properties above.
+- `app/lint-baseline.xml` records existing lint findings so `lintDebug` can flag new findings. Review and fix findings rather than updating the baseline to silence regressions.
 
 ## Architecture
 - UI state is managed in `AppViewModel`.
@@ -71,7 +73,8 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
 The app's Settings and About screens list the open-source components and attribution requirements.
 
 How the list is maintained:
-- Runtime dependency licenses are generated from `releaseRuntimeClasspath` into `app/src/main/res/raw/third_party_licenses` and `app/src/main/res/raw/third_party_license_metadata`.
+- Runtime dependency licenses are generated from `releaseRuntimeClasspath` into `app/build/generated/oss_menu_resources/res/raw/` and included as generated resources.
+- In an existing checkout, remove any old generated `app/src/main/res/raw/third_party_licenses` and `third_party_license_metadata` files once; leaving them beside the new generated resources causes duplicate resource errors.
 - Non-Maven attributions (for map/data providers) are maintained in `app/src/main/oss/manual_notices.csv` and merged into the same in-app OSS list.
 
 Summary:
