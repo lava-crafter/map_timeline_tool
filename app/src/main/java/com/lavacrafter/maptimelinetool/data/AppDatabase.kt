@@ -32,6 +32,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         const val DATABASE_NAME = "map_timeline.db"
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS point_tags (pointId INTEGER NOT NULL, tagId INTEGER NOT NULL, PRIMARY KEY(pointId, tagId))"
+                )
+            }
+        }
+
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE points ADD COLUMN pressureHpa REAL")
@@ -65,6 +74,7 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE points ADD COLUMN locationAccuracyMeters REAL")
                 db.execSQL("ALTER TABLE points ADD COLUMN locationFixTimeMs INTEGER")
                 db.execSQL("ALTER TABLE points ADD COLUMN locationProvider TEXT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_point_tags_tagId ON point_tags(tagId)")
             }
         }
 
@@ -73,11 +83,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_points_import_key ON points (timestamp, latitude, longitude)"
                 )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_point_tags_tagId ON point_tags(tagId)")
             }
         }
 
         @JvmField
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
 
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {
