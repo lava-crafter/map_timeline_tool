@@ -37,9 +37,6 @@ import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import java.io.File
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import org.osmdroid.config.Configuration
 
 class MapTimelineApp : Application() {
@@ -66,8 +63,6 @@ class MapTimelineApp : Application() {
 class AppGraph(
     private val app: Application
 ) {
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     private val database: AppDatabase by lazy { AppDatabase.get(app) }
 
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
@@ -163,8 +158,7 @@ class AppGraph(
             sensorSnapshotPort = sensorSnapshotPort,
             deletePhoto = { photoPath -> deletePointPhotoFile(app, photoPath) },
             shouldCollectNoise = { settingsManagementUseCase.getNoiseEnabled() },
-            collectNoiseDb = { com.lavacrafter.maptimelinetool.sensor.captureNoiseDb(app) },
-            asyncScope = appScope
+            collectNoiseDb = { com.lavacrafter.maptimelinetool.sensor.captureNoiseDb(app) }
         )
     }
 }

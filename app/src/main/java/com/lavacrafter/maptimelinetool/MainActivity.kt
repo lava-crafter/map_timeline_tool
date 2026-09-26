@@ -26,6 +26,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
@@ -84,6 +85,8 @@ import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
 import com.lavacrafter.maptimelinetool.ui.ExportScreens
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import com.lavacrafter.maptimelinetool.ui.AboutScreen
@@ -159,6 +162,9 @@ class MainActivity : AppCompatActivity() {
                 var newPointNote by remember { mutableStateOf("") }
                 var pendingAddPhotoPath by remember { mutableStateOf<String?>(null) }
                 var pendingAddPhotoUri by remember { mutableStateOf<Uri?>(null) }
+                var addSaveInProgress by remember { mutableStateOf(false) }
+                var editWriteInProgress by remember { mutableStateOf(false) }
+                var tagWriteInProgress by remember { mutableStateOf(false) }
                 var pendingLocationPermissionAction by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
                 var remainingSeconds by remember { mutableStateOf(settingsState.timeoutSeconds) }
                 var isCountdownPaused by remember { mutableStateOf(false) }
@@ -185,11 +191,13 @@ class MainActivity : AppCompatActivity() {
                     settingsViewModel.toggleDefaultTag(tagId)
                 }
                 val toggleNewPointTag: (Long) -> Unit = { tagId ->
-                    newPointSelectedTagIds = if (newPointSelectedTagIds.contains(tagId)) {
-                        newPointSelectedTagIds - tagId
-                    } else {
-                        recordRecentTag(tagId)
-                        newPointSelectedTagIds + tagId
+                    if (!addSaveInProgress) {
+                        newPointSelectedTagIds = if (newPointSelectedTagIds.contains(tagId)) {
+                            newPointSelectedTagIds - tagId
+                        } else {
+                            recordRecentTag(tagId)
+                            newPointSelectedTagIds + tagId
+                        }
                     }
                 }
                 val onUserTyping = {
@@ -394,15 +402,18 @@ class MainActivity : AppCompatActivity() {
                 val importCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
-                        runCatching {
+                        try {
                             val importedPoints = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
                                     CsvImporter.parseCsv(input.reader(Charsets.UTF_8)) { null }
-                                } ?: emptyList()
+                                } ?: throw IOException("Failed to open CSV import")
                             }
-                            viewModel.importPoints(importedPoints)
-                            Toast.makeText(context, context.getString(R.string.toast_import_success, importedPoints.size), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
+                            val result = viewModel.importPoints(importedPoints)
+                            Toast.makeText(context, context.getString(R.string.toast_import_success, result.imported), Toast.LENGTH_SHORT).show()
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.e("MainActivity", "CSV import failed", error)
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -531,7 +542,7 @@ class MainActivity : AppCompatActivity() {
                 fun deletePhotoOnIo(path: String?) {
                     scope.launch(Dispatchers.IO) { deletePointPhotoFile(context, path) }
                 }
-                suspend fun preparePhotoPathForPersist(rawPhotoPath: String?): String? {
+                suspend fun preparePhotoPathForPersist(rawPhotoPath: String?): PreparedPhoto {
                     return preparePhotoForPersist(
                         context = context,
                         photoPath = rawPhotoPath,
@@ -541,6 +552,22 @@ class MainActivity : AppCompatActivity() {
                             compressQuality = settingsState.photoCompressQuality
                         )
                     )
+                }
+                suspend fun rollbackPhotoUnlessCommitted(prepared: PreparedPhoto?) {
+                    if (prepared == null) return
+                    withContext(NonCancellable) {
+                        // Cancellation can race with Room returning a committed ID. Keep a generated file
+                        // whenever the DB may reference it; an orphan is safer than a missing user photo.
+                        val referenced = prepared.generatedPath?.let { path ->
+                            try {
+                                graph.pointRepositoryGateway.isPhotoReferenced(path)
+                            } catch (error: Exception) {
+                                Log.w("MainActivity", "Unable to verify photo reference after failed write", error)
+                                true
+                            }
+                        } ?: false
+                        if (!referenced) prepared.rollback(context)
+                    }
                 }
                 fun hasLocationPermission(): Boolean {
                     return ContextCompat.checkSelfPermission(
@@ -646,6 +673,7 @@ class MainActivity : AppCompatActivity() {
                         pendingAddPhotoUri = null
                     }
                     pendingManualSaveConfirmation = null
+                    addSaveInProgress = false
                     showDialog = false
                     pendingTimestamp = null
                     newPointSelectedTagIds = emptySet()
@@ -687,21 +715,40 @@ class MainActivity : AppCompatActivity() {
                     autoSaved: Boolean
                 ) {
                     val location = decision.location ?: return
-                    val persistedPhotoPath = preparePhotoPathForPersist(photoPath)
-                    viewModel.addPointWithTags(
-                        title = title.trim(),
-                        note = note.trim(),
-                        location = location,
-                        timestamp = createdAt,
-                        tagIds = selectedTags,
-                        photoPath = persistedPhotoPath
-                    )
+                    var prepared: PreparedPhoto? = null
+                    var coreSaved = false
+                    try {
+                        prepared = preparePhotoPathForPersist(photoPath)
+                        viewModel.addPointWithTags(
+                            title = title.trim(),
+                            note = note.trim(),
+                            location = location,
+                            timestamp = createdAt,
+                            tagIds = selectedTags,
+                            photoPath = prepared.storedPath,
+                            onCoreSaved = { coreSaved = true }
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.e("MainActivity", "Point save failed", error)
+                        Toast.makeText(context, context.getString(R.string.toast_point_save_failed), Toast.LENGTH_SHORT).show()
+                        remainingSeconds = settingsState.timeoutSeconds
+                        isCountdownPaused = true
+                        lastTypingTime = null
+                        return
+                    } finally {
+                        if (!coreSaved) rollbackPhotoUnlessCommitted(prepared)
+                    }
+                    try {
+                        withContext(NonCancellable) {
+                            prepared.commitCleanup(context) { graph.pointRepositoryGateway.isPhotoReferenced(it) }
+                        }
+                    } catch (error: Exception) {
+                        Log.w("MainActivity", "Photo source cleanup failed after save", error)
+                    }
                     vibrateOnce(context)
-                    Toast.makeText(
-                        context,
-                        context.getString(saveToastRes(decision.quality, autoSaved)),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(context, context.getString(saveToastRes(decision.quality, autoSaved)), Toast.LENGTH_SHORT).show()
                     resetPendingAddDialogState()
                 }
 
@@ -749,9 +796,8 @@ class MainActivity : AppCompatActivity() {
                     pendingEditPhotoUri = null
                 }
                 val toggleEditingPointTag: (Long) -> Unit = { tagId ->
-                    editingPoint?.let { point ->
+                    if (!editWriteInProgress) editingPoint?.let {
                         val shouldAttach = !editingPointTagIds.contains(tagId)
-                        viewModel.setTagForPoint(point.id, tagId, shouldAttach)
                         editingPointTagIds = if (shouldAttach) {
                             recordRecentTag(tagId)
                             editingPointTagIds + tagId
@@ -760,17 +806,26 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                BackHandler(pendingManualSaveConfirmation != null) { pendingManualSaveConfirmation = null }
+                BackHandler(pendingManualSaveConfirmation != null) {
+                    if (!addSaveInProgress) {
+                        pendingManualSaveConfirmation = null
+                        isCountdownPaused = true
+                    }
+                }
                 BackHandler(showTagPickerForEdit) { showTagPickerForEdit = false }
                 BackHandler(showTagPickerForAdd) { showTagPickerForAdd = false }
                 BackHandler(editingPoint != null) {
-                    clearUnsavedEditingPhoto()
-                    resetEditingPointState()
+                    if (!editWriteInProgress && pendingEditPhotoUri == null) {
+                        clearUnsavedEditingPhoto()
+                        resetEditingPointState()
+                    }
                 }
-                BackHandler(editingTag != null) { editingTag = null }
+                BackHandler(editingTag != null) { if (!tagWriteInProgress) editingTag = null }
                 BackHandler(showDialog && pendingManualSaveConfirmation == null && !showTagPickerForAdd && !showTagPickerForEdit) {
-                    viewModel.cancelAutoAdd()
-                    resetPendingAddDialogState(clearPendingPhoto = true)
+                    if (!addSaveInProgress && pendingAddPhotoUri == null) {
+                        viewModel.cancelAutoAdd()
+                        resetPendingAddDialogState(clearPendingPhoto = true)
+                    }
                 }
                 BackHandler(showAbout) { showAbout = false }
                 BackHandler(showMapDownload) { showMapDownload = false }
@@ -802,40 +857,54 @@ class MainActivity : AppCompatActivity() {
                         isCountdownPaused = false
                     }
                 }
-                LaunchedEffect(showDialog, isCountdownPaused, remainingSeconds, pendingTimestamp) {
+                LaunchedEffect(showDialog, isCountdownPaused, remainingSeconds, pendingTimestamp, addSaveInProgress, pendingManualSaveConfirmation, pendingAddPhotoUri) {
                     if (!showDialog || pendingTimestamp == null) return@LaunchedEffect
                     if (remainingSeconds <= 0) return@LaunchedEffect
-                    if (isCountdownPaused) return@LaunchedEffect
+                    if (isCountdownPaused || addSaveInProgress || pendingManualSaveConfirmation != null || pendingAddPhotoUri != null) return@LaunchedEffect
                     kotlinx.coroutines.delay(1000L)
-                    if (showDialog && !isCountdownPaused) {
+                    if (showDialog && !isCountdownPaused && !addSaveInProgress && pendingManualSaveConfirmation == null && pendingAddPhotoUri == null) {
                         remainingSeconds -= 1
                     }
                 }
-                LaunchedEffect(remainingSeconds, showDialog, pendingTimestamp) {
+                LaunchedEffect(remainingSeconds, showDialog, pendingTimestamp, addSaveInProgress, pendingManualSaveConfirmation, pendingAddPhotoUri) {
                     if (!showDialog || pendingTimestamp == null) return@LaunchedEffect
                     if (remainingSeconds > 0) return@LaunchedEffect
+                    if (addSaveInProgress || pendingManualSaveConfirmation != null || pendingAddPhotoUri != null) return@LaunchedEffect
+                    addSaveInProgress = true
                     val createdAt = pendingTimestamp!!
                     val defaultTitle = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(createdAt))
                     val title = newPointTitle.trim().ifBlank { defaultTitle }
                     val note = newPointNote.trim()
                     val addPhotoPath = pendingAddPhotoPath
                     scope.launch {
-                        val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.AUTO_SAVE, 5_000L)
-                        if (!decision.canSave || decision.location == null) {
+                        try {
+                            val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.AUTO_SAVE, 5_000L)
+                            if (!decision.canSave || decision.location == null) {
+                                Toast.makeText(context, context.getString(R.string.toast_auto_save_location_failed), Toast.LENGTH_SHORT).show()
+                                remainingSeconds = settingsState.timeoutSeconds
+                                isCountdownPaused = true
+                                lastTypingTime = null
+                            } else {
+                                finalizeAddDialogSave(
+                                    title = title,
+                                    note = note,
+                                    createdAt = createdAt,
+                                    selectedTags = newPointSelectedTagIds,
+                                    photoPath = addPhotoPath,
+                                    decision = decision,
+                                    autoSaved = true
+                                )
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.e("MainActivity", "Auto-save location failed", error)
                             Toast.makeText(context, context.getString(R.string.toast_auto_save_location_failed), Toast.LENGTH_SHORT).show()
                             remainingSeconds = settingsState.timeoutSeconds
                             isCountdownPaused = true
                             lastTypingTime = null
-                        } else {
-                            finalizeAddDialogSave(
-                                title = title,
-                                note = note,
-                                createdAt = createdAt,
-                                selectedTags = newPointSelectedTagIds,
-                                photoPath = addPhotoPath,
-                                decision = decision,
-                                autoSaved = true
-                            )
+                        } finally {
+                            addSaveInProgress = false
                         }
                     }
                 }
@@ -1083,7 +1152,7 @@ class MainActivity : AppCompatActivity() {
                                     TagListScreen(
                                         tags = tagsState,
                                         pinnedTagIds = settingsState.pinnedTagIds,
-                                        onAddTag = { name -> viewModel.addTag(name) },
+                                        onAddTag = viewModel::addTag,
                                         onOpenTag = { tag -> selectedTag = tag },
                                         onEditTag = { tag -> editingTag = tag },
                                         onTogglePin = { tag, shouldPin ->
@@ -1316,13 +1385,15 @@ class MainActivity : AppCompatActivity() {
 
                 if (showDialog && pendingTimestamp != null) {
                     val launchAddPhotoCapture = {
-                        val oldPath = pendingAddPhotoPath
-                        val file = createPendingPointPhotoFile(context)
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                        pendingAddPhotoPath = toStoredPhotoPath(file)
-                        pendingAddPhotoUri = uri
-                        deletePhotoOnIo(oldPath)
-                        addPhotoLauncher.launch(uri)
+                        if (!addSaveInProgress) {
+                            val oldPath = pendingAddPhotoPath
+                            val file = createPendingPointPhotoFile(context)
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                            pendingAddPhotoPath = toStoredPhotoPath(file)
+                            pendingAddPhotoUri = uri
+                            deletePhotoOnIo(oldPath)
+                            addPhotoLauncher.launch(uri)
+                        }
                     }
                     AddPointDialog(
                         createdAt = pendingTimestamp!!,
@@ -1332,51 +1403,70 @@ class MainActivity : AppCompatActivity() {
                         title = newPointTitle,
                         note = newPointNote,
                         remainingSeconds = remainingSeconds,
-                        isCountdownPaused = isCountdownPaused,
+                        isCountdownPaused = isCountdownPaused || addSaveInProgress || pendingManualSaveConfirmation != null || pendingAddPhotoUri != null,
+                        isSaving = addSaveInProgress || pendingAddPhotoUri != null,
                         onTitleChange = { newPointTitle = it },
                         onNoteChange = { newPointNote = it },
                         onUserTyping = onUserTyping,
                         onToggleTag = toggleNewPointTag,
-                        onOpenTagPicker = { showTagPickerForAdd = true },
+                        onOpenTagPicker = { if (!addSaveInProgress) showTagPickerForAdd = true },
                         hasPhoto = !pendingAddPhotoPath.isNullOrBlank(),
                         onTakePhoto = launchAddPhotoCapture,
                         onRetakePhoto = launchAddPhotoCapture,
                         onRemovePhoto = {
-                            val oldPath = pendingAddPhotoPath
-                            pendingAddPhotoPath = null
-                            pendingAddPhotoUri = null
-                            deletePhotoOnIo(oldPath)
+                            if (!addSaveInProgress) {
+                                val oldPath = pendingAddPhotoPath
+                                pendingAddPhotoPath = null
+                                pendingAddPhotoUri = null
+                                deletePhotoOnIo(oldPath)
+                            }
                         },
                         onViewPhoto = { viewPhoto(pendingAddPhotoPath) },
                         onSharePhoto = { sharePhoto(pendingAddPhotoPath) },
                         onDismiss = {
-                            resetPendingAddDialogState(clearPendingPhoto = true)
+                            if (!addSaveInProgress && pendingAddPhotoUri == null) resetPendingAddDialogState(clearPendingPhoto = true)
                         },
                         onConfirm = { title, note, createdAt, selectedTags ->
-                            scope.launch {
-                                val addPhotoPath = pendingAddPhotoPath
-                                val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.MANUAL_ADD, 5_000L)
-                                if (!decision.canSave || decision.location == null) {
-                                    Toast.makeText(context, context.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
-                                } else if (decision.requiresManualConfirmation) {
-                                    pendingManualSaveConfirmation = PendingManualSaveConfirmation(
-                                        title = title,
-                                        note = note,
-                                        createdAt = createdAt,
-                                        selectedTags = selectedTags,
-                                        photoPath = addPhotoPath,
-                                        decision = decision
-                                    )
-                                } else {
-                                    finalizeAddDialogSave(
-                                        title = title,
-                                        note = note,
-                                        createdAt = createdAt,
-                                        selectedTags = selectedTags,
-                                        photoPath = addPhotoPath,
-                                        decision = decision,
-                                        autoSaved = false
-                                    )
+                            if (!addSaveInProgress && pendingManualSaveConfirmation == null && pendingAddPhotoUri == null) {
+                                addSaveInProgress = true
+                                scope.launch {
+                                    try {
+                                        val addPhotoPath = pendingAddPhotoPath
+                                        val decision = graph.locationSaveResolver.resolve(LocationSaveFlow.MANUAL_ADD, 5_000L)
+                                        if (!decision.canSave || decision.location == null) {
+                                            Toast.makeText(context, context.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
+                                            isCountdownPaused = true
+                                            lastTypingTime = null
+                                        } else if (decision.requiresManualConfirmation) {
+                                            pendingManualSaveConfirmation = PendingManualSaveConfirmation(
+                                                title = title,
+                                                note = note,
+                                                createdAt = createdAt,
+                                                selectedTags = selectedTags,
+                                                photoPath = addPhotoPath,
+                                                decision = decision
+                                            )
+                                        } else {
+                                            finalizeAddDialogSave(
+                                                title = title,
+                                                note = note,
+                                                createdAt = createdAt,
+                                                selectedTags = selectedTags,
+                                                photoPath = addPhotoPath,
+                                                decision = decision,
+                                                autoSaved = false
+                                            )
+                                        }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        Log.e("MainActivity", "Manual location resolution failed", error)
+                                        Toast.makeText(context, context.getString(R.string.toast_location_unavailable_save_failed), Toast.LENGTH_SHORT).show()
+                                        isCountdownPaused = true
+                                        lastTypingTime = null
+                                    } finally {
+                                        addSaveInProgress = false
+                                    }
                                 }
                             }
                         }
@@ -1385,7 +1475,12 @@ class MainActivity : AppCompatActivity() {
 
                 pendingManualSaveConfirmation?.let { confirmation ->
                     AlertDialog(
-                        onDismissRequest = { pendingManualSaveConfirmation = null },
+                        onDismissRequest = {
+                            if (!addSaveInProgress) {
+                                pendingManualSaveConfirmation = null
+                                isCountdownPaused = true
+                            }
+                        },
                         title = { Text(stringResource(R.string.dialog_location_confirmation_title)) },
                         text = {
                             Text(
@@ -1400,26 +1495,33 @@ class MainActivity : AppCompatActivity() {
                         confirmButton = {
                             TextButton(
                                 onClick = {
-                                    val request = confirmation
-                                    pendingManualSaveConfirmation = null
-                                    scope.launch {
-                                        finalizeAddDialogSave(
-                                            title = request.title,
-                                            note = request.note,
-                                            createdAt = request.createdAt,
-                                            selectedTags = request.selectedTags,
-                                            photoPath = request.photoPath,
-                                            decision = request.decision,
-                                            autoSaved = false
-                                        )
+                                    if (!addSaveInProgress) {
+                                        addSaveInProgress = true
+                                        val request = confirmation
+                                        scope.launch {
+                                            try {
+                                                finalizeAddDialogSave(
+                                                    title = request.title,
+                                                    note = request.note,
+                                                    createdAt = request.createdAt,
+                                                    selectedTags = request.selectedTags,
+                                                    photoPath = request.photoPath,
+                                                    decision = request.decision,
+                                                    autoSaved = false
+                                                )
+                                            } finally {
+                                                addSaveInProgress = false
+                                            }
+                                        }
                                     }
-                                }
+                                },
+                                enabled = !addSaveInProgress
                             ) {
                                 Text(stringResource(R.string.action_save))
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { pendingManualSaveConfirmation = null }) {
+                            TextButton(onClick = { pendingManualSaveConfirmation = null; isCountdownPaused = true }, enabled = !addSaveInProgress) {
                                 Text(stringResource(R.string.action_cancel))
                             }
                         }
@@ -1431,11 +1533,7 @@ class MainActivity : AppCompatActivity() {
                         tags = tagsState,
                         selectedTagIds = if (showTagPickerForAdd) newPointSelectedTagIds else editingPointTagIds,
                         onToggleTag = if (showTagPickerForAdd) toggleNewPointTag else toggleEditingPointTag,
-                        onCreateTag = { name, onResult ->
-                            viewModel.addTag(name) { tagId ->
-                                onResult(tagId)
-                            }
-                        },
+                        onCreateTag = viewModel::addTag,
                         onDismiss = {
                             showTagPickerForAdd = false
                             showTagPickerForEdit = false
@@ -1472,49 +1570,98 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     val launchEditPhotoCapture = {
-                        clearReplacedEditingPhoto()
-                        val file = createPendingPointPhotoFile(context)
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                        val newPath = toStoredPhotoPath(file)
-                        editingCaptureCandidatePhotoPath = newPath
-                        pendingEditPhotoUri = uri
-                        editPhotoLauncher.launch(uri)
+                        if (!editWriteInProgress) {
+                            clearReplacedEditingPhoto()
+                            val file = createPendingPointPhotoFile(context)
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                            val newPath = toStoredPhotoPath(file)
+                            editingCaptureCandidatePhotoPath = newPath
+                            pendingEditPhotoUri = uri
+                            editPhotoLauncher.launch(uri)
+                        }
                     }
                     EditPointDialog(
                         point = point,
                         quickTags = quickTags,
                         tags = tagsState,
                         selectedTagIds = editingPointTagIds,
+                        isSaving = editWriteInProgress || pendingEditPhotoUri != null,
                         onToggleTag = toggleEditingPointTag,
-                        onOpenTagPicker = { showTagPickerForEdit = true },
+                        onOpenTagPicker = { if (!editWriteInProgress) showTagPickerForEdit = true },
                         currentPhotoPath = editingPointPhotoPath,
                         onTakePhoto = launchEditPhotoCapture,
                         onRetakePhoto = launchEditPhotoCapture,
                         onRemovePhoto = {
-                            clearReplacedEditingPhoto()
-                            editingPointPhotoPath = null
+                            if (!editWriteInProgress) {
+                                clearReplacedEditingPhoto()
+                                editingPointPhotoPath = null
+                            }
                         },
                         onViewPhoto = { viewPhoto(editingPointPhotoPath) },
                         onSharePhoto = { sharePhoto(editingPointPhotoPath) },
                         onSave = { title, note, photoPath ->
-                            scope.launch {
-                                val persistedPhotoPath = if (photoPath == point.photoPath) {
-                                    photoPath
-                                } else {
-                                    preparePhotoPathForPersist(photoPath)
+                            if (!editWriteInProgress && pendingEditPhotoUri == null) {
+                                editWriteInProgress = true
+                                scope.launch {
+                                    var prepared: PreparedPhoto? = null
+                                    var coreSaved = false
+                                    try {
+                                        prepared = if (photoPath == point.photoPath) {
+                                            PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
+                                        } else {
+                                            preparePhotoPathForPersist(photoPath)
+                                        }
+                                        viewModel.updatePoint(point, title, note, prepared.storedPath, editingPointTagIds) {
+                                            coreSaved = true
+                                        }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        Log.e("MainActivity", "Point update failed", error)
+                                        Toast.makeText(context, context.getString(R.string.toast_point_update_failed), Toast.LENGTH_SHORT).show()
+                                        return@launch
+                                    } finally {
+                                        if (!coreSaved) {
+                                            rollbackPhotoUnlessCommitted(prepared)
+                                            editWriteInProgress = false
+                                        }
+                                    }
+                                    try {
+                                        withContext(NonCancellable) {
+                                            prepared.commitCleanup(context) { graph.pointRepositoryGateway.isPhotoReferenced(it) }
+                                        }
+                                    } catch (error: Exception) {
+                                        Log.w("MainActivity", "Photo source cleanup failed after update", error)
+                                    }
+                                    resetEditingPointState()
+                                    editWriteInProgress = false
                                 }
-                                viewModel.updatePoint(point, title, note, persistedPhotoPath)
-                                resetEditingPointState()
                             }
                         },
                         onDelete = {
-                            clearUnsavedEditingPhoto()
-                            viewModel.deletePoint(point)
-                            resetEditingPointState()
+                            if (!editWriteInProgress && pendingEditPhotoUri == null) {
+                                editWriteInProgress = true
+                                scope.launch {
+                                    try {
+                                        viewModel.deletePoint(point)
+                                        clearUnsavedEditingPhoto()
+                                        resetEditingPointState()
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        Log.e("MainActivity", "Point delete failed", error)
+                                        Toast.makeText(context, context.getString(R.string.toast_point_delete_failed), Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        editWriteInProgress = false
+                                    }
+                                }
+                            }
                         },
                         onDismiss = {
-                            clearUnsavedEditingPhoto()
-                            resetEditingPointState()
+                            if (!editWriteInProgress && pendingEditPhotoUri == null) {
+                                clearUnsavedEditingPhoto()
+                                resetEditingPointState()
+                            }
                         }
                     )
                 }
@@ -1523,18 +1670,49 @@ class MainActivity : AppCompatActivity() {
                     val tag = editingTag!!
                     EditTagDialog(
                         tag = tag,
+                        isSaving = tagWriteInProgress,
                         onRename = { name ->
-                            viewModel.renameTag(tag, name)
-                            editingTag = null
+                            if (!tagWriteInProgress) {
+                                if (name.isBlank()) {
+                                    Toast.makeText(context, context.getString(R.string.toast_tag_save_failed), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    tagWriteInProgress = true
+                                    scope.launch {
+                                        try {
+                                            viewModel.renameTag(tag, name)
+                                            editingTag = null
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (error: Exception) {
+                                            Log.e("MainActivity", "Tag rename failed", error)
+                                            Toast.makeText(context, context.getString(R.string.toast_tag_save_failed), Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            tagWriteInProgress = false
+                                        }
+                                    }
+                                }
+                            }
                         },
                         onDelete = {
-                            viewModel.deleteTag(tag.id)
-                            if (selectedTag?.id == tag.id) {
-                                selectedTag = null
+                            if (!tagWriteInProgress) {
+                                tagWriteInProgress = true
+                                scope.launch {
+                                    try {
+                                        viewModel.deleteTag(tag.id)
+                                        if (selectedTag?.id == tag.id) selectedTag = null
+                                        editingTag = null
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        Log.e("MainActivity", "Tag delete failed", error)
+                                        Toast.makeText(context, context.getString(R.string.toast_tag_delete_failed), Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        tagWriteInProgress = false
+                                    }
+                                }
                             }
-                            editingTag = null
                         },
-                        onDismiss = { editingTag = null }
+                        onDismiss = { if (!tagWriteInProgress) editingTag = null }
                     )
                 }
 

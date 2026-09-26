@@ -70,6 +70,21 @@ class TagManagementUseCaseTest {
         assertTrue(fake.insertedPointTags.contains(10L to 20L))
         assertTrue(fake.deletedPointTags.contains(10L to 20L))
     }
+
+    @Test
+    fun `tag rename and deletion failures reach caller without reporting completion`() = runBlocking {
+        val fake = FakePointRepositoryGateway()
+        var cleanedSettings = false
+        val useCase = TagManagementUseCase(fake, onTagDeleted = { cleanedSettings = true })
+        fake.tagFailure = IllegalStateException("write failed")
+
+        val renameFailure = runCatching { useCase.renameTag(Tag(id = 3, name = "old"), "new") }.exceptionOrNull()
+        val deleteFailure = runCatching { useCase.deleteTag(3L) }.exceptionOrNull()
+
+        assertTrue(renameFailure is IllegalStateException)
+        assertTrue(deleteFailure is IllegalStateException)
+        assertTrue(!cleanedSettings)
+    }
 }
 
 private class FakePointRepositoryGateway : PointRepositoryGateway {
@@ -77,6 +92,7 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     var lastUpdatedTag: Tag? = null
     val insertedPointTags = mutableListOf<Pair<Long, Long>>()
     val deletedPointTags = mutableListOf<Pair<Long, Long>>()
+    var tagFailure: Exception? = null
 
     override fun observeAll(): Flow<List<Point>> = flowOf(emptyList())
     override suspend fun insert(point: Point): Long = 1L
@@ -95,10 +111,13 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     }
 
     override suspend fun updateTag(tag: Tag) {
+        tagFailure?.let { throw it }
         lastUpdatedTag = tag
     }
 
-    override suspend fun deleteTag(tagId: Long) = Unit
+    override suspend fun deleteTag(tagId: Long) {
+        tagFailure?.let { throw it }
+    }
     override suspend fun insertPointTag(pointId: Long, tagId: Long) {
         insertedPointTags += pointId to tagId
     }

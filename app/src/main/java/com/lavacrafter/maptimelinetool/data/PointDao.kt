@@ -31,10 +31,10 @@ interface PointDao {
     suspend fun insert(point: PointEntity): Long
 
     @Update
-    suspend fun update(point: PointEntity)
+    suspend fun update(point: PointEntity): Int
 
     @Delete
-    suspend fun delete(point: PointEntity)
+    suspend fun delete(point: PointEntity): Int
 
     @Query("DELETE FROM point_tags WHERE pointId = :pointId")
     suspend fun deleteTagsForPoint(pointId: Long)
@@ -70,10 +70,10 @@ interface PointDao {
     suspend fun insertTag(tag: TagEntity): Long
 
     @Update
-    suspend fun updateTag(tag: TagEntity)
+    suspend fun updateTag(tag: TagEntity): Int
 
     @Query("DELETE FROM tags WHERE id = :tagId")
-    suspend fun deleteTag(tagId: Long)
+    suspend fun deleteTag(tagId: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPointTag(crossRef: PointTagCrossRef)

@@ -25,6 +25,7 @@ import com.lavacrafter.maptimelinetool.ui.PhotoCompressFormat
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 private const val POINT_PHOTO_DIR_NAME = "point_photos"
@@ -119,35 +120,86 @@ suspend fun preparePhotoForPersist(
     context: Context,
     photoPath: String?,
     options: PhotoPersistOptions
-): String? = withContext(Dispatchers.IO) {
-    if (photoPath.isNullOrBlank() || options.losslessEnabled) return@withContext photoPath
-    val sourceFile = resolvePointPhotoFile(context, photoPath) ?: return@withContext photoPath
-    if (!sourceFile.exists() || !sourceFile.canRead()) return@withContext photoPath
-    val bitmap = BitmapFactory.decodeFile(sourceFile.absolutePath) ?: return@withContext photoPath
-    val orientation = runCatching {
-        ExifInterface(sourceFile.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-    val corrected = applyExifOrientation(bitmap, orientation)
-    val (format, extension) = when (options.compressFormat) {
-        PhotoCompressFormat.JPEG -> Bitmap.CompressFormat.JPEG to "jpg"
-        PhotoCompressFormat.PNG -> Bitmap.CompressFormat.PNG to "png"
-        PhotoCompressFormat.WEBP -> Bitmap.CompressFormat.WEBP to "webp"
-    }
-    val targetFile = createPointPhotoFile(context, extension)
-    val compressed = runCatching {
-        targetFile.outputStream().use { output ->
-            corrected.compress(format, options.compressQuality.coerceIn(1, 100), output)
+): PreparedPhoto {
+    var generatedPhotoPath: String? = null
+    try {
+        return withContext(Dispatchers.IO) {
+            if (photoPath.isNullOrBlank() || options.losslessEnabled) {
+                return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
+            }
+            val sourceFile = resolvePointPhotoFile(context, photoPath)
+                ?: return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
+            if (!sourceFile.exists() || !sourceFile.canRead()) {
+                return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
+            }
+            val bitmap = BitmapFactory.decodeFile(sourceFile.absolutePath)
+                ?: return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
+            var corrected: Bitmap? = null
+            try {
+                val orientation = runCatching {
+                    ExifInterface(sourceFile.absolutePath).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+                val outputBitmap = applyExifOrientation(bitmap, orientation)
+                corrected = outputBitmap
+                val (format, extension) = when (options.compressFormat) {
+                    PhotoCompressFormat.JPEG -> Bitmap.CompressFormat.JPEG to "jpg"
+                    PhotoCompressFormat.PNG -> Bitmap.CompressFormat.PNG to "png"
+                    PhotoCompressFormat.WEBP -> Bitmap.CompressFormat.WEBP to "webp"
+                }
+                val generatedFile = createPointPhotoFile(context, extension)
+                generatedPhotoPath = toStoredPhotoPath(generatedFile)
+                generatedFile.outputStream().use { output ->
+                    check(outputBitmap.compress(format, options.compressQuality.coerceIn(1, 100), output)) {
+                        "Unable to compress point photo"
+                    }
+                }
+                PreparedPhoto(
+                    storedPath = generatedPhotoPath,
+                    generatedPath = generatedPhotoPath,
+                    sourcePath = toStoredPhotoPath(sourceFile)
+                )
+            } finally {
+                corrected?.takeUnless { it.isRecycled }?.recycle()
+                if (corrected !== bitmap && !bitmap.isRecycled) bitmap.recycle()
+            }
         }
-    }.getOrDefault(false)
-    corrected.recycle()
-    if (!compressed) {
-        if (targetFile.exists()) targetFile.delete()
-        return@withContext photoPath
+    } catch (error: Throwable) {
+        // withContext can be cancelled even after its IO block finishes but before its result is delivered.
+        // Clean the generated output in both cases without deleting the original candidate.
+        generatedPhotoPath?.let { path ->
+            withContext(NonCancellable + Dispatchers.IO) {
+                resolvePointPhotoFile(context, path)?.delete()
+            }
+        }
+        throw error
     }
-    if (sourceFile != targetFile) {
-        sourceFile.delete()
+}
+
+data class PreparedPhoto(
+    val storedPath: String?,
+    val generatedPath: String?,
+    val sourcePath: String?
+) {
+    suspend fun commitCleanup(
+        context: Context,
+        isPhotoReferenced: suspend (String) -> Boolean
+    ) {
+        val generated = generatedPath ?: return
+        val source = sourcePath ?: return
+        if (generated == source || isPhotoReferenced(source)) return
+        withContext(Dispatchers.IO) {
+            resolvePointPhotoFile(context, source)?.takeIf { it.name != generated }?.delete()
+        }
     }
-    return@withContext toStoredPhotoPath(targetFile)
+
+    suspend fun rollback(context: Context) {
+        withContext(Dispatchers.IO) {
+            generatedPath?.let { resolvePointPhotoFile(context, it)?.delete() }
+        }
+    }
 }
 
 fun applyExifOrientation(

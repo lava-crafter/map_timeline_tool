@@ -25,10 +25,10 @@ import com.lavacrafter.maptimelinetool.text.sanitizeMultilineText
 import com.lavacrafter.maptimelinetool.text.sanitizeSingleLineText
 import com.lavacrafter.maptimelinetool.text.MAX_POINT_NOTE_LENGTH
 import com.lavacrafter.maptimelinetool.text.MAX_POINT_TITLE_LENGTH
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 class PointWriteUseCase(
     private val repository: PointRepositoryGateway,
@@ -36,7 +36,7 @@ class PointWriteUseCase(
     private val deletePhoto: suspend (String?) -> Unit,
     private val shouldCollectNoise: () -> Boolean = { false },
     private val collectNoiseDb: suspend () -> Float? = { null },
-    private val asyncScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val onOptionalFailure: (Exception) -> Unit = { it.printStackTrace() }
 ) {
     suspend fun addPointWithTags(
         title: String,
@@ -44,8 +44,9 @@ class PointWriteUseCase(
         location: GeoPoint,
         timestamp: Long,
         tagIds: Set<Long>,
-        photoPath: String? = null
-    ) {
+        photoPath: String? = null,
+        onCoreSaved: (Long) -> Unit = {}
+    ): Long {
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { formatPointTimestamp(timestamp) }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
@@ -61,32 +62,49 @@ class PointWriteUseCase(
             tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
             insertedId
         }
-        if (shouldCollectNoise()) {
-            asyncScope.launch {
-                val noiseDb = runCatching { collectNoiseDb() }.getOrNull()
-                repository.updateNoiseDb(id, noiseDb)
-            }.join()
+        onCoreSaved(id)
+        try {
+            if (shouldCollectNoise()) {
+                withContext(Dispatchers.IO) {
+                    collectNoiseDb()?.let { repository.updateNoiseDb(id, it) }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // Noise is optional; the already-committed point must not be reported as a failed insert.
+            onOptionalFailure(error)
         }
+        return id
     }
 
-    suspend fun updatePoint(point: Point, title: String, note: String, photoPath: String?) {
+    suspend fun updatePoint(
+        point: Point, title: String, note: String, photoPath: String?, tagIds: Set<Long>? = null,
+        onCoreSaved: () -> Unit = {}
+    ) {
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { point.title }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
-        repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
-        if (point.photoPath != photoPath && point.photoPath != null && !repository.isPhotoReferenced(point.photoPath)) {
-            deletePhoto(point.photoPath)
+        repository.inTransaction {
+            repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
+            if (tagIds != null) {
+                val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
+                (oldTagIds - tagIds).forEach { repository.deletePointTag(point.id, it) }
+                (tagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+            }
         }
+        onCoreSaved()
+        cleanupUnreferencedPhoto(point.photoPath?.takeIf { it != photoPath })
     }
 
     suspend fun deletePoint(point: Point) {
         repository.delete(point)
-        if (point.photoPath != null && !repository.isPhotoReferenced(point.photoPath)) {
-            deletePhoto(point.photoPath)
-        }
+        cleanupUnreferencedPhoto(point.photoPath)
     }
 
-    suspend fun importPoints(pointsList: List<Point>) {
+    data class ImportResult(val imported: Int)
+
+    suspend fun importPoints(pointsList: List<Point>): ImportResult {
         repository.inTransaction {
             val existingMap = repository.getAll().associateBy {
                 Triple(it.timestamp, it.latitude, it.longitude)
@@ -127,6 +145,21 @@ class PointWriteUseCase(
                     existingMap[key] = normalizedPoint.copy(id = newId)
                 }
             }
+        }
+        return ImportResult(pointsList.size)
+    }
+
+    private suspend fun cleanupUnreferencedPhoto(path: String?) {
+        if (path == null) return
+        try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                if (!repository.isPhotoReferenced(path)) deletePhoto(path)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // The row is already committed. A failed best-effort file cleanup is not a failed write.
+            onOptionalFailure(error)
         }
     }
 

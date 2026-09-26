@@ -62,6 +62,7 @@ fun EditPointDialog(
     quickTags: List<TagEntity>,
     tags: List<TagEntity>,
     selectedTagIds: Set<Long>,
+    isSaving: Boolean = false,
     onToggleTag: (Long) -> Unit,
     onOpenTagPicker: () -> Unit,
     currentPhotoPath: String?,
@@ -89,14 +90,14 @@ fun EditPointDialog(
     val lookDirection = remember(point) { point.toLookDirection() }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         confirmButton = {
-            TextButton(onClick = { onSave(sanitizePointTitle(title).ifBlank { point.title }, sanitizePointNote(note), currentPhotoPath) }) {
+            TextButton(onClick = { onSave(sanitizePointTitle(title).ifBlank { point.title }, sanitizePointNote(note), currentPhotoPath) }, enabled = !isSaving) {
                 Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text(stringResource(R.string.action_cancel)) }
         },
         title = { Text(stringResource(R.string.dialog_title_edit_point)) },
         text = {
@@ -110,13 +111,15 @@ fun EditPointDialog(
                     onValueChange = { title = normalizePointTitleForEditing(it) },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    readOnly = isSaving
                 )
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = normalizePointNoteForEditing(it) },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = isSaving
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -134,20 +137,20 @@ fun EditPointDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (currentPhotoPath.isNullOrBlank()) {
-                        OutlinedButton(onClick = onTakePhoto) {
+                        OutlinedButton(onClick = onTakePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_take_photo))
                         }
                     } else {
-                        OutlinedButton(onClick = onRetakePhoto) {
+                        OutlinedButton(onClick = onRetakePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_retake_photo))
                         }
-                        OutlinedButton(onClick = onRemovePhoto) {
+                        OutlinedButton(onClick = onRemovePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_remove_photo))
                         }
-                        OutlinedButton(onClick = onViewPhoto) {
+                        OutlinedButton(onClick = onViewPhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_view_photo))
                         }
-                        OutlinedButton(onClick = onSharePhoto) {
+                        OutlinedButton(onClick = onSharePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_share_photo))
                         }
                     }
@@ -297,7 +300,7 @@ fun EditPointDialog(
                 if (!point.hasSensorData()) {
                     Text(stringResource(R.string.label_sensor_none))
                 }
-                TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete)) }
+                TextButton(onClick = onDelete, enabled = !isSaving) { Text(stringResource(R.string.action_delete)) }
             }
         }
     )

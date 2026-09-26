@@ -158,6 +158,86 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
+    fun awaitedAddEditAndDeleteReturnAfterEachRoomCommit() = runBlocking {
+        val tagId = database.pointDao().insertTag(TagEntity(name = "Work"))
+        val model = viewModel()
+
+        val id = model.addPointWithTags(
+            title = "Original", note = "", location = GeoPoint(10.0, 20.0),
+            timestamp = 1_000L, tagIds = setOf(tagId)
+        )
+        val saved = database.pointDao().getAll().single { it.id == id }
+        assertEquals("Original", saved.title)
+        assertEquals(listOf(tagId), database.pointDao().getTagIdsForPoint(id))
+
+        model.updatePoint(saved, "Updated", "note", null, emptySet())
+        assertEquals("Updated", database.pointDao().getAll().single().title)
+        assertTrue(database.pointDao().getTagIdsForPoint(id).isEmpty())
+
+        model.deletePoint(database.pointDao().getAll().single())
+        assertTrue(database.pointDao().getAll().isEmpty())
+    }
+
+    @Test
+    fun awaitedViewModelWriteFailureIsVisibleToItsCaller() = runBlocking {
+        val failingRepository = object : PointRepositoryGateway by repository {
+            override suspend fun <T> inTransaction(block: suspend () -> T): T = repository.inTransaction(block)
+            override suspend fun insert(point: Point): Long = throw IllegalStateException("Injected DB failure")
+        }
+
+        val failure = runCatching {
+            viewModel(failingRepository).addPointWithTags(
+                title = "Point", note = "", location = GeoPoint(10.0, 20.0),
+                timestamp = 1_000L, tagIds = emptySet()
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertTrue(database.pointDao().getAll().isEmpty())
+    }
+
+    @Test
+    fun failedEditTagRelationPreservesOldPointAndRelations() = runBlocking {
+        val id = database.pointDao().insert(pointEntity().copy(photoPath = "existing.jpg"))
+        val oldTag = database.pointDao().insertTag(TagEntity(name = "Old"))
+        val newTag = database.pointDao().insertTag(TagEntity(name = "New"))
+        repository.insertPointTag(id, oldTag)
+        val failingRepository = object : PointRepositoryGateway by repository {
+            override suspend fun <T> inTransaction(block: suspend () -> T): T = repository.inTransaction(block)
+            override suspend fun insertPointTag(pointId: Long, tagId: Long) {
+                if (tagId == newTag) throw IllegalStateException("Injected tag failure")
+                repository.insertPointTag(pointId, tagId)
+            }
+        }
+
+        val failure = runCatching {
+            viewModel(failingRepository).updatePoint(
+                database.pointDao().getAll().single(), "New title", "new note", "replacement.jpg", setOf(newTag)
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertEquals("Point", database.pointDao().getAll().single().title)
+        assertEquals("existing.jpg", database.pointDao().getAll().single().photoPath)
+        assertEquals(listOf(oldTag), database.pointDao().getTagIdsForPoint(id))
+    }
+
+    @Test
+    fun stalePointUpdateAndDeleteCannotReportSuccessfulCompletion() = runBlocking {
+        val stalePoint = pointEntity().copy(id = 123_456L)
+        val model = viewModel()
+
+        val updateFailure = runCatching {
+            model.updatePoint(stalePoint, "Never saved", "", null, emptySet())
+        }.exceptionOrNull()
+        val deleteFailure = runCatching { model.deletePoint(stalePoint) }.exceptionOrNull()
+
+        assertTrue(updateFailure is IllegalStateException)
+        assertTrue(deleteFailure is IllegalStateException)
+        assertTrue(database.pointDao().getAll().isEmpty())
+    }
+
+    @Test
     fun deletingPointDoesNotLeavePointTagRows() = runBlocking {
         val id = database.pointDao().insert(pointEntity())
         val tagId = database.pointDao().insertTag(TagEntity(name = "Work"))

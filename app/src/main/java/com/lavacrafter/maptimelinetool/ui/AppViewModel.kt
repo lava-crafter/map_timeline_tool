@@ -68,59 +68,33 @@ class AppViewModel(
     private val _autoAdded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val autoAdded = _autoAdded
 
-    fun addPointWithTags(
+    suspend fun addPointWithTags(
         title: String,
         note: String,
-        location: GeoPoint?,
+        location: GeoPoint,
         timestamp: Long,
         tagIds: Set<Long>,
-        photoPath: String? = null
-    ) {
-        if (location == null) return
+        photoPath: String? = null,
+        onCoreSaved: (Long) -> Unit = {}
+    ): Long {
         val normalizedTimestamp = normalizeTimestamp(timestamp, location)
-        viewModelScope.launch {
-            pointWriteUseCase.addPointWithTags(title, note, location, normalizedTimestamp, tagIds, photoPath)
-        }
+        return pointWriteUseCase.addPointWithTags(title, note, location, normalizedTimestamp, tagIds, photoPath, onCoreSaved)
     }
 
-    fun updatePoint(point: PointEntity, title: String, note: String, photoPath: String?) {
-        viewModelScope.launch {
-            pointWriteUseCase.updatePoint(point.toDomain(), title, note, photoPath)
-        }
-    }
+    suspend fun updatePoint(
+        point: PointEntity, title: String, note: String, photoPath: String?, tagIds: Set<Long>,
+        onCoreSaved: () -> Unit = {}
+    ) = pointWriteUseCase.updatePoint(point.toDomain(), title, note, photoPath, tagIds, onCoreSaved)
 
-    fun deletePoint(point: PointEntity) {
-        viewModelScope.launch {
-            pointWriteUseCase.deletePoint(point.toDomain())
-        }
-    }
+    suspend fun deletePoint(point: PointEntity) = pointWriteUseCase.deletePoint(point.toDomain())
 
-    fun addTag(name: String, onResult: (Long) -> Unit = {}) {
-        viewModelScope.launch {
-            val id = tagManagementUseCase.addTag(name)
-            if (id > 0L) {
-                onResult(id)
-            }
-        }
-    }
+    suspend fun addTag(name: String): Long = tagManagementUseCase.addTag(name)
 
-    fun renameTag(tag: TagEntity, name: String) {
-        viewModelScope.launch {
-            tagManagementUseCase.renameTag(tag.toDomain(), name)
-        }
-    }
+    suspend fun renameTag(tag: TagEntity, name: String) = tagManagementUseCase.renameTag(tag.toDomain(), name)
 
-    fun deleteTag(tagId: Long) {
-        viewModelScope.launch {
-            tagManagementUseCase.deleteTag(tagId)
-        }
-    }
+    suspend fun deleteTag(tagId: Long) = tagManagementUseCase.deleteTag(tagId)
 
-    fun importPoints(pointsList: List<Point>) {
-        viewModelScope.launch {
-            pointWriteUseCase.importPoints(pointsList)
-        }
-    }
+    suspend fun importPoints(pointsList: List<Point>): PointWriteUseCase.ImportResult = pointWriteUseCase.importPoints(pointsList)
 
     suspend fun importZipData(importStats: ZipImporter.ImportStats): ZipImportResult {
         return repo.inTransaction {

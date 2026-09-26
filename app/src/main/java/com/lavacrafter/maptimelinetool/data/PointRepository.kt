@@ -31,11 +31,13 @@ class PointRepository(
         dao.observeAll().map { points -> points.map { it.toDomain() } }
 
     override suspend fun insert(point: com.lavacrafter.maptimelinetool.domain.model.Point): Long = dao.insert(point.toEntity())
-    override suspend fun update(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.update(point.toEntity())
+    override suspend fun update(point: com.lavacrafter.maptimelinetool.domain.model.Point) {
+        check(dao.update(point.toEntity()) == 1) { "Point no longer exists" }
+    }
     override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = dao.updateNoiseDb(pointId, noiseDb)
     override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = inTransaction {
         dao.deleteTagsForPoint(point.id)
-        dao.delete(point.toEntity())
+        check(dao.delete(point.toEntity()) == 1) { "Point no longer exists" }
     }
     override suspend fun getAll() = dao.getAll().map { it.toDomain() }
     override suspend fun isPhotoReferenced(photoPath: String) = dao.isPhotoReferenced(photoPath)
@@ -47,10 +49,12 @@ class PointRepository(
     override fun observeTags() = dao.observeTags().map { tags -> tags.map { it.toDomain() } }
     override suspend fun getAllTags() = dao.getAllTags().map { it.toDomain() }
     override suspend fun insertTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.insertTag(tag.toEntity())
-    override suspend fun updateTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.updateTag(tag.toEntity())
+    override suspend fun updateTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) {
+        check(dao.updateTag(tag.toEntity()) == 1) { "Tag no longer exists" }
+    }
     override suspend fun deleteTag(tagId: Long) = inTransaction {
         dao.deletePointsForTag(tagId)
-        dao.deleteTag(tagId)
+        check(dao.deleteTag(tagId) == 1) { "Tag no longer exists" }
     }
     override suspend fun insertPointTag(pointId: Long, tagId: Long) = dao.insertPointTag(PointTagCrossRef(pointId, tagId))
     override suspend fun deletePointTag(pointId: Long, tagId: Long) = dao.deletePointTag(pointId, tagId)

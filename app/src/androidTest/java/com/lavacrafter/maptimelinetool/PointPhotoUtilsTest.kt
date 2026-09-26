@@ -17,10 +17,13 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.lavacrafter.maptimelinetool.ui.PhotoCompressFormat
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -82,6 +85,102 @@ class PointPhotoUtilsTest {
         } finally {
             destination.delete()
             deletePointPhotoImportStagingDir(staging)
+        }
+    }
+
+    @Test
+    fun preparingPhotoKeepsSourceUntilCommitCleanup() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = File(getPointPhotoDir(context), "source_${UUID.randomUUID()}.jpg")
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        var generated: File? = null
+        try {
+            source.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
+            val prepared = preparePhotoForPersist(
+                context,
+                source.name,
+                PhotoPersistOptions(false, PhotoCompressFormat.PNG, 100)
+            )
+
+            assertEquals(source.name, prepared.sourcePath)
+            assertTrue(source.exists())
+            generated = File(getPointPhotoDir(context), requireNotNull(prepared.generatedPath))
+            assertTrue(generated.exists())
+            prepared.commitCleanup(context) { false }
+            assertFalse(source.exists())
+        } finally {
+            bitmap.recycle()
+            source.delete()
+            generated?.delete()
+        }
+    }
+
+    @Test
+    fun rollbackRemovesGeneratedPhotoAndRetainsSource() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = File(getPointPhotoDir(context), "source_${UUID.randomUUID()}.jpg")
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        var generated: File? = null
+        try {
+            source.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
+            val prepared = preparePhotoForPersist(
+                context,
+                source.name,
+                PhotoPersistOptions(false, PhotoCompressFormat.PNG, 100)
+            )
+            generated = File(getPointPhotoDir(context), requireNotNull(prepared.generatedPath))
+            prepared.rollback(context)
+
+            assertTrue(source.exists())
+            assertFalse(generated.exists())
+        } finally {
+            bitmap.recycle()
+            source.delete()
+            generated?.delete()
+        }
+    }
+
+    @Test
+    fun commitCleanupDoesNotDeleteSourceStillReferencedByAnotherPoint() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = File(getPointPhotoDir(context), "source_${UUID.randomUUID()}.jpg")
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        var generated: File? = null
+        try {
+            source.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
+            val prepared = preparePhotoForPersist(
+                context, source.name, PhotoPersistOptions(false, PhotoCompressFormat.PNG, 100)
+            )
+            generated = File(getPointPhotoDir(context), requireNotNull(prepared.generatedPath))
+
+            prepared.commitCleanup(context) { it == source.name }
+
+            assertTrue(source.exists())
+            assertTrue(generated.exists())
+        } finally {
+            bitmap.recycle()
+            source.delete()
+            generated?.delete()
+        }
+    }
+
+    @Test
+    fun losslessPreparationNeverGeneratesOrDeletesPhoto() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = File(getPointPhotoDir(context), "source_${UUID.randomUUID()}.jpg")
+        try {
+            source.writeBytes(byteArrayOf(1, 2, 3))
+            val prepared = preparePhotoForPersist(
+                context, source.name, PhotoPersistOptions(true, PhotoCompressFormat.JPEG, 80)
+            )
+
+            assertEquals(source.name, prepared.storedPath)
+            assertNull(prepared.generatedPath)
+            prepared.rollback(context)
+            prepared.commitCleanup(context) { false }
+            assertTrue(source.exists())
+        } finally {
+            source.delete()
         }
     }
 }

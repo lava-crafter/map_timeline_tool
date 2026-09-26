@@ -11,6 +11,11 @@
     <string name="action_share_backup_zip">Share Full Backup ZIP</string>
     <string name="toast_import_success">Imported %1$d points</string>
     <string name="toast_import_failed">Import failed</string>
+    <string name="toast_point_save_failed">Could not save point. Your edits are still here; please try again.</string>
+    <string name="toast_point_update_failed">Could not update point. Please try again.</string>
+    <string name="toast_point_delete_failed">Could not delete point. Please try again.</string>
+    <string name="toast_tag_save_failed">Could not save tag. Please try again.</string>
+    <string name="toast_tag_delete_failed">Could not delete tag. Please try again.</string>
     <string name="toast_export_success">Exported %1$d points</string>
     <string name="action_clear_cache">Clear map cache</string>
     <string name="action_back">Back</string>
