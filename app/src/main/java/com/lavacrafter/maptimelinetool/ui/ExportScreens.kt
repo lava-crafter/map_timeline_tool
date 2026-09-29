@@ -61,7 +61,7 @@ sealed class ExportKind {
     data class Manual(val ids: List<Long>) : ExportKind()
 }
 
-data class ExportSelection(val includeTags: Boolean, val kind: ExportKind)
+data class ExportSelection(val kind: ExportKind)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,41 +72,17 @@ fun ExportScreens(
     onBack: () -> Unit
 ) {
     var route by remember { mutableStateOf(0) }
-    var includeTags by remember { mutableStateOf(true) }
-        @OptIn(ExperimentalMaterial3Api::class)
-        when (route) {
-        0 -> ExportOptionsScreen(includeTags = includeTags, onIncludeTagsChange = { includeTags = it }, onNext = { route = 1 }, onBack = onBack)
-        1 -> SubsetMenuScreen(
-            onChooseByTag = { route = 2 },
-            onChooseByTime = { route = 3 },
-            onChooseManual = { route = 4 },
-            onChooseAll = { onSelectExport(ExportSelection(includeTags, ExportKind.All)) },
-            onBack = { route = 0 }
+    when (route) {
+        0 -> SubsetMenuScreen(
+            onChooseByTag = { route = 1 },
+            onChooseByTime = { route = 2 },
+            onChooseManual = { route = 3 },
+            onChooseAll = { onSelectExport(ExportSelection(ExportKind.All)) },
+            onBack = onBack
         )
-        2 -> TagPickerScreen(tags = tags, onSelectTag = { tagId -> onSelectExport(ExportSelection(includeTags, ExportKind.ByTag(tagId))) }, onBack = { route = 1 })
-        3 -> TimeRangePickerScreen(onExport = { fromMs, toMs -> onSelectExport(ExportSelection(includeTags, ExportKind.ByTime(fromMs, toMs))) }, onBack = { route = 1 })
-        4 -> ManualSelectScreen(points = points, onExport = { ids -> onSelectExport(ExportSelection(includeTags, ExportKind.Manual(ids))) }, onBack = { route = 1 })
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExportOptionsScreen(includeTags: Boolean, onIncludeTagsChange: (Boolean) -> Unit, onNext: () -> Unit, onBack: () -> Unit) {
-    BackHandler { onBack() }
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.export_chooser_title)) }) }) { padding ->
-        Column(modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = includeTags, onCheckedChange = onIncludeTagsChange)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = stringResource(R.string.export_option_points_and_tags))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = !includeTags, onClick = { onIncludeTagsChange(false) })
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = stringResource(R.string.export_option_points_only))
-            }
-            Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_next)) }
-        }
+        1 -> TagPickerScreen(tags = tags, onSelectTag = { tagId -> onSelectExport(ExportSelection(ExportKind.ByTag(tagId))) }, onBack = { route = 0 })
+        2 -> TimeRangePickerScreen(onExport = { fromMs, toMs -> onSelectExport(ExportSelection(ExportKind.ByTime(fromMs, toMs))) }, onBack = { route = 0 })
+        3 -> ManualSelectScreen(points = points, onExport = { ids -> onSelectExport(ExportSelection(ExportKind.Manual(ids))) }, onBack = { route = 0 })
     }
 }
 

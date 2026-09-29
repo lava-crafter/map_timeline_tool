@@ -20,6 +20,7 @@ import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.export.CsvExporter
 import com.lavacrafter.maptimelinetool.export.CsvImporter
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -97,7 +98,7 @@ class CsvParseTest {
     fun forEachPoint_streamsRecordsAndRejectsOversizedFields() {
         val titles = mutableListOf<String>()
         CsvImporter.forEachPoint(
-            StringReader("name,latitude,longitude\nOne,1,2\nTwo,3,4\n")
+            StringReader("name,latitude,longitude,time_utc\nOne,1,2,1000\nTwo,3,4,2000\n")
         ) { point ->
             titles += point.title
         }
@@ -105,12 +106,81 @@ class CsvParseTest {
 
         try {
             CsvImporter.forEachPoint(
-                StringReader("name,latitude,longitude\n${"a".repeat(20)},1,2\n"),
+                StringReader("name,latitude,longitude,time_utc\n${"a".repeat(20)},1,2,1000\n"),
                 limits = CsvImporter.Limits(maxFieldChars = 10)
             ) { }
             throw AssertionError("Expected CSV field budget rejection")
         } catch (_: IllegalArgumentException) {
             assertTrue(true)
         }
+    }
+
+    @Test
+    fun ordinaryCsvReportsInvalidRowsAndEnforcesTotalRecordBudget() {
+        val csv = "name,description,latitude,longitude,time_utc\n" +
+            "Good,,1,2,1000\n" +
+            "Bad coordinate,,NaN,2,1000\n" +
+            "Bad time,,1,2,not-a-date\n" +
+            "Missing time,,1,2\n"
+        val parsed = CsvImporter.parseOrdinaryCsv(csv.reader())
+
+        assertEquals(listOf("Good"), parsed.points.map { it.title })
+        assertEquals(3, parsed.skipped)
+        assertEquals(listOf(2, 3, 4), parsed.warnings.map { it.row })
+        assertEquals(
+            listOf(CsvImporter.SkipReason.INVALID_COORDINATES, CsvImporter.SkipReason.INVALID_TIMESTAMP,
+                CsvImporter.SkipReason.INVALID_TIMESTAMP), parsed.warnings.map { it.reason }
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            CsvImporter.parseOrdinaryCsv(csv.reader(), maxRecords = 3)
+        }
+    }
+
+    @Test
+    fun generatedOrdinaryCsvWithMoreThanOneThousandRowsParsesCompletely() {
+        val csv = buildString {
+            append("name,description,latitude,longitude,time_utc\n")
+            repeat(1_201) { index -> append("Point $index,,1,2,1000\n") }
+        }
+        val parsed = CsvImporter.parseOrdinaryCsv(csv.reader())
+
+        assertEquals(1_201, parsed.points.size)
+        assertEquals(0, parsed.skipped)
+    }
+
+    @Test
+    fun ordinaryCsvFormulaSafeTextRoundTripsExactlyWithoutChangingNegativeCoordinates() {
+        val titles = listOf("=1+1", "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =1+1", "MTTCSV1:abcd", "Safe")
+        val points = titles.mapIndexed { index, title ->
+            Point(timestamp = 1_700_000_000_000L + index, latitude = -12.5, longitude = -3.25,
+                title = title, note = if (index == 6) "MTTCSV1:abc" else "=HYPERLINK(\"bad\")",
+                locationProvider = "@provider")
+        }
+        val exported = CsvExporter.buildCsv(points)
+        val imported = CsvImporter.parseOrdinaryCsv(exported.reader())
+
+        assertTrue(exported.contains("\"-12.5\",\"-3.25\""))
+        assertTrue(!exported.contains("\"=1+1\""))
+        assertTrue(!exported.contains("\"+SUM(1,2)\""))
+        assertTrue(!exported.contains("\"-1+2\""))
+        assertTrue(!exported.contains("\"@SUM(1,2)\""))
+        assertEquals(0, imported.skipped)
+        // The parser applies the app's existing title normalization on import.
+        assertEquals(titles.map(String::trim), imported.points.map { it.title })
+        assertEquals(points.map { it.note }, imported.points.map { it.note })
+        assertEquals(points.map { it.locationProvider }, imported.points.map { it.locationProvider })
+        assertEquals(points.map { it.latitude }, imported.points.map { it.latitude })
+    }
+
+    @Test
+    fun malformedEncodedTextIsSkippedButUnmarkedExternalCsvIsNotDecoded() {
+        val marked = "name,description,latitude,longitude,time_utc,mtt_text_encoding\n" +
+            "MTTCSV1:qq,,1,2,1000,hex-v1\n"
+        val parsed = CsvImporter.parseOrdinaryCsv(marked.reader())
+        assertEquals(1, parsed.skipped)
+        assertEquals(CsvImporter.SkipReason.INVALID_TEXT_ENCODING, parsed.warnings.single().reason)
+
+        val external = "name,description,latitude,longitude,time_utc\nMTTCSV1:qq,,1,2,1000\n"
+        assertEquals("MTTCSV1:qq", CsvImporter.parseOrdinaryCsv(external.reader()).points.single().title)
     }
 }

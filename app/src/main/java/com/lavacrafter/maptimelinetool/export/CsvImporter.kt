@@ -29,6 +29,28 @@ import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 
 object CsvImporter {
+    const val MAX_ORDINARY_RECORDS = 100_000
+    private const val MAX_WARNINGS = 5
+
+    enum class SkipReason { INVALID_COORDINATES, INVALID_TIMESTAMP, INVALID_TEXT_ENCODING }
+    data class SkippedRow(val row: Int, val reason: SkipReason)
+    data class OrdinaryCsvResult(val points: List<Point>, val skipped: Int, val warnings: List<SkippedRow>)
+
+    /** Stream the input and bound all rows (including rejected ones) before committing anything to Room. */
+    fun parseOrdinaryCsv(reader: Reader, maxRecords: Int = MAX_ORDINARY_RECORDS): OrdinaryCsvResult {
+        val points = mutableListOf<Point>()
+        val warnings = mutableListOf<SkippedRow>()
+        var skipped = 0
+        forEachPoint(
+            reader, resolvePhotoPath = { null }, requireHeader = true, maxRecords = maxRecords,
+            onSkippedRow = { row, reason ->
+                skipped++
+                if (warnings.size < MAX_WARNINGS) warnings += SkippedRow(row, reason)
+            }
+        ) { points += it }
+        return OrdinaryCsvResult(points, skipped, warnings)
+    }
+
     data class Limits(
         val maxRecordChars: Int = 1_000_000,
         val maxFieldChars: Int = 256_000,
@@ -60,6 +82,9 @@ object CsvImporter {
         limits: Limits = Limits(),
         strictRows: Boolean = false,
         onPhotoMetadata: (relPath: String, sizeBytes: Long?, sha256: String?) -> Unit = { _, _, _ -> },
+        requireHeader: Boolean = false,
+        maxRecords: Int = Int.MAX_VALUE,
+        onSkippedRow: (Int, SkipReason) -> Unit = { _, _ -> },
         consume: (Point) -> Unit
     ) {
         val pushbackReader = PushbackReader(reader, 2)
@@ -74,18 +99,21 @@ object CsvImporter {
                 header = normalized
                 break
             }
-            if (strictRows) throw IllegalArgumentException("Invalid canonical points CSV header")
+            if (strictRows || requireHeader) throw IllegalArgumentException("Invalid points CSV header")
         }
         val resolvedHeader = header ?: run {
-            if (strictRows) throw IllegalArgumentException("Missing points CSV header")
+            if (strictRows || requireHeader) throw IllegalArgumentException("Missing points CSV header")
             return
         }
         if (strictRows) require("time_utc" in resolvedHeader) { "Missing canonical point timestamp" }
         val indexMap = resolvedHeader.withIndex().associate { it.value to it.index }
+        var rowNumber = 0
 
         while (true) {
             val row = readCsvRecord(pushbackReader, limits, strictRows) ?: break
             if (row.all { it.isBlank() }) continue
+            rowNumber++
+            if (rowNumber > maxRecords) throw IllegalArgumentException("CSV exceeds the $maxRecords record limit")
             if (strictRows) {
                 require(row.size == resolvedHeader.size) { "Incorrect number of point CSV fields" }
                 for (key in listOf("location_accuracy_meters", "pressure_hpa", "ambient_light_lux",
@@ -101,17 +129,32 @@ object CsvImporter {
             val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull()
             if (lat == null || lon == null || !lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) {
                 if (strictRows) throw IllegalArgumentException("Invalid point coordinates in CSV")
+                onSkippedRow(rowNumber, SkipReason.INVALID_COORDINATES)
                 continue
             }
-            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), allowMissing = !strictRows)
+            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"))
             if (timestamp == null) {
                 if (strictRows) throw IllegalArgumentException("Invalid point timestamp in CSV")
+                onSkippedRow(rowNumber, SkipReason.INVALID_TIMESTAMP)
                 continue
             }
-            val title = sanitizePointTitle(row.valueOf(indexMap, "name").orEmpty())
+            val encodedText = !strictRows && row.valueOf(indexMap, CsvTextEncoding.column) == CsvTextEncoding.version
+            val rawTitle = row.valueOf(indexMap, "name").orEmpty()
+            val rawNote = row.valueOf(indexMap, "description").orEmpty()
+            val decodedTitle = if (encodedText) CsvTextEncoding.decode(rawTitle) else rawTitle
+            val decodedNote = if (encodedText) CsvTextEncoding.decode(rawNote) else rawNote
+            val rawProvider = row.valueOf(indexMap, "location_provider").orEmpty()
+            val decodedProvider = if (encodedText) CsvTextEncoding.decode(rawProvider) else rawProvider
+            val rawPhotoPath = row.valueOf(indexMap, "photo_rel_path").orEmpty()
+            val decodedPhotoPath = if (encodedText) CsvTextEncoding.decode(rawPhotoPath) else rawPhotoPath
+            if (decodedTitle == null || decodedNote == null || decodedProvider == null || decodedPhotoPath == null) {
+                onSkippedRow(rowNumber, SkipReason.INVALID_TEXT_ENCODING)
+                continue
+            }
+            val title = sanitizePointTitle(decodedTitle)
                 .ifBlank { formatPointTimestamp(timestamp) }
-            val note = sanitizePointNote(row.valueOf(indexMap, "description").orEmpty())
-            val photoRelPath = row.valueOf(indexMap, "photo_rel_path").orEmpty().trim()
+            val note = sanitizePointNote(decodedNote)
+            val photoRelPath = decodedPhotoPath.trim()
             val resolvedPhotoPath = photoRelPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
             if (photoRelPath.isNotEmpty()) {
                 val rawSize = row.valueOf(indexMap, "photo_size_bytes")?.trim().orEmpty()
@@ -135,7 +178,7 @@ object CsvImporter {
                     longitude = lon,
                     locationAccuracyMeters = row.valueOf(indexMap, "location_accuracy_meters").toFiniteFloatOrNull(),
                     locationFixTimeMs = row.valueOf(indexMap, "location_fix_time_ms").toFiniteLongOrNull(),
-                    locationProvider = row.valueOf(indexMap, "location_provider").toTrimmedOrNull(),
+                    locationProvider = decodedProvider.toTrimmedOrNull(),
                     title = title,
                     note = note,
                     pressureHpa = row.valueOf(indexMap, "pressure_hpa").toFiniteFloatOrNull(),
@@ -156,8 +199,8 @@ object CsvImporter {
         }
     }
 
-    private fun parseTimestamp(time: String?, allowMissing: Boolean): Long? {
-        if (time == null) return if (allowMissing) System.currentTimeMillis() else null // Older ordinary CSV files may omit time_utc.
+    private fun parseTimestamp(time: String?): Long? {
+        if (time == null) return null // A missing time must not be replaced by a fabricated import time.
         val value = time.trim()
         if (value.isEmpty()) return null
         value.toLongOrNull()?.let { return it }

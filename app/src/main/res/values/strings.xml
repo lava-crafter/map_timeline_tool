@@ -11,6 +11,12 @@
     <string name="action_share_backup_zip">Share Full Backup ZIP</string>
     <string name="toast_import_success">Imported %1$d points</string>
     <string name="toast_import_failed">Import failed</string>
+    <string name="csv_import_summary">Imported %1$d points; skipped %2$d invalid rows.</string>
+    <string name="csv_skipped_row">Data row %1$d: %2$s</string>
+    <string name="csv_invalid_coordinates">invalid coordinates</string>
+    <string name="csv_invalid_timestamp">invalid or missing timestamp</string>
+    <string name="csv_invalid_text_encoding">invalid encoded text</string>
+    <string name="csv_more_skipped_rows">…and %1$d more invalid rows.</string>
     <string name="toast_restore_settings_warning">Restored %1$d points, but settings could not be saved</string>
     <string name="restore_in_progress">Restoring backup</string>
     <string name="restore_validating">Validating and staging backup data…</string>

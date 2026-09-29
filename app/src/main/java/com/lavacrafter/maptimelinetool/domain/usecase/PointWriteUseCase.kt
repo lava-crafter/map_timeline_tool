@@ -106,44 +106,14 @@ class PointWriteUseCase(
 
     suspend fun importPoints(pointsList: List<Point>): ImportResult {
         repository.inTransaction {
-            val existingMap = repository.getAll().associateBy {
-                Triple(it.timestamp, it.latitude, it.longitude)
-            }.toMutableMap()
-
             pointsList.forEach { p ->
                 val normalizedPoint = p.copy(
                     title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
                         .ifBlank { formatPointTimestamp(p.timestamp) },
                     note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
                 )
-                val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
-                val existing = existingMap[key]
-                if (existing != null) {
-                    val merged = normalizedPoint.copy(
-                        id = existing.id,
-                        photoPath = normalizedPoint.photoPath ?: existing.photoPath,
-                        locationAccuracyMeters = normalizedPoint.locationAccuracyMeters ?: existing.locationAccuracyMeters,
-                        locationFixTimeMs = normalizedPoint.locationFixTimeMs ?: existing.locationFixTimeMs,
-                        locationProvider = normalizedPoint.locationProvider ?: existing.locationProvider,
-                        pressureHpa = normalizedPoint.pressureHpa ?: existing.pressureHpa,
-                        ambientLightLux = normalizedPoint.ambientLightLux ?: existing.ambientLightLux,
-                        accelerometerX = normalizedPoint.accelerometerX ?: existing.accelerometerX,
-                        accelerometerY = normalizedPoint.accelerometerY ?: existing.accelerometerY,
-                        accelerometerZ = normalizedPoint.accelerometerZ ?: existing.accelerometerZ,
-                        gyroscopeX = normalizedPoint.gyroscopeX ?: existing.gyroscopeX,
-                        gyroscopeY = normalizedPoint.gyroscopeY ?: existing.gyroscopeY,
-                        gyroscopeZ = normalizedPoint.gyroscopeZ ?: existing.gyroscopeZ,
-                        magnetometerX = normalizedPoint.magnetometerX ?: existing.magnetometerX,
-                        magnetometerY = normalizedPoint.magnetometerY ?: existing.magnetometerY,
-                        magnetometerZ = normalizedPoint.magnetometerZ ?: existing.magnetometerZ,
-                        noiseDb = normalizedPoint.noiseDb ?: existing.noiseDb
-                    )
-                    repository.update(merged)
-                    existingMap[key] = merged
-                } else {
-                    val newId = repository.insert(normalizedPoint.copy(id = 0))
-                    existingMap[key] = normalizedPoint.copy(id = newId)
-                }
+                // Ordinary CSV is an exchange format: even identical coordinates/times are independent rows.
+                repository.insert(normalizedPoint.copy(id = 0))
             }
         }
         return ImportResult(pointsList.size)

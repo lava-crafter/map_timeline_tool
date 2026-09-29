@@ -126,6 +126,12 @@ import java.util.Locale
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.modules.SqlTileWriter
 
+private data class CsvImportSummary(
+    val imported: Int,
+    val skipped: Int,
+    val warnings: List<CsvImporter.SkippedRow>
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
     private val graph by lazy { applicationContext.appGraph() }
@@ -232,6 +238,7 @@ class MainActivity : AppCompatActivity() {
                 var pendingManualSaveConfirmation by remember { mutableStateOf<PendingManualSaveConfirmation?>(null) }
                 var pendingExportPayload by remember { mutableStateOf<PendingExportPayload?>(null) }
                 var pendingExportSelection by remember { mutableStateOf<ExportSelection?>(null) }
+                var csvImportSummary by remember { mutableStateOf<CsvImportSummary?>(null) }
                 var zipIncludePoints by remember { mutableStateOf(true) }
                 var zipIncludeTags by remember { mutableStateOf(true) }
                 var zipIncludeSensors by remember { mutableStateOf(true) }
@@ -398,13 +405,13 @@ class MainActivity : AppCompatActivity() {
                     if (uri == null) return@rememberLauncherForActivityResult
                     scope.launch {
                         try {
-                            val importedPoints = withContext(Dispatchers.IO) {
+                            val parsed = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8), resolvePhotoPath = { null })
+                                    CsvImporter.parseOrdinaryCsv(input.reader(Charsets.UTF_8))
                                 } ?: throw IOException("Failed to open CSV import")
                             }
-                            val result = viewModel.importPoints(importedPoints)
-                            Toast.makeText(context, context.getString(R.string.toast_import_success, result.imported), Toast.LENGTH_SHORT).show()
+                            val result = viewModel.importPoints(parsed.points)
+                            csvImportSummary = CsvImportSummary(result.imported, parsed.skipped, parsed.warnings)
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
@@ -416,6 +423,32 @@ class MainActivity : AppCompatActivity() {
                 val importZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (uri == null) return@rememberLauncherForActivityResult
                     viewModel.restoreZip(uri, graph.zipRestoreCoordinator)
+                }
+
+                csvImportSummary?.let { summary ->
+                    AlertDialog(
+                        onDismissRequest = { csvImportSummary = null },
+                        title = { Text(stringResource(R.string.action_import_csv)) },
+                        text = {
+                            Column {
+                                Text(stringResource(R.string.csv_import_summary, summary.imported, summary.skipped))
+                                summary.warnings.forEach { warning ->
+                                    val reason = when (warning.reason) {
+                                        CsvImporter.SkipReason.INVALID_COORDINATES -> R.string.csv_invalid_coordinates
+                                        CsvImporter.SkipReason.INVALID_TIMESTAMP -> R.string.csv_invalid_timestamp
+                                        CsvImporter.SkipReason.INVALID_TEXT_ENCODING -> R.string.csv_invalid_text_encoding
+                                    }
+                                    Text(stringResource(R.string.csv_skipped_row, warning.row, stringResource(reason)))
+                                }
+                                if (summary.skipped > summary.warnings.size) {
+                                    Text(stringResource(R.string.csv_more_skipped_rows, summary.skipped - summary.warnings.size))
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { csvImportSummary = null }) { Text(stringResource(R.string.action_ok)) }
+                        }
+                    )
                 }
 
                 val restoreState by viewModel.restoreState.collectAsState()

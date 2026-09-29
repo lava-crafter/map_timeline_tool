@@ -72,7 +72,7 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
-    fun importingLegacyCsvDoesNotEraseExistingPhotoAndMetadata() = runBlocking {
+    fun importingLegacyCsvAddsNewPointWithoutTouchingExistingPhotoAndMetadata() = runBlocking {
         val id = database.pointDao().insert(
             pointEntity(timestamp = 1_704_067_200_000L).copy(
                 photoPath = "original.jpg",
@@ -91,6 +91,7 @@ class DataIntegrityVerificationTest {
         assertEquals("original.jpg", afterImport.photoPath)
         assertEquals(8f, afterImport.locationAccuracyMeters)
         assertEquals(1_002f, afterImport.pressureHpa)
+        assertEquals(2, database.pointDao().getAll().size)
     }
 
     @Test
@@ -115,7 +116,7 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
-    fun importingTheSameLegacyCsvTwiceDoesNotCreateExtraRows() = runBlocking {
+    fun importingTheSameLegacyCsvTwiceCreatesTwoIndependentSets() = runBlocking {
         val imported = CsvImporter.parseCsv(
             "name,description,latitude,longitude,time_utc\n" +
                 "Old format,Some notes,10.0,20.0,2024-01-01T00:00:00Z\n"
@@ -125,11 +126,39 @@ class DataIntegrityVerificationTest {
         writer.importPoints(imported)
         writer.importPoints(imported)
 
-        val saved = database.pointDao().getAll().single()
-        assertEquals("Old format", saved.title)
-        assertEquals("Some notes", saved.note)
-        assertEquals(null, saved.pressureHpa)
-        assertEquals(null, saved.photoPath)
+        val saved = database.pointDao().getAll()
+        assertEquals(2, saved.size)
+        assertTrue(saved[0].id != saved[1].id)
+        saved.forEach { row ->
+            assertEquals("Old format", row.title)
+            assertEquals("Some notes", row.note)
+            assertEquals(null, row.pressureHpa)
+            assertEquals(null, row.photoPath)
+        }
+    }
+
+    @Test
+    fun twoIdenticalCsvRowsRemainDistinct() = runBlocking {
+        val parsed = CsvImporter.parseOrdinaryCsv(
+            ("name,description,latitude,longitude,time_utc\n" +
+                "One,,10.0,20.0,2024-01-01T00:00:00Z\n" +
+                "Two,,10.0,20.0,2024-01-01T00:00:00Z\n").reader()
+        )
+
+        assertEquals(2, pointWriter().importPoints(parsed.points).imported)
+        assertEquals(setOf("One", "Two"), database.pointDao().getAll().map { it.title }.toSet())
+    }
+
+    @Test
+    fun moreThanOneThousandCsvRowsCommitAsOneBatch() = runBlocking {
+        val csv = buildString {
+            append("name,description,latitude,longitude,time_utc\n")
+            repeat(1_201) { index -> append("Point $index,,10.0,20.0,1000\n") }
+        }
+        val parsed = CsvImporter.parseOrdinaryCsv(csv.reader())
+
+        assertEquals(1_201, pointWriter().importPoints(parsed.points).imported)
+        assertEquals(1_201, database.pointDao().getAll().size)
     }
 
     @Test

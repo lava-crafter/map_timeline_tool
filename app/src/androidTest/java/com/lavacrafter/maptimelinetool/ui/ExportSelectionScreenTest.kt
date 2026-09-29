@@ -18,14 +18,10 @@ package com.lavacrafter.maptimelinetool.ui
 
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.isToggleable
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lavacrafter.maptimelinetool.R
@@ -35,7 +31,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Checks option propagation, not the SAF writer or CSV file contents. */
+/** Checks export selection, not the SAF writer or CSV file contents. */
 @RunWith(AndroidJUnit4::class)
 class ExportSelectionScreenTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
@@ -52,42 +48,25 @@ class ExportSelectionScreenTest {
     }
 
     @Test
-    fun pointsOnlyRadioIsNotSelectedWhileIncludeTagsIsChecked() {
+    fun exportStartsAtSubsetMenu() {
         compose.setContent {
             ExportScreens(points = emptyList(), tags = emptyList(), onSelectExport = {}, onBack = {})
         }
 
-        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))[0]
-            .assertIsNotSelected()
+        compose.onNodeWithText(label(R.string.export_all)).assertIsDisplayed()
+        compose.onNodeWithText(label(R.string.export_option_points_and_tags)).assertDoesNotExist()
     }
 
     @Test
-    fun choosingPointsOnlyUpdatesTheExportSelection() {
+    fun choosingAllForwardsTheExportSelection() {
         var selection: ExportSelection? = null
         compose.setContent {
             ExportScreens(points = emptyList(), tags = emptyList(), onSelectExport = { selection = it }, onBack = {})
         }
 
-        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))[0]
-            .performClick()
-        compose.onNodeWithText(label(R.string.action_next)).performClick()
         compose.onNodeWithText(label(R.string.export_all)).performClick()
 
-        compose.runOnIdle { assertEquals(ExportSelection(false, ExportKind.All), selection) }
-    }
-
-    @Test
-    fun uncheckingTagsBeforeChoosingAllForwardsTheChoice() {
-        var selection: ExportSelection? = null
-        compose.setContent {
-            ExportScreens(points = emptyList(), tags = emptyList(), onSelectExport = { selection = it }, onBack = {})
-        }
-
-        compose.onAllNodes(isToggleable())[0].performClick()
-        compose.onNodeWithText(label(R.string.action_next)).performClick()
-        compose.onNodeWithText(label(R.string.export_all)).performClick()
-
-        compose.runOnIdle { assertEquals(ExportSelection(false, ExportKind.All), selection) }
+        compose.runOnIdle { assertEquals(ExportSelection(ExportKind.All), selection) }
     }
 
     private fun label(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
