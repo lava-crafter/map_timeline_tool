@@ -260,6 +260,8 @@ class AppViewModel(
 
     suspend fun getAllPoints(): List<PointEntity> = repo.getAll().map { it.toEntity() }
 
+    suspend fun getAllTags(): List<TagEntity> = repo.getAllTags().map { it.toEntity() }
+
     companion object {
         fun factory(app: Application, graph: AppGraph): ViewModelProvider.Factory = viewModelFactory {
             initializer {

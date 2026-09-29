@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lavacrafter.maptimelinetool.ui.PhotoCompressFormat
@@ -34,6 +35,57 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class PointPhotoUtilsTest {
+    @Test
+    fun largePhotoUsesBoundedSampledDecode() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = File(getPointPhotoDir(context), "large_${UUID.randomUUID()}.jpg")
+        val bitmap = Bitmap.createBitmap(4096, 3072, Bitmap.Config.ARGB_8888)
+        var generated: File? = null
+        try {
+            source.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)) }
+            val prepared = preparePhotoForPersist(
+                context, source.name, PhotoPersistOptions(false, PhotoCompressFormat.JPEG, 80)
+            )
+            generated = File(getPointPhotoDir(context), requireNotNull(prepared.generatedPath))
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(generated.absolutePath, bounds)
+            assertTrue(bounds.outWidth <= MAX_WORKING_PHOTO_SIDE)
+            assertTrue(bounds.outHeight <= MAX_WORKING_PHOTO_SIDE)
+            assertTrue(bounds.outWidth.toLong() * bounds.outHeight <= MAX_WORKING_PHOTO_PIXELS)
+            prepared.rollback(context)
+            assertTrue(source.exists())
+            assertFalse(generated.exists())
+        } finally {
+            bitmap.recycle()
+            source.delete()
+            generated?.delete()
+        }
+    }
+
+    @Test
+    fun sampleSizeCapsLongEdgeAndPixelCount() {
+        val sample = photoDecodeSampleSize(30_000, 8_000)
+        assertTrue((30_000L + sample - 1) / sample <= MAX_WORKING_PHOTO_SIDE)
+        assertTrue(((30_000L + sample - 1) / sample) * ((8_000L + sample - 1) / sample) <= MAX_WORKING_PHOTO_PIXELS)
+    }
+
+    @Test
+    fun invalidImageFailsWithoutDeletingTheOriginal() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val source = File(getPointPhotoDir(context), "invalid_${UUID.randomUUID()}.jpg")
+        try {
+            source.writeBytes(byteArrayOf(1, 2, 3))
+            val failure = runCatching {
+                preparePhotoForPersist(context, source.name,
+                    PhotoPersistOptions(false, PhotoCompressFormat.JPEG, 80))
+            }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertTrue(source.exists())
+        } finally {
+            source.delete()
+        }
+    }
+
     @Test
     fun resolvePointPhotoFile_onlyAllowsTheDedicatedPhotoDirectory() {
         val context = ApplicationProvider.getApplicationContext<Context>()

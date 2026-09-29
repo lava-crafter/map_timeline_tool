@@ -29,6 +29,21 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 private const val POINT_PHOTO_DIR_NAME = "point_photos"
+internal const val MAX_WORKING_PHOTO_SIDE = 2048
+internal const val MAX_WORKING_PHOTO_PIXELS = 4_194_304L
+
+internal fun photoDecodeSampleSize(width: Int, height: Int): Int {
+    require(width > 0 && height > 0) { "Invalid photo dimensions" }
+    var sampleSize = 1
+    fun sampled(dimension: Int): Long = (dimension.toLong() + sampleSize - 1) / sampleSize
+    while (sampled(width) > MAX_WORKING_PHOTO_SIDE ||
+        sampled(height) > MAX_WORKING_PHOTO_SIDE ||
+        sampled(width) * sampled(height) > MAX_WORKING_PHOTO_PIXELS) {
+        check(sampleSize <= Int.MAX_VALUE / 2) { "Photo dimensions are too large" }
+        sampleSize *= 2
+    }
+    return sampleSize
+}
 
 data class PhotoPersistOptions(
     val losslessEnabled: Boolean,
@@ -132,10 +147,26 @@ suspend fun preparePhotoForPersist(
             if (!sourceFile.exists() || !sourceFile.canRead()) {
                 return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
             }
-            val bitmap = BitmapFactory.decodeFile(sourceFile.absolutePath)
-                ?: return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(sourceFile.absolutePath, bounds)
+            require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Invalid photo dimensions" }
+            val sampleSize = photoDecodeSampleSize(bounds.outWidth, bounds.outHeight)
+            val bitmap = BitmapFactory.decodeFile(
+                sourceFile.absolutePath,
+                BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                    inScaled = false
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+            )
+                ?: throw IllegalArgumentException("Unable to decode photo")
             var corrected: Bitmap? = null
             try {
+                require(bitmap.width <= MAX_WORKING_PHOTO_SIDE &&
+                    bitmap.height <= MAX_WORKING_PHOTO_SIDE &&
+                    bitmap.width.toLong() * bitmap.height <= MAX_WORKING_PHOTO_PIXELS) {
+                    "Decoded photo exceeds working bitmap budget"
+                }
                 val orientation = runCatching {
                     ExifInterface(sourceFile.absolutePath).getAttributeInt(
                         ExifInterface.TAG_ORIENTATION,

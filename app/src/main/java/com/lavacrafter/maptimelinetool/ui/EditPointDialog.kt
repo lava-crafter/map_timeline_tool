@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -73,10 +74,16 @@ fun EditPointDialog(
     onSharePhoto: () -> Unit,
     onSave: (String, String, String?) -> Unit,
     onDelete: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    draftTitle: String? = null,
+    draftNote: String? = null,
+    onDraftTitleChange: ((String) -> Unit)? = null,
+    onDraftNoteChange: ((String) -> Unit)? = null
 ) {
-    var title by remember(point.id) { mutableStateOf(point.title) }
-    var note by remember(point.id) { mutableStateOf(point.note) }
+    var localTitle by rememberSaveable(point.id) { mutableStateOf(point.title) }
+    var localNote by rememberSaveable(point.id) { mutableStateOf(point.note) }
+    val title = draftTitle ?: localTitle
+    val note = draftNote ?: localNote
 
     val selectedTags = remember(tags, selectedTagIds) {
         tags.filter { selectedTagIds.contains(it.id) }
@@ -108,7 +115,10 @@ fun EditPointDialog(
             ) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = normalizePointTitleForEditing(it) },
+                    onValueChange = { newTitle ->
+                        val normalized = normalizePointTitleForEditing(newTitle)
+                        if (onDraftTitleChange != null) onDraftTitleChange(normalized) else localTitle = normalized
+                    },
                     label = { Text(stringResource(R.string.dialog_title_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -116,7 +126,10 @@ fun EditPointDialog(
                 )
                 OutlinedTextField(
                     value = note,
-                    onValueChange = { note = normalizePointNoteForEditing(it) },
+                    onValueChange = { newNote ->
+                        val normalized = normalizePointNoteForEditing(newNote)
+                        if (onDraftNoteChange != null) onDraftNoteChange(normalized) else localNote = normalized
+                    },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     readOnly = isSaving

@@ -21,7 +21,6 @@ import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.ui.AppViewModel
-import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -32,7 +31,7 @@ internal suspend fun buildPointTagNameMap(
     viewModel: AppViewModel,
     points: List<Point>
 ): Map<Long, List<String>> {
-    val tags = viewModel.tags.first()
+    val tags = viewModel.getAllTags()
     val tagNamesById = tags.associate { it.id to it.name }
     val result = mutableMapOf<Long, List<String>>()
     points.forEach { point ->
