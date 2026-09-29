@@ -80,8 +80,7 @@ import com.lavacrafter.maptimelinetool.export.GeoJsonExporter
 import com.lavacrafter.maptimelinetool.export.FullBackupAssembler
 import com.lavacrafter.maptimelinetool.export.KmlExporter
 import com.lavacrafter.maptimelinetool.export.KmzExporter
-import com.lavacrafter.maptimelinetool.export.ZipImporter
-import com.lavacrafter.maptimelinetool.export.ZipImportLimits
+import com.lavacrafter.maptimelinetool.export.RestoreState
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
 import com.lavacrafter.maptimelinetool.ui.ExportScreens
@@ -124,7 +123,6 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.modules.SqlTileWriter
 
@@ -402,7 +400,7 @@ class MainActivity : AppCompatActivity() {
                         try {
                             val importedPoints = withContext(Dispatchers.IO) {
                                 context.contentResolver.openInputStream(uri)?.use { input ->
-                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8)) { null }
+                                    CsvImporter.parseCsv(input.reader(Charsets.UTF_8), resolvePhotoPath = { null })
                                 } ?: throw IOException("Failed to open CSV import")
                             }
                             val result = viewModel.importPoints(importedPoints)
@@ -417,64 +415,42 @@ class MainActivity : AppCompatActivity() {
                 }
                 val importZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (uri == null) return@rememberLauncherForActivityResult
-                    scope.launch {
-                        val importedPhotoPaths = mutableListOf<String>()
-                        var photoStagingDir: java.io.File? = null
-                        var dataImportCommitted = false
-                        runCatching {
-                            val imported = withContext(Dispatchers.IO) {
-                                photoStagingDir = createPointPhotoImportStagingDir(context)
-                                val availableBytes = requireNotNull(photoStagingDir).usableSpace
-                                val reservedBytes = 64L * 1024L * 1024L
-                                if (availableBytes <= reservedBytes) {
-                                    throw IOException("Not enough storage available for import staging")
-                                }
-                                val totalBudget = minOf(
-                                    2L * 1024L * 1024L * 1024L,
-                                    availableBytes - reservedBytes
-                                )
-                                context.contentResolver.openInputStream(uri)?.use { input ->
-                                    ZipImporter.importZip(input, limits = ZipImportLimits(
-                                        maxPhotoBytes = minOf(128L * 1024L * 1024L, totalBudget),
-                                        maxTotalBytes = totalBudget
-                                    ), savePhoto = { entryName, photoInput ->
-                                        val extension = entryName.substringAfterLast('.', "").lowercase(Locale.US)
-                                        val safeExt = extension.takeIf { it.matches(Regex("[a-z0-9]{1,10}")) } ?: "jpg"
-                                        val importedPhotoFile = java.io.File(requireNotNull(photoStagingDir), "point_photo_${UUID.randomUUID()}.$safeExt")
-                                        importedPhotoFile.outputStream().buffered().use { output -> photoInput.copyTo(output) }
-                                        importedPhotoFile.name
-                                    })
-                                } ?: throw IOException("Failed to open import")
-                            }
-                            withContext(Dispatchers.IO) {
-                                val stagingFiles = requireNotNull(photoStagingDir).listFiles()?.toList().orEmpty()
-                                importedPhotoPaths += commitPointPhotoImport(context, stagingFiles)
-                                deletePointPhotoImportStagingDir(photoStagingDir)
-                            }
-                            val importResult = viewModel.importZipData(imported)
-                            dataImportCommitted = true
-                            imported.settingsJson?.takeIf { imported.manifest.sections.settings }?.let { json ->
-                                val restored = SettingsStore.importBackupJson(
-                                    context,
-                                    json,
-                                    importResult.legacyTagIdToActualId,
-                                    restoreTagSettings = imported.manifest.sections.tags
-                                )
-                                if (restored) {
-                                    settingsViewModel.reloadFromStore()
-                                    applyLanguagePreference(settingsViewModel.uiState.value.languagePreference)
+                    viewModel.restoreZip(uri, graph.zipRestoreCoordinator)
+                }
+
+                val restoreState by viewModel.restoreState.collectAsState()
+                if (restoreState == RestoreState.Validating || restoreState == RestoreState.Restoring ||
+                    restoreState == RestoreState.Finalizing) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text(stringResource(R.string.restore_in_progress)) },
+                        text = { Text(stringResource(if (restoreState == RestoreState.Finalizing)
+                            R.string.restore_finalizing else R.string.restore_validating)) },
+                        confirmButton = {
+                            if (restoreState != RestoreState.Finalizing) {
+                                TextButton(onClick = viewModel::cancelRestore) {
+                                    Text(stringResource(android.R.string.cancel))
                                 }
                             }
-                            Toast.makeText(context, context.getString(R.string.toast_import_success, imported.points.size), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
-                            if (!dataImportCommitted) {
-                                scope.launch(Dispatchers.IO) {
-                                    importedPhotoPaths.forEach { deletePointPhotoFile(context, it) }
-                                    deletePointPhotoImportStagingDir(photoStagingDir)
-                                }
-                            }
+                        }
+                    )
+                }
+                LaunchedEffect(restoreState) {
+                    when (val result = restoreState) {
+                        is RestoreState.Success -> {
+                            settingsViewModel.reloadFromStore()
+                            applyLanguagePreference(settingsViewModel.uiState.value.languagePreference)
+                            Toast.makeText(context, context.getString(R.string.toast_import_success, result.points), Toast.LENGTH_SHORT).show()
+                        }
+                        is RestoreState.SuccessWithWarning -> {
+                            settingsViewModel.reloadFromStore()
+                            Toast.makeText(context, context.getString(R.string.toast_restore_settings_warning, result.points), Toast.LENGTH_LONG).show()
+                        }
+                        is RestoreState.Failure -> {
+                            Log.e("MainActivity", "ZIP restore failed: ${result.reason}")
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
+                        else -> Unit
                     }
                 }
 

@@ -19,6 +19,7 @@ package com.lavacrafter.maptimelinetool.export
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import java.io.OutputStream
 import java.text.SimpleDateFormat
+import java.text.ParsePosition
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -32,6 +33,7 @@ object GeoJsonExporter {
     private val utcFormatter: SimpleDateFormat
         get() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
+            isLenient = false
         }
 
     fun writeGeoJson(
@@ -126,13 +128,17 @@ object GeoJsonExporter {
         geoJsonText: String,
         resolvePhotoPath: (String) -> String? = { it }
     ): List<Point> {
-        val root = runCatching { JSONObject(geoJsonText) }.getOrNull() ?: return emptyList()
-        val features = root.optJSONArray("features") ?: return emptyList()
+        val root = runCatching { JSONObject(geoJsonText) }.getOrElse {
+            throw IllegalArgumentException("Invalid GeoJSON document", it)
+        }
+        val features = root.optJSONArray("features")
+            ?: throw IllegalArgumentException("GeoJSON FeatureCollection is missing features")
         val sdf = utcFormatter
         val points = mutableListOf<Point>()
 
         for (index in 0 until features.length()) {
-            val feature = features.optJSONObject(index) ?: continue
+            val feature = features.optJSONObject(index)
+                ?: throw IllegalArgumentException("GeoJSON feature[$index] is not an object")
             val properties = feature.optJSONObject("properties")
             val geometry = feature.optJSONObject("geometry")
 
@@ -142,10 +148,17 @@ object GeoJsonExporter {
 
             val lat = latFromGeometry
                 ?: properties?.optDoubleOrNull("latitude")
-                ?: continue
+                ?: throw IllegalArgumentException("GeoJSON feature[$index] is missing a finite latitude")
             val lon = lonFromGeometry
                 ?: properties?.optDoubleOrNull("longitude")
-                ?: continue
+                ?: throw IllegalArgumentException("GeoJSON feature[$index] is missing a finite longitude")
+
+            require(lat in -90.0..90.0) {
+                "GeoJSON feature[$index] latitude is out of bounds: $lat"
+            }
+            require(lon in -180.0..180.0) {
+                "GeoJSON feature[$index] longitude is out of bounds: $lon"
+            }
 
             val title = properties?.optString("title")
                 ?.takeIf { it.isNotBlank() }
@@ -156,9 +169,9 @@ object GeoJsonExporter {
                 ?: properties?.optString("description")
                 ?: ""
 
-            val timestampMs = properties?.optLong("timestamp_ms")
+            val timestampMs = properties?.optLongOrNull("timestamp_ms")
                 ?.takeIf { it > 0L }
-                ?: parseTimestamp(properties?.optString("time_utc"), sdf)
+                ?: parseTimestamp(properties?.optStringOrNull("time_utc"), sdf, index)
             val normalizedTitle = sanitizePointTitle(title).ifBlank { formatPointTimestamp(timestampMs) }
             val normalizedNote = sanitizePointNote(note)
 
@@ -194,12 +207,23 @@ object GeoJsonExporter {
         return points
     }
 
-    private fun parseTimestamp(raw: String?, sdf: SimpleDateFormat): Long {
+    private fun parseTimestamp(raw: String?, sdf: SimpleDateFormat, featureIndex: Int): Long {
         val value = raw?.trim().orEmpty()
-        if (value.isEmpty()) return System.currentTimeMillis()
-        val parsedDate = runCatching { sdf.parse(value) }.getOrNull()
-        if (parsedDate != null) return parsedDate.time
-        return value.toLongOrNull() ?: System.currentTimeMillis()
+        if (value.isEmpty()) {
+            throw IllegalArgumentException("GeoJSON feature[$featureIndex] is missing a valid timestamp")
+        }
+
+        value.toLongOrNull()?.let { timestamp ->
+            if (timestamp > 0L) return timestamp
+        }
+
+        val position = ParsePosition(0)
+        val parsedDate = sdf.parse(value, position)
+        if (parsedDate != null && position.index == value.length) return parsedDate.time
+
+        throw IllegalArgumentException(
+            "GeoJSON feature[$featureIndex] has an invalid timestamp: $value"
+        )
     }
 
     private fun JSONObject.optDoubleOrNull(key: String): Double? {

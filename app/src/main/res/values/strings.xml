@@ -11,6 +11,10 @@
     <string name="action_share_backup_zip">Share Full Backup ZIP</string>
     <string name="toast_import_success">Imported %1$d points</string>
     <string name="toast_import_failed">Import failed</string>
+    <string name="toast_restore_settings_warning">Restored %1$d points, but settings could not be saved</string>
+    <string name="restore_in_progress">Restoring backup</string>
+    <string name="restore_validating">Validating and staging backup data…</string>
+    <string name="restore_finalizing">Saving points and photos…</string>
     <string name="toast_point_save_failed">Could not save point. Your edits are still here; please try again.</string>
     <string name="toast_point_update_failed">Could not update point. Please try again.</string>
     <string name="toast_point_delete_failed">Could not delete point. Please try again.</string>

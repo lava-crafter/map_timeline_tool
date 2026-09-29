@@ -35,11 +35,17 @@ import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
 import com.lavacrafter.maptimelinetool.export.ZipImporter
+import com.lavacrafter.maptimelinetool.export.ZipRestoreCoordinator
+import com.lavacrafter.maptimelinetool.export.RestoreState
+import android.net.Uri
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
 import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -67,6 +73,26 @@ class AppViewModel(
     private var autoAddJob: kotlinx.coroutines.Job? = null
     private val _autoAdded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val autoAdded = _autoAdded
+    private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Idle)
+    val restoreState = _restoreState.asStateFlow()
+    private var restoreJob: kotlinx.coroutines.Job? = null
+
+    fun restoreZip(uri: Uri, coordinator: ZipRestoreCoordinator) {
+        if (restoreJob?.isActive == true) return
+        restoreJob = viewModelScope.launch {
+            try {
+                coordinator.restore(uri, _restoreState) { stats, movePhotos -> importZipData(stats, movePhotos) }
+            } catch (cancelled: CancellationException) {
+                _restoreState.value = RestoreState.Idle
+            } catch (error: Exception) {
+                _restoreState.value = RestoreState.Failure(error.message ?: "Restore failed")
+            }
+        }
+    }
+
+    fun cancelRestore() {
+        restoreJob?.cancel()
+    }
 
     suspend fun addPointWithTags(
         title: String,
@@ -96,7 +122,10 @@ class AppViewModel(
 
     suspend fun importPoints(pointsList: List<Point>): PointWriteUseCase.ImportResult = pointWriteUseCase.importPoints(pointsList)
 
-    suspend fun importZipData(importStats: ZipImporter.ImportStats): ZipImportResult {
+    suspend fun importZipData(
+        importStats: ZipImporter.ImportStats,
+        beforeTransactionEnd: suspend () -> Unit = {}
+    ): ZipImportResult {
         return repo.inTransaction {
             val pointIdByIndex = if (importStats.manifest.sections.tags) mutableMapOf<Int, Long>() else null
             val existingPointsByKey = repo.getAll().groupBy { Triple(it.timestamp, it.latitude, it.longitude) }
@@ -148,6 +177,7 @@ class AppViewModel(
                     }
                 }
             }
+            beforeTransactionEnd()
             ZipImportResult(legacyTagIdToActualId = legacyTagIdToActualId)
         }
     }

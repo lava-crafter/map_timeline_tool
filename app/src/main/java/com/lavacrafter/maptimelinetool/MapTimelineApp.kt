@@ -20,6 +20,7 @@ import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
 import android.os.SystemClock
+import android.util.Log
 import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.SettingsRepository
@@ -36,6 +37,11 @@ import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
+import com.lavacrafter.maptimelinetool.export.ZipRestoreCoordinator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import org.osmdroid.config.Configuration
 
@@ -48,6 +54,13 @@ class MapTimelineApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                graph.zipRestoreCoordinator.recover()
+            } catch (error: Exception) {
+                Log.e("MapTimelineApp", "Restore journal recovery failed; next restore will retry", error)
+            }
+        }
         val config = Configuration.getInstance()
         config.userAgentValue = packageName
         val basePath = File(cacheDir, "osmdroid")
@@ -64,6 +77,10 @@ class AppGraph(
     private val app: Application
 ) {
     private val database: AppDatabase by lazy { AppDatabase.get(app) }
+
+    val zipRestoreCoordinator: ZipRestoreCoordinator by lazy {
+        ZipRestoreCoordinator(app, pointRepositoryGateway)
+    }
 
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
         PointRepository(database, database.pointDao())

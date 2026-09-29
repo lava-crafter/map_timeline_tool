@@ -510,7 +510,7 @@ class ZipExportImportTest {
     }
 
     @Test
-    fun `zip import normalizes backslashes and rejects parent traversal photo entries`() {
+    fun `zip import rejects unsafe archive paths before restore`() {
         val zipBytes = ByteArrayOutputStream()
         java.util.zip.ZipOutputStream(zipBytes).use { zip ->
             zip.putNextEntry(java.util.zip.ZipEntry("points.csv"))
@@ -530,16 +530,9 @@ class ZipExportImportTest {
             zip.closeEntry()
         }
 
-        val imported = ZipImporter.importZip(ByteArrayInputStream(zipBytes.toByteArray())) { entryName, photoInput ->
-            photoInput.readBytes()
-            "stored/$entryName"
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            ZipImporter.importZip(ByteArrayInputStream(zipBytes.toByteArray())) { _, _ -> null }
         }
-
-        assertEquals(2, imported.points.size)
-        assertEquals("stored/photos/safe.jpg", imported.points[0].photoPath)
-        assertNull(imported.points[1].photoPath)
-        assertEquals(1, imported.importedPhotoCount)
-        assertEquals(1, imported.missingPhotoCount)
     }
 
     @Test

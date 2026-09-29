@@ -495,6 +495,37 @@ object SettingsStore {
         }.getOrDefault(false)
     }
 
+    /** Check portable settings before any restored data or photo becomes visible. */
+    fun validateBackupJson(json: String) {
+        val root = org.json.JSONObject(json)
+        require(!root.has("schema_version") || root.opt("schema_version") is Number &&
+            root.getInt("schema_version") == SETTINGS_SCHEMA_VERSION) { "Unsupported settings schema" }
+        val integerKeys = setOf(KEY_TIMEOUT, KEY_CACHE_POLICY, KEY_SATELLITE_CACHE_POLICY,
+            KEY_ZOOM_BEHAVIOR, KEY_LANGUAGE_PREFERENCE, KEY_PHOTO_COMPRESS_FORMAT, KEY_PHOTO_COMPRESS_QUALITY)
+        val booleanKeys = setOf(KEY_FOLLOW_SYSTEM_THEME, KEY_DARK_THEME, KEY_PHOTO_LOSSLESS_ENABLED,
+            KEY_PRESSURE_ENABLED, KEY_AMBIENT_LIGHT_ENABLED, KEY_ACCELEROMETER_ENABLED,
+            KEY_GYROSCOPE_ENABLED, KEY_MAGNETOMETER_ENABLED, KEY_NOISE_ENABLED)
+        for (key in integerKeys) {
+            if (root.has(key)) require(root.opt(key) is Number &&
+                (root.opt(key) as Number).toDouble().let { it.isFinite() && it % 1.0 == 0.0 }) { "Invalid setting: $key" }
+        }
+        for (key in booleanKeys) {
+            if (root.has(key)) require(root.opt(key) is Boolean) { "Invalid setting: $key" }
+        }
+        if (root.has(KEY_MARKER_SCALE)) require((root.opt(KEY_MARKER_SCALE) as? Number)?.toDouble()?.isFinite() == true) {
+            "Invalid marker scale"
+        }
+        if (root.has(KEY_MAP_TILE_SOURCE)) require(root.opt(KEY_MAP_TILE_SOURCE) is String) { "Invalid map source" }
+        for (key in setOf(KEY_PINNED_TAGS, KEY_RECENT_TAGS, KEY_DEFAULT_TAGS)) {
+            if (!root.has(key)) continue
+            val ids = root.optJSONArray(key) ?: throw IllegalArgumentException("Invalid setting: $key")
+            require(ids.length() <= 50_000) { "Too many tag IDs in settings" }
+            for (index in 0 until ids.length()) {
+                require(ids.opt(index) is Number && ids.getLong(index) >= 0) { "Invalid tag ID in settings" }
+            }
+        }
+    }
+
     internal fun sanitizeBackupJsonForImport(
         json: String,
         legacyTagIdToActualId: Map<Long, Long> = emptyMap(),

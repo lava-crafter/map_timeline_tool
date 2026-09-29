@@ -31,7 +31,8 @@ import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 object CsvImporter {
     data class Limits(
         val maxRecordChars: Int = 1_000_000,
-        val maxFieldChars: Int = 256_000
+        val maxFieldChars: Int = 256_000,
+        val maxFields: Int = 128
     )
 
     fun parseCsv(csv: String): List<Point> {
@@ -42,10 +43,14 @@ object CsvImporter {
         reader: Reader,
         strictRows: Boolean = false,
         onPhotoMetadata: (relPath: String, sizeBytes: Long?, sha256: String?) -> Unit = { _, _, _ -> },
-        resolvePhotoPath: (String) -> String? = { it }
+        resolvePhotoPath: (String) -> String? = { it },
+        maxPoints: Int = Int.MAX_VALUE
     ): List<Point> {
         val points = mutableListOf<Point>()
-        forEachPoint(reader, resolvePhotoPath, strictRows = strictRows, onPhotoMetadata = onPhotoMetadata) { points += it }
+        forEachPoint(reader, resolvePhotoPath, strictRows = strictRows, onPhotoMetadata = onPhotoMetadata) {
+            if (points.size >= maxPoints) throw ZipImportLimitExceededException("Too many points in backup")
+            points += it
+        }
         return points
     }
 
@@ -61,7 +66,7 @@ object CsvImporter {
         var header: List<String>? = null
 
         while (true) {
-            val record = readCsvRecord(pushbackReader, limits) ?: break
+            val record = readCsvRecord(pushbackReader, limits, strictRows) ?: break
             if (record.isEmpty()) continue
             val candidate = record.map { it.trim() }
             val normalized = candidate.map { it.lowercase(Locale.US) }
@@ -69,20 +74,36 @@ object CsvImporter {
                 header = normalized
                 break
             }
+            if (strictRows) throw IllegalArgumentException("Invalid canonical points CSV header")
         }
-        val resolvedHeader = header ?: return
+        val resolvedHeader = header ?: run {
+            if (strictRows) throw IllegalArgumentException("Missing points CSV header")
+            return
+        }
+        if (strictRows) require("time_utc" in resolvedHeader) { "Missing canonical point timestamp" }
         val indexMap = resolvedHeader.withIndex().associate { it.value to it.index }
 
         while (true) {
-            val row = readCsvRecord(pushbackReader, limits) ?: break
+            val row = readCsvRecord(pushbackReader, limits, strictRows) ?: break
             if (row.all { it.isBlank() }) continue
+            if (strictRows) {
+                require(row.size == resolvedHeader.size) { "Incorrect number of point CSV fields" }
+                for (key in listOf("location_accuracy_meters", "pressure_hpa", "ambient_light_lux",
+                    "accelerometer_x", "accelerometer_y", "accelerometer_z", "gyroscope_x", "gyroscope_y",
+                    "gyroscope_z", "magnetometer_x", "magnetometer_y", "magnetometer_z", "noise_db")) {
+                    val value = row.valueOf(indexMap, key)?.trim().orEmpty()
+                    require(value.isEmpty() || value.toFloatOrNull()?.isFinite() == true) { "Invalid point field: $key" }
+                }
+                val fixTime = row.valueOf(indexMap, "location_fix_time_ms")?.trim().orEmpty()
+                require(fixTime.isEmpty() || fixTime.toLongOrNull() != null) { "Invalid location fix time" }
+            }
             val lat = row.valueOf(indexMap, "latitude")?.toDoubleOrNull()
             val lon = row.valueOf(indexMap, "longitude")?.toDoubleOrNull()
             if (lat == null || lon == null || !lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0) {
                 if (strictRows) throw IllegalArgumentException("Invalid point coordinates in CSV")
                 continue
             }
-            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"))
+            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), allowMissing = !strictRows)
             if (timestamp == null) {
                 if (strictRows) throw IllegalArgumentException("Invalid point timestamp in CSV")
                 continue
@@ -135,8 +156,8 @@ object CsvImporter {
         }
     }
 
-    private fun parseTimestamp(time: String?): Long? {
-        if (time == null) return System.currentTimeMillis() // Older CSV files may omit time_utc.
+    private fun parseTimestamp(time: String?, allowMissing: Boolean): Long? {
+        if (time == null) return if (allowMissing) System.currentTimeMillis() else null // Older ordinary CSV files may omit time_utc.
         val value = time.trim()
         if (value.isEmpty()) return null
         value.toLongOrNull()?.let { return it }
@@ -171,15 +192,17 @@ object CsvImporter {
         return this?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    private fun readCsvRecord(reader: PushbackReader, limits: Limits): List<String>? {
+    private fun readCsvRecord(reader: PushbackReader, limits: Limits, strict: Boolean): List<String>? {
         val record = mutableListOf<String>()
         val field = StringBuilder()
         var inQuotes = false
+        var closedQuote = false
         var anyContent = false
 
         while (true) {
             val intChar = reader.read()
             if (intChar == -1) {
+                if (strict) require(!inQuotes) { "Unterminated CSV quoted field" }
                 if (!anyContent && field.isEmpty() && record.isEmpty()) {
                     return null
                 }
@@ -194,6 +217,9 @@ object CsvImporter {
             }
 
             anyContent = true
+            if (strict && closedQuote && currentChar != ',' && currentChar != '\n' && currentChar != '\r') {
+                throw IllegalArgumentException("Malformed CSV quoted field")
+            }
             when {
                 currentChar == '"' -> {
                     if (inQuotes) {
@@ -203,9 +229,11 @@ object CsvImporter {
                             validateField(field, limits)
                         } else {
                             inQuotes = false
+                            closedQuote = true
                             if (next != -1) reader.unread(next)
                         }
                     } else {
+                        if (strict) require(field.isEmpty()) { "Malformed CSV quoted field" }
                         inQuotes = true
                     }
                 }
@@ -213,6 +241,7 @@ object CsvImporter {
                     record.add(field.toString())
                     validateRecord(record, limits)
                     field.clear()
+                    closedQuote = false
                 }
                 currentChar == '\n' && !inQuotes -> {
                     record.add(field.toString())
@@ -243,6 +272,7 @@ object CsvImporter {
     }
 
     private fun validateRecord(record: List<String>, limits: Limits) {
+        if (record.size > limits.maxFields) throw IllegalArgumentException("CSV has too many fields")
         if (record.sumOf(String::length) > limits.maxRecordChars) {
             throw IllegalArgumentException("CSV record exceeds the configured size budget")
         }
