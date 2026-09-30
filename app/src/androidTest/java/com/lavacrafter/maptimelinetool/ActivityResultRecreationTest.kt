@@ -18,18 +18,19 @@ package com.lavacrafter.maptimelinetool
 
 import android.Manifest
 import android.view.WindowManager
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipe
 import androidx.test.rule.GrantPermissionRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -79,11 +80,11 @@ class ActivityResultRecreationTest {
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithText(title).fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onRoot().performTouchInput {
-                swipe(start = Offset(right - 120f, bottom - 500f),
-                    end = Offset(right - 120f, top + 200f), durationMillis = 500)
-            }
-            compose.onNodeWithText(title).assertIsDisplayed()
+            // Expand the sheet itself: a root-coordinate swipe can pan the map instead,
+            // leaving the row behind the navigation bar and sending its long-click there.
+            compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Expand))
+                .performSemanticsAction(SemanticsActions.Expand)
+            compose.onNodeWithText(title).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText(title).performTouchInput { longClick(durationMillis = 1_200) }
             compose.onNodeWithText(label(R.string.dialog_title_edit_point)).assertIsDisplayed()
             compose.onNodeWithText(label(R.string.dialog_note_label)).performTextReplacement("Phase 6 note draft")

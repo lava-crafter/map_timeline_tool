@@ -27,7 +27,7 @@ class LocationSaveResolver(
     suspend fun resolve(
         flow: LocationSaveFlow,
         timeoutMs: Long,
-        nowMs: Long = System.currentTimeMillis()
+        nowMs: Long? = null
     ): LocationSaveDecision {
         val deadline = LocationDeadline.after(timeoutMs)
 
@@ -35,7 +35,8 @@ class LocationSaveResolver(
             locationProvider.getPreciseLocation(deadline.preferredBudgetMs())
         }
         if (preciseLocation != null) {
-            return policy.evaluate(preciseLocation, null, flow, nowMs)
+            val decision = policy.evaluate(preciseLocation, null, flow, nowMs ?: System.currentTimeMillis())
+            if (decision.canSave) return decision
         }
 
         val fallbackBudgetMs = deadline.remainingMs()
@@ -44,7 +45,7 @@ class LocationSaveResolver(
         } else {
             null
         }
-        return policy.evaluate(null, fallbackLocation, flow, nowMs)
+        return policy.evaluate(null, fallbackLocation, flow, nowMs ?: System.currentTimeMillis())
     }
 
     private suspend fun locationOrNull(block: suspend () -> com.lavacrafter.maptimelinetool.domain.model.GeoPoint?): com.lavacrafter.maptimelinetool.domain.model.GeoPoint? {

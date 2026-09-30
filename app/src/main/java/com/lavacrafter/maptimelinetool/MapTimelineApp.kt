@@ -117,13 +117,14 @@ class AppGraph(
             locationProvider = locationProvider,
             locationCache = quickAddLocationCache,
             elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
-            addPoint = { title, location, timestamp ->
+            addPoint = { title, location, timestamp, onCoreSaved ->
                 pointWriteUseCase.addPointWithTags(
                     title = title,
                     note = "",
                     location = location,
                     timestamp = timestamp,
-                    tagIds = settingsManagementUseCase.getDefaultTagIds().toSet()
+                    tagIds = settingsManagementUseCase.getDefaultTagIds().toSet(),
+                    onCoreSaved = { onCoreSaved() }
                 )
             }
         )

@@ -14,14 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package com.lavacrafter.maptimelinetool.domain.model
+package com.lavacrafter.maptimelinetool.notification
 
-data class GeoPoint(
-    val latitude: Double,
-    val longitude: Double,
-    val accuracyMeters: Float? = null,
-    val fixTimeMs: Long? = null,
-    val provider: String? = null,
-    /** Runtime-only metadata; Point/Room intentionally do not persist this flag. */
-    val isMock: Boolean = false
-)
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** Covers permissions, location, sensor snapshot, optional noise and core DB save. */
+internal suspend fun <T> runQuickAddWithinDeadline(
+    timeoutMs: Long,
+    committedResult: () -> T?,
+    work: suspend () -> T?
+): T? = withTimeoutOrNull(timeoutMs) { work() } ?: committedResult()

@@ -19,6 +19,7 @@ package com.lavacrafter.maptimelinetool.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,11 +31,12 @@ class QuickAddReceiver : BroadcastReceiver() {
             return
         }
 
+        val deadlineElapsedMs = SystemClock.elapsedRealtime() + QUICK_ADD_OVERALL_TIMEOUT_MS
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                appContext.performQuickAdd()
+                appContext.performQuickAdd(deadlineElapsedMs)
             } finally {
                 pendingResult.finish()
             }

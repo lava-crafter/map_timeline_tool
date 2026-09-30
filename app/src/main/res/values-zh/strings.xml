@@ -55,6 +55,10 @@
     <string name="toast_quick_add_saved_from_cache">快速打点已使用近期且准确的缓存定位保存</string>
     <string name="toast_quick_add_saved_from_fresh">快速打点已使用新的精确定位保存</string>
     <string name="toast_quick_add_failed_no_fresh_accurate_location">快速打点未能获取新的准确定位，未保存点位。</string>
+    <string name="toast_quick_add_save_failed">快速打点未能保存点位，请重试。</string>
+    <string name="dialog_location_confirmation_approximate">定位精度较低或来自近期历史定位。仍要保存吗？</string>
+    <string name="toast_location_unavailable_save_failed">没有可用的近期定位，请重新获取后再试。点位未保存。</string>
+    <string name="toast_auto_save_location_failed">自动保存需要新鲜且精准的定位；点位未保存，可手动确认。</string>
     <string name="toast_quick_add_precise_permission_required">快速打点需要精确定位权限；只有近似定位时不会保存点位。</string>
     <string name="toast_quick_add_background_permission_required">Android 10 及以上要让快速打点在后台持续预热严格缓存，还需要后台定位权限。请先到系统设置中开启“始终允许”，再启用快速打点。</string>
     <string name="toast_noise_permission_denied">麦克风权限被拒绝，噪音采集保持关闭。</string>

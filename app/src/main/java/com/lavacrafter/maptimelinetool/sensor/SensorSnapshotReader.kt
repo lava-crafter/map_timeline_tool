@@ -65,35 +65,28 @@ suspend fun captureSensorSnapshot(
             return@suspendCancellableCoroutine
         }
 
-        val sensors = listOfNotNull(
-            if (Sensor.TYPE_PRESSURE in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { Sensor.TYPE_PRESSURE to it } else null,
-            if (Sensor.TYPE_LIGHT in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)?.let { Sensor.TYPE_LIGHT to it } else null,
-            if (Sensor.TYPE_ACCELEROMETER in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { Sensor.TYPE_ACCELEROMETER to it } else null,
-            if (Sensor.TYPE_GYROSCOPE in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let { Sensor.TYPE_GYROSCOPE to it } else null,
-            if (Sensor.TYPE_MAGNETIC_FIELD in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let { Sensor.TYPE_MAGNETIC_FIELD to it } else null
-        )
-
-        if (sensors.isEmpty()) {
-            continuation.resume(SensorSnapshot())
-            return@suspendCancellableCoroutine
-        }
-
         val callbackHandler = Handler(Looper.getMainLooper())
         val registeredTypes = mutableSetOf<Int>()
         var snapshot = SensorSnapshot()
+        var completed = false
+        var registrationsComplete = false
         lateinit var timeoutRunnable: Runnable
 
         fun finish(listener: SensorEventListener) {
-            if (!continuation.isActive) return
+            if (completed) return
+            completed = true
             sensorManager.unregisterListener(listener)
             callbackHandler.removeCallbacks(timeoutRunnable)
-            continuation.resume(snapshot)
+            if (continuation.isActive) {
+                continuation.resume(snapshot)
+            }
         }
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
+                if (completed) return
                 snapshot = snapshot.updateFrom(event.sensor.type, event.values)
-                if (registeredTypes.isNotEmpty() && registeredTypes.all(snapshot::hasReadingFor)) {
+                if (registrationsComplete && registeredTypes.isNotEmpty() && registeredTypes.all(snapshot::hasReadingFor)) {
                     finish(this)
                 }
             }
@@ -105,27 +98,54 @@ suspend fun captureSensorSnapshot(
             finish(listener)
         }
 
-        sensors.forEach { (sensorType, sensor) ->
-            val registered = sensorManager.registerListener(
-                listener,
-                sensor,
-                SensorManager.SENSOR_DELAY_GAME,
-                callbackHandler
+        callbackHandler.post {
+            if (!continuation.isActive || completed) return@post
+
+            val sensors = listOfNotNull(
+                if (Sensor.TYPE_PRESSURE in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let { Sensor.TYPE_PRESSURE to it } else null,
+                if (Sensor.TYPE_LIGHT in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)?.let { Sensor.TYPE_LIGHT to it } else null,
+                if (Sensor.TYPE_ACCELEROMETER in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { Sensor.TYPE_ACCELEROMETER to it } else null,
+                if (Sensor.TYPE_GYROSCOPE in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let { Sensor.TYPE_GYROSCOPE to it } else null,
+                if (Sensor.TYPE_MAGNETIC_FIELD in activeSensorTypes) sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let { Sensor.TYPE_MAGNETIC_FIELD to it } else null
             )
-            if (registered) {
-                registeredTypes += sensorType
+
+            if (sensors.isEmpty()) {
+                finish(listener)
+                return@post
             }
-        }
 
-        if (registeredTypes.isEmpty()) {
-            continuation.resume(SensorSnapshot())
-            return@suspendCancellableCoroutine
-        }
+            sensors.forEach { (sensorType, sensor) ->
+                val registered = sensorManager.registerListener(
+                    listener,
+                    sensor,
+                    SensorManager.SENSOR_DELAY_GAME,
+                    callbackHandler
+                )
+                if (registered) registeredTypes += sensorType
+            }
+            // Callbacks must not complete a partial registration set, even if the platform
+            // invokes a listener synchronously from registerListener.
+            registrationsComplete = true
 
-        callbackHandler.postDelayed(timeoutRunnable, timeoutMs)
+            if (registeredTypes.isEmpty()) {
+                finish(listener)
+                return@post
+            }
+
+            if (registeredTypes.all(snapshot::hasReadingFor)) {
+                finish(listener)
+                return@post
+            }
+
+            callbackHandler.postDelayed(timeoutRunnable, timeoutMs)
+        }
         continuation.invokeOnCancellation {
-            sensorManager.unregisterListener(listener)
-            callbackHandler.removeCallbacks(timeoutRunnable)
+            callbackHandler.post {
+                if (completed) return@post
+                completed = true
+                sensorManager.unregisterListener(listener)
+                callbackHandler.removeCallbacks(timeoutRunnable)
+            }
         }
     }
 

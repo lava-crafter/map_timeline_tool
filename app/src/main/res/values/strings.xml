@@ -37,7 +37,7 @@
     <string name="dialog_title_new_point">New Point</string>
     <string name="dialog_title_edit_point">Edit Point</string>
     <string name="dialog_location_confirmation_title">Save with fallback location?</string>
-    <string name="dialog_location_confirmation_approximate">Current location is fresh but approximate. Save this point anyway?</string>
+    <string name="dialog_location_confirmation_approximate">Location is approximate or from a recent previous fix. Save this point anyway?</string>
     <string name="dialog_location_confirmation_stale">Only a stale last known location is available. Save this point anyway?</string>
     <string name="dialog_title_label">Name</string>
     <string name="dialog_note_label">Note (optional)</string>
@@ -74,11 +74,12 @@
     <string name="toast_point_auto_saved_approximate">Point auto-saved with approximate location</string>
     <string name="toast_point_auto_saved_last_known">Point auto-saved using recent last known location</string>
     <string name="toast_point_auto_saved_stale">Point auto-saved using stale last known location</string>
-    <string name="toast_location_unavailable_save_failed">No location was available. Point not saved.</string>
-    <string name="toast_auto_save_location_failed">Auto-save could not get any location. Point not saved.</string>
+    <string name="toast_location_unavailable_save_failed">No recent usable location. Get a new fix and try again. Point not saved.</string>
+    <string name="toast_auto_save_location_failed">Auto-save needs a fresh precise location. Point not saved; you can save manually.</string>
     <string name="toast_quick_add_saved_from_cache">Quick Add saved using a recent accurate cached location</string>
     <string name="toast_quick_add_saved_from_fresh">Quick Add saved using a fresh precise location</string>
     <string name="toast_quick_add_failed_no_fresh_accurate_location">Quick Add could not get a fresh accurate location. Point not saved.</string>
+    <string name="toast_quick_add_save_failed">Quick Add could not save the point. Please try again.</string>
     <string name="toast_quick_add_precise_permission_required">Quick Add needs precise location permission. Approximate-only access will not save a point.</string>
     <string name="toast_quick_add_background_permission_required">Quick Add background cache warming needs background location on Android 10+. Enable "Allow all the time" in system settings before turning Quick Add on.</string>
     <string name="toast_noise_permission_denied">Microphone permission denied. Noise capture remains off.</string>

@@ -49,10 +49,11 @@ class QuickAddResolverTest {
         val result = QuickAddResolver(
             locationProvider = provider,
             locationCache = cache,
-            addPoint = { title, location, timestamp ->
+            addPoint = { title, location, timestamp, onCoreSaved ->
                 savedTitle = title
                 savedLocation = location
                 savedTimestamp = timestamp
+                onCoreSaved()
             },
             wallClockMs = { 100_000L },
             titleFormatter = { "title-$it" }
@@ -83,8 +84,9 @@ class QuickAddResolverTest {
         val result = QuickAddResolver(
             locationProvider = provider,
             locationCache = cache,
-            addPoint = { _, location, _ ->
+            addPoint = { _, location, _, onCoreSaved ->
                 savedLocation = location
+                onCoreSaved()
             },
             wallClockMs = { 100_000L }
         ).savePoint(timeoutMs = 5_000L, clickTimeMs = 101_000L)
@@ -112,7 +114,7 @@ class QuickAddResolverTest {
         val result = QuickAddResolver(
             locationProvider = provider,
             locationCache = QuickAddLocationCache(wallClockMs = { 100_000L }),
-            addPoint = { _, _, _ -> saved = true },
+            addPoint = { _, _, _, onCoreSaved -> saved = true; onCoreSaved() },
             wallClockMs = { 100_000L }
         ).savePoint(timeoutMs = 5_000L, clickTimeMs = 101_000L)
 
@@ -139,9 +141,10 @@ class QuickAddResolverTest {
         val result = QuickAddResolver(
             locationProvider = provider,
             locationCache = cache,
-            addPoint = { title, location, _ ->
+            addPoint = { title, location, _, onCoreSaved ->
                 savedTitle = title
                 savedLocation = location
+                onCoreSaved()
             },
             wallClockMs = { 100_000L },
             titleFormatter = { "title-$it" }
@@ -173,9 +176,10 @@ class QuickAddResolverTest {
         val result = QuickAddResolver(
             locationProvider = provider,
             locationCache = cache,
-            addPoint = { _, location, timestamp ->
+            addPoint = { _, location, timestamp, onCoreSaved ->
                 savedLocation = location
                 savedTime = timestamp
+                onCoreSaved()
             },
             wallClockMs = { nowMs }
         ).savePoint(timeoutMs = 15_000L, clickTimeMs = 100_000L)
@@ -183,6 +187,54 @@ class QuickAddResolverTest {
         assertEquals(QuickAddResult.SAVED_FROM_RECENT_CACHE, result)
         assertEquals(cached.toGeoPoint(), savedLocation)
         assertEquals(100_000L, savedTime)
+    }
+
+    @Test
+    fun savePoint_rejectsMockPreciseFixEvenWithGoodAccuracy() = runBlocking {
+        var saved = false
+        val result = QuickAddResolver(
+            locationProvider = FakeLocationProvider(
+                GeoPoint(1.0, 2.0, accuracyMeters = 3f, fixTimeMs = 99_000L, provider = "gps", isMock = true)
+            ),
+            locationCache = QuickAddLocationCache(wallClockMs = { 100_000L }),
+            addPoint = { _, _, _, _ -> saved = true },
+            wallClockMs = { 100_000L }
+        ).savePoint(5_000L)
+
+        assertEquals(QuickAddResult.FAILED_NO_FRESH_ACCURATE_LOCATION, result)
+        assertEquals(false, saved)
+    }
+
+    @Test
+    fun geoPointConversionPreservesMockFlagBothWays() {
+        val mock = GeoPoint(1.0, 2.0, accuracyMeters = 3f, fixTimeMs = 99_000L, provider = "gps", isMock = true)
+        val converted = mock.toQuickAddLocation(observedAtMs = 100_000L)!!
+        assertEquals(true, converted.isMock)
+        assertEquals(true, converted.toGeoPoint().isMock)
+    }
+
+    @Test
+    fun savePoint_reportsCommittedCoreEvenIfOptionalWorkFails() = runBlocking {
+        var committed: QuickAddResult? = null
+        val resolver = QuickAddResolver(
+            locationProvider = FakeLocationProvider(
+                GeoPoint(1.0, 2.0, accuracyMeters = 3f, fixTimeMs = 99_000L, provider = "gps")
+            ),
+            locationCache = QuickAddLocationCache(wallClockMs = { 100_000L }),
+            addPoint = { _, _, _, onCoreSaved ->
+                onCoreSaved()
+                error("optional noise failed")
+            },
+            wallClockMs = { 100_000L }
+        )
+
+        try {
+            resolver.savePoint(5_000L, onCoreSaved = { committed = it })
+            error("Expected optional error")
+        } catch (expected: IllegalStateException) {
+            assertEquals("optional noise failed", expected.message)
+        }
+        assertEquals(QuickAddResult.SAVED_FROM_FRESH_REQUEST, committed)
     }
 
     private class FakeLocationProvider(

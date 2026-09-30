@@ -22,12 +22,18 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlin.math.log10
 import kotlin.math.sqrt
 
 private const val DEFAULT_SAMPLE_RATE = 16_000
 private const val NOISE_CAPTURE_DURATION_SECONDS = 3
+private const val NOISE_CAPTURE_MAX_DURATION_MS = 3_500L
 
 suspend fun captureNoiseDb(context: Context): Float? {
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -56,15 +62,22 @@ suspend fun captureNoiseDb(context: Context): Float? {
         val readBuffer = ShortArray(minBufferSize / 2)
         var samplesRead = 0
         var sumSquares = 0.0
+        val deadlineMs = SystemClock.elapsedRealtime() + NOISE_CAPTURE_MAX_DURATION_MS
 
         try {
             audioRecord.startRecording()
             while (samplesRead < targetSamples) {
+                currentCoroutineContext().ensureActive()
+                if (SystemClock.elapsedRealtime() >= deadlineMs) return@runCatching null
                 val remaining = targetSamples - samplesRead
                 val maxRead = minOf(readBuffer.size, remaining)
-                val readCount = audioRecord.read(readBuffer, 0, maxRead)
-                if (readCount <= 0) {
+                val readCount = audioRecord.read(readBuffer, 0, maxRead, AudioRecord.READ_NON_BLOCKING)
+                if (readCount < 0) {
                     return@runCatching null
+                }
+                if (readCount == 0) {
+                    delay(10L)
+                    continue
                 }
                 for (i in 0 until readCount) {
                     val sample = readBuffer[i].toDouble()
@@ -78,7 +91,10 @@ suspend fun captureNoiseDb(context: Context): Float? {
         }
 
         pcm16SumSquaresToDbfs(sumSquares, samplesRead)
-    }.getOrNull()
+    }.getOrElse { error ->
+        if (error is CancellationException) throw error
+        null
+    }
 }
 
 /** Pure final conversion for deterministic PCM tests; no microphone calibration is implied. */

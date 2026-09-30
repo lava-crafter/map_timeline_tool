@@ -30,6 +30,8 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Task
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationFixValidity
+import com.lavacrafter.maptimelinetool.quickadd.isMockCompat
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -161,18 +163,15 @@ class GoogleFusedLocationProvider(
         maxAccuracyMeters: Float,
         requireAccuracy: Boolean = false
     ): Boolean {
-        if (location.latitude.isNaN() || location.longitude.isNaN()) {
-            return false
-        }
-        val fixTime = location.time.takeIf { it > 0L } ?: return false
-        val ageMs = (nowMs - fixTime).coerceAtLeast(0L)
+        val ageMs = LocationFixValidity.ageMs(location.latitude, location.longitude, location.time, nowMs)
+            ?: return false
         if (ageMs > maxAgeMs) {
             return false
         }
         if (requireAccuracy && !location.hasAccuracy()) {
             return false
         }
-        if (location.hasAccuracy() && location.accuracy > maxAccuracyMeters) {
+        if (location.hasAccuracy() && (!location.accuracy.isFinite() || location.accuracy < 0f || location.accuracy > maxAccuracyMeters)) {
             return false
         }
         return true
@@ -223,6 +222,7 @@ private fun Location.toGeoPointAndCache(context: Context): GeoPoint {
         longitude = longitude,
         accuracyMeters = if (hasAccuracy()) accuracy else null,
         fixTimeMs = time.takeIf { it > 0L },
-        provider = provider?.ifBlank { "fused" } ?: "fused"
+        provider = provider?.ifBlank { "fused" } ?: "fused",
+        isMock = isMockCompat()
     )
 }

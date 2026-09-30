@@ -17,6 +17,7 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.content.Context
+import com.lavacrafter.maptimelinetool.quickadd.isMockCompat
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 
@@ -41,5 +42,6 @@ private fun android.location.Location.toGeoPoint(): GeoPoint = GeoPoint(
     longitude = longitude,
     accuracyMeters = if (hasAccuracy()) accuracy else null,
     fixTimeMs = time.takeIf { it > 0L },
-    provider = provider
+    provider = provider,
+    isMock = isMockCompat()
 )

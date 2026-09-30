@@ -111,6 +111,7 @@ import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationSavePolicy
 import com.lavacrafter.maptimelinetool.notification.ACTION_QUICK_ADD
 import com.lavacrafter.maptimelinetool.notification.performQuickAdd
 import com.lavacrafter.maptimelinetool.notification.syncQuickAddNotification
@@ -1557,15 +1558,26 @@ class MainActivity : AppCompatActivity() {
                                         val request = confirmation
                                         scope.launch {
                                             try {
-                                                finalizeAddDialogSave(
-                                                    title = request.title,
-                                                    note = request.note,
-                                                    createdAt = request.createdAt,
-                                                    selectedTags = request.selectedTags,
-                                                    photoPath = request.photoPath,
-                                                    decision = request.decision,
-                                                    autoSaved = false
+                                                val currentDecision = LocationSavePolicy().evaluate(
+                                                    preciseLocation = null,
+                                                    fallbackLocation = request.decision.location,
+                                                    flow = LocationSaveFlow.MANUAL_ADD
                                                 )
+                                                if (!currentDecision.canSave) {
+                                                    pendingManualSaveConfirmation = null
+                                                    isCountdownPaused = true
+                                                    Toast.makeText(context, R.string.toast_location_unavailable_save_failed, Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    finalizeAddDialogSave(
+                                                        title = request.title,
+                                                        note = request.note,
+                                                        createdAt = request.createdAt,
+                                                        selectedTags = request.selectedTags,
+                                                        photoPath = request.photoPath,
+                                                        decision = currentDecision,
+                                                        autoSaved = false
+                                                    )
+                                                }
                                             } finally {
                                                 addSaveInProgress = false
                                             }

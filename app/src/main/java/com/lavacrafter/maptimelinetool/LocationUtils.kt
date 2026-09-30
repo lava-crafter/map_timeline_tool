@@ -24,6 +24,8 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.CancellationSignal
 import com.lavacrafter.maptimelinetool.quickadd.toQuickAddLocation
+import com.lavacrafter.maptimelinetool.quickadd.isMockCompat
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationFixValidity
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -67,6 +69,8 @@ object LocationUtils {
     }
 
     fun cacheLocation(context: Context, location: Location) {
+        // A persisted location cache has no mock metadata; never launder a mock fix through it.
+        if (location.isMockCompat()) return
         val editor = context.getSharedPreferences(HeadingLocationOverlay.LOCATION_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putFloat(HeadingLocationOverlay.KEY_LAT, location.latitude.toFloat())
@@ -223,12 +227,8 @@ object LocationUtils {
         maxAccuracyMeters: Float,
         requireAccuracy: Boolean = false
     ): Boolean {
-        if (location.latitude.isNaN() || location.longitude.isNaN()) {
-            return false
-        }
-
-        val fixTime = location.time.takeIf { it > 0L } ?: return false
-        val ageMs = (nowMs - fixTime).coerceAtLeast(0L)
+        val ageMs = LocationFixValidity.ageMs(location.latitude, location.longitude, location.time, nowMs)
+            ?: return false
         if (ageMs > maxAgeMs) {
             return false
         }
@@ -237,7 +237,7 @@ object LocationUtils {
             return false
         }
 
-        if (location.hasAccuracy() && location.accuracy > maxAccuracyMeters) {
+        if (location.hasAccuracy() && (!location.accuracy.isFinite() || location.accuracy < 0f || location.accuracy > maxAccuracyMeters)) {
             return false
         }
 
