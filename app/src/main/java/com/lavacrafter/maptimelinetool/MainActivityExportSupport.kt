@@ -16,11 +16,11 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool
 
-import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.export.ZipExporter
-import com.lavacrafter.maptimelinetool.ui.AppViewModel
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -28,21 +28,22 @@ import java.util.Date
 import java.util.Locale
 
 internal suspend fun buildPointTagNameMap(
-    viewModel: AppViewModel,
+    repository: PointRepositoryGateway,
     points: List<Point>
-): Map<Long, List<String>> {
-    val tags = viewModel.getAllTags()
+): Map<Long, List<String>> = repository.inTransaction {
+    val tags = repository.getAllTags()
     val tagNamesById = tags.associate { it.id to it.name }
-    val result = mutableMapOf<Long, List<String>>()
-    points.forEach { point ->
-        val tagNames = viewModel.getTagIdsForPoint(point.id)
-            .mapNotNull { tagId -> tagNamesById[tagId] }
-            .filter { it.isNotBlank() }
-        if (tagNames.isNotEmpty()) {
-            result[point.id] = tagNames
-        }
-    }
-    return result
+    selectedPointTagIds(points, repository.getAllPointTagRelations())
+        .mapValues { (_, tagIds) -> tagIds.mapNotNull { tagNamesById[it]?.takeIf(String::isNotBlank) } }
+        .filterValues { it.isNotEmpty() }
+}
+
+private fun selectedPointTagIds(
+    points: List<Point>,
+    relations: List<PointTagRelation>
+): Map<Long, List<Long>> {
+    val selectedIds = points.mapTo(HashSet(points.size)) { it.id }
+    return relations.filter { it.pointId in selectedIds }.groupBy({ it.pointId }, { it.tagId })
 }
 
 internal enum class ExportFileKind {
@@ -100,24 +101,17 @@ internal suspend fun buildZipExportPayload(
     includeTags: Boolean,
     includeSensors: Boolean,
     includePhotos: Boolean,
-    viewModel: AppViewModel,
-    tags: List<TagEntity>
+    repository: PointRepositoryGateway
 ): PendingExportPayload {
-    val pointTagMap = mutableMapOf<Long, List<Long>>()
-    val zipTags = mutableListOf<ZipExporter.TagRecord>()
-
-    if (includeTags) {
-        points.forEach { point ->
-            val tagIds = viewModel.getTagIdsForPoint(point.id)
-            if (tagIds.isNotEmpty()) {
-                pointTagMap[point.id] = tagIds
-            }
+    val (pointTagMap, zipTags) = if (includeTags) {
+        repository.inTransaction {
+            val tags = repository.getAllTags()
+            val pointTagMap = selectedPointTagIds(points, repository.getAllPointTagRelations())
+            val usedTagIds = pointTagMap.values.flatten().toSet()
+            pointTagMap to tags.filter { it.id in usedTagIds }.map { ZipExporter.TagRecord(it.id, it.name) }
         }
-
-        val usedTagIds = pointTagMap.values.flatten().toSet()
-        tags
-            .filter { usedTagIds.contains(it.id) }
-            .forEach { zipTags.add(ZipExporter.TagRecord(it.id, it.name)) }
+    } else {
+        emptyMap<Long, List<Long>>() to emptyList<ZipExporter.TagRecord>()
     }
 
     return PendingExportPayload(

@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -16,6 +17,21 @@ class ZipRestorePreflightTest {
         assertThrows(ZipImportLimitExceededException::class.java) {
             restore(zip(entries), ZipImportLimits(maxEntries = 10))
         }
+    }
+
+    @Test fun defaultEntryBudgetAcceptsThousandsOfEntriesAndRejectsOverflow() {
+        val manyEntries = (0 until 1_201).map { "photos/$it.jpg" to "bytes" } + ("points.csv" to csv)
+        val restored = restore(zip(manyEntries))
+        assertEquals(1, restored.points.size)
+        assertEquals(1_201, restored.importedPhotoCount)
+
+        val limits = ZipImportLimits()
+        val overflow = (0..limits.maxEntries).map { "unknown_$it" to "" }
+        // Isolate the total-entry ceiling from the separate, intentionally smaller unknown-entry cap.
+        val failure = assertThrows(ZipImportLimitExceededException::class.java) {
+            restore(zip(overflow), limits.copy(maxUnrecognizedEntries = limits.maxEntries + 1))
+        }
+        assertEquals("Too many archive entries", failure.message)
     }
 
     @Test fun rejectsTooManyPhotoEntries() {

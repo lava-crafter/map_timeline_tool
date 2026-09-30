@@ -46,3 +46,26 @@
 - 不修改 lint baseline、检查级别或业务调用，不通过隐藏语言资源或关闭翻译检查规避错误。
 - 11 个本地化 XML 的新资源唯一性、格式参数匹配、`he` / `iw` 一致性检查通过。
 - `./gradlew :app:lintDebug :app:assembleDebug :app:testDebugUnitTest` 通过；当前 lint 门禁为 0 errors / 7 个既有 warnings（3 `PluralsCandidate`、3 `UnusedResources`、1 `UsableSpace`），baseline 中的历史存量未改动。单测任务复用 148/148 全绿结果（`UP-TO-DATE`）；Debug APK 重新构建成功。
+
+## Phase 9 — 小范围维护债清理
+
+本节对应同一稳定性计划的 Phase 9，保留已有数据库版本、repository transaction 和导出格式，不新增 GPX 功能、依赖或架构层。
+
+- **9.1 GPX：**全项目引用检索只发现 `GpxExporter` 自身定义，没有调用或导出入口；删除 dead file。
+- **9.2 N+1：**GeoJSON / KML / KMZ 的标签名称映射及普通 ZIP 的标签组装改用一次 all-relations query，与 tags 在同一 Room snapshot 中读取。普通 ZIP 仍只包含选中 Point 使用的 Tags，禁用 Tags 时不查询标签/关系；Full Backup 已有的全部关系快照保持不变。
+- **9.3 CrossRef：**不加 foreign keys、不改 schema；`PointRepositoryIntegrityTest` 验证删除 Point、删除 Tag 均清掉其全部关系，且保留无关数据；另验证删除 Point 失败时关系清理回滚。测试使用独立 debug 包及 in-memory Room。
+- **9.4 SAF：**五种 CreateDocument 导出共用 `writeCreatedDocument`，在完整写入、flush、正常 close 后才返回成功。exporter 可关闭自己的 Writer / ZIP wrapper，但底层目标流只由 helper 关闭一次；仍直接 streaming 写目标，不复制大型 ZIP。打开、准备 payload、写入、flush、close 失败或取消后，在 NonCancellable IO 中 best-effort 删除刚创建的 URI；清理失败不会覆盖原始异常，取消继续传播。Full Backup 分享也不再吞掉取消。
+- 对真正的 document URI 使用 `DocumentsContract.deleteDocument`；其他 ContentProvider 使用 `ContentResolver.delete`，避免 provider 忽略 document call 却返回“成功”而留下残片。
+- `CreatedDocumentExportTest` 覆盖流的完成顺序、失败/取消与清理异常；`CreatedDocumentExportInstrumentedTest` 用 debug FileProvider 的真实 ContentResolver 流验证全部五种格式及失败/取消删除，不打开系统 picker、不使用用户文件。
+- `MainActivityExportSupportTest` 用 1,201 Points 验证导出只读取一次标签/关系，不允许逐 Point query；`ZipRestorePreflightTest` 新增 1,201 个识别照片 entries 的 parser/budget 验证，以及 20,001 总 entries 的拒绝验证（隔离独立的 unknown-entry ceiling）。这些 parser entry fixtures 不冒充真实图片验证；真实 JPEG 恢复和高清 sampled decode 由 connected 用例覆盖。
+
+### 最终完整验证（2026-09-30）
+
+- `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --rerun-tasks` 通过，57 个 task 实际重跑。随后对最终代码再次执行 `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:connectedDebugAndroidTest`，全部通过。
+- 最终结果 XML：**JVM 161/161、connected 80/80 通过，0 failures / errors / skipped**；Phase 9 定向 connected 也为 6/6 通过。
+- 全量执行包含：1,201 行 CSV 原子导入；1,001 Points / unattached Tag / 501 relations / 302 个真实 JPEG / portable Settings 的 Full Backup round-trip；4096×3072 JPEG sampled decode；大量 ZIP entries；checksum、metadata、DB、照片 move 故障和提交前取消；journal recovery 及 Activity recreation；DB2/3/4/5/历史无 index 的 DB6/后期 DB6/DB7 → DB8。
+- 所有大型 fixture 运行时生成并 teardown，没有提交 binary fixture。中断恢复以遗留 journal 模拟验证；没有宣称真实进程 kill 后断点续传，也未运行数 GB archive 实测。
+- lint 门禁 **0 active errors / 7 个既有 warnings**（3 `PluralsCandidate`、3 `UnusedResources`、1 `UsableSpace`）；既有 baseline 未改动，没有新增 suppression 或放宽检查。
+- 设备为 SM-X730 / API 36，测试前 `/data` 可用约 39 GiB；`ANDROID_SERIAL` 明确限定该设备。APK ID / instrumentation target 分别为 `.debug` / `.debug`，test package 为 `.debug.test`。正式包只做只读 `pm path` 检查，完整测试前后的 APK 路径完全一致，没有 clear、uninstall、覆盖安装或启动正式 App。connected 完成后 debug 包已不再安装；restore fixture 内的 staging/journal 清理由断言、recovery 和 teardown 覆盖。
+- runner 有一条 `androidx.test.services` 未安装导致 appops 设置失败的环境提示，但全部 80 个 connected 用例完成且无跳过，整体 `BUILD SUCCESSFUL`；不将该提示当成产品失败或跳过测试的理由。
+- 最终 `git diff --check` 通过，generated OSS resources 和 Room schema 未产生额外 source-tree 修改。

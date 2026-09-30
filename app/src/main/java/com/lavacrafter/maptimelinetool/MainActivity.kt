@@ -274,7 +274,7 @@ class MainActivity : AppCompatActivity() {
                     val points = ids.map { id -> requireNotNull(byId[id]) { "Export point is no longer available" }.toDomain() }
                     return if (kind == ExportFileKind.ZIP) {
                         buildZipExportPayload(points, zipIncludePoints, zipIncludeTags, zipIncludeSensors,
-                            zipIncludePhotos, viewModel, viewModel.getAllTags())
+                            zipIncludePhotos, graph.pointRepositoryGateway)
                     } else {
                         buildStandardExportPayload(points, kind)
                     }
@@ -305,156 +305,78 @@ class MainActivity : AppCompatActivity() {
                     replacedAddPhotoPath = null
                     pendingAddPhotoUri = null
                 }
-                val exportCsvLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.CreateDocument("text/csv")
-                ) { uri ->
+                fun exportToDocument(uri: Uri?, kind: ExportFileKind) {
                     if (uri == null) {
                         clearExportRequest()
-                        return@rememberLauncherForActivityResult
+                        return
                     }
                     scope.launch {
-                        runCatching {
-                            val pending = exportPayload(ExportFileKind.CSV)
-                            withContext(Dispatchers.IO) {
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    CsvExporter.writeCsv(pending.points, output)
-                                } ?: throw IOException("Failed to open output stream")
-                            }
-                            pending.points.size
-                        }.onSuccess { count ->
-                            Toast.makeText(context, context.getString(R.string.toast_export_success, count), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
-                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
-                        }
-                        clearExportRequest()
-                    }
-                }
-                val exportGeoJsonLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.CreateDocument("application/geo+json")
-                ) { uri ->
-                    if (uri == null) {
-                        clearExportRequest()
-                        return@rememberLauncherForActivityResult
-                    }
-                    scope.launch {
-                        runCatching {
-                            val pending = exportPayload(ExportFileKind.GEOJSON)
-                            withContext(Dispatchers.IO) {
-                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    GeoJsonExporter.writeGeoJson(
+                        try {
+                            val count = writeCreatedDocument(context, uri) { output ->
+                                val pending = exportPayload(kind)
+                                val pointTagNameMap = if (kind != ExportFileKind.CSV && kind != ExportFileKind.ZIP) {
+                                    buildPointTagNameMap(graph.pointRepositoryGateway, pending.points)
+                                } else {
+                                    emptyMap()
+                                }
+                                when (kind) {
+                                    ExportFileKind.CSV -> CsvExporter.writeCsv(pending.points, output)
+                                    ExportFileKind.GEOJSON -> GeoJsonExporter.writeGeoJson(
                                         points = pending.points,
                                         outputStream = output,
                                         includeSensors = true,
                                         pointTagNamesByPointId = pointTagNameMap,
                                         photoRelPathResolver = { null }
                                     )
-                                } ?: throw IOException("Failed to open output stream")
-                            }
-                            pending.points.size
-                        }.onSuccess { count ->
-                            Toast.makeText(context, context.getString(R.string.toast_export_success, count), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
-                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
-                        }
-                        clearExportRequest()
-                    }
-                }
-                val exportKmlLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
-                ) { uri ->
-                    if (uri == null) {
-                        clearExportRequest()
-                        return@rememberLauncherForActivityResult
-                    }
-                    scope.launch {
-                        runCatching {
-                            val pending = exportPayload(ExportFileKind.KML)
-                            withContext(Dispatchers.IO) {
-                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    KmlExporter.writeKml(
+                                    ExportFileKind.KML -> KmlExporter.writeKml(
                                         points = pending.points,
                                         outputStream = output,
                                         includeSensors = true,
                                         pointTagNamesByPointId = pointTagNameMap,
                                         photoRelPathResolver = { null }
                                     )
-                                } ?: throw IOException("Failed to open output stream")
-                            }
-                            pending.points.size
-                        }.onSuccess { count ->
-                            Toast.makeText(context, context.getString(R.string.toast_export_success, count), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
-                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
-                        }
-                        clearExportRequest()
-                    }
-                }
-                val exportKmzLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kmz")
-                ) { uri ->
-                    if (uri == null) {
-                        clearExportRequest()
-                        return@rememberLauncherForActivityResult
-                    }
-                    scope.launch {
-                        runCatching {
-                            val pending = exportPayload(ExportFileKind.KMZ)
-                            withContext(Dispatchers.IO) {
-                                val pointTagNameMap = buildPointTagNameMap(viewModel, pending.points)
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    KmzExporter.export(
+                                    ExportFileKind.KMZ -> KmzExporter.export(
                                         points = pending.points,
                                         outputStream = output,
-                                        resolvePhotoFile = { photoPath ->
-                                            resolvePointPhotoFile(context, photoPath)
-                                        },
+                                        resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
                                         includeSensors = true,
                                         includePhotos = true,
                                         pointTagNamesByPointId = pointTagNameMap
                                     )
-                                } ?: throw IOException("Failed to open output stream")
-                            }
-                            pending.points.size
-                        }.onSuccess { count ->
-                            Toast.makeText(context, context.getString(R.string.toast_export_success, count), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
-                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
-                        }
-                        clearExportRequest()
-                    }
-                }
-                val exportZipLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.CreateDocument("application/zip")
-                ) { uri ->
-                    if (uri == null) {
-                        clearExportRequest()
-                        return@rememberLauncherForActivityResult
-                    }
-                    scope.launch {
-                        runCatching {
-                            val pending = exportPayload(ExportFileKind.ZIP)
-                            withContext(Dispatchers.IO) {
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    pending.writeOrdinaryZip(
+                                    ExportFileKind.ZIP -> pending.writeOrdinaryZip(
                                         outputStream = output,
-                                        resolvePhotoFile = { photoPath ->
-                                            resolvePointPhotoFile(context, photoPath)
-                                        },
+                                        resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
                                         appVersion = packageManager.getPackageInfo(packageName, 0).versionName
                                     )
-                                } ?: throw IOException("Failed to open output stream")
+                                }
+                                pending.points.size
                             }
-                            pending.points.size
-                        }.onSuccess { count ->
                             Toast.makeText(context, context.getString(R.string.toast_export_success, count), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.e("MainActivity", "Document export failed", error)
                             Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                        } finally {
+                            clearExportRequest()
                         }
-                        clearExportRequest()
                     }
                 }
+                val exportCsvLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("text/csv")
+                ) { uri -> exportToDocument(uri, ExportFileKind.CSV) }
+                val exportGeoJsonLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/geo+json")
+                ) { uri -> exportToDocument(uri, ExportFileKind.GEOJSON) }
+                val exportKmlLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")
+                ) { uri -> exportToDocument(uri, ExportFileKind.KML) }
+                val exportKmzLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/vnd.google-earth.kmz")
+                ) { uri -> exportToDocument(uri, ExportFileKind.KMZ) }
+                val exportZipLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.CreateDocument("application/zip")
+                ) { uri -> exportToDocument(uri, ExportFileKind.ZIP) }
                 val importCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     if (pendingImportKind != "CSV") {
                         pendingImportKind = null
@@ -1082,7 +1004,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val shareBackupZip: () -> Unit = {
                     scope.launch {
-                        runCatching {
+                        try {
                             val (shareUri, totalPointCount) = withContext(Dispatchers.IO) {
                                 val backup = FullBackupAssembler(context.appGraph().pointRepositoryGateway).assemble()
                                 val portableSettings = SettingsStore.exportBackupJson(context)
@@ -1108,7 +1030,10 @@ class MainActivity : AppCompatActivity() {
                                 )
                             )
                             Toast.makeText(context, context.getString(R.string.toast_export_success, totalPointCount), Toast.LENGTH_SHORT).show()
-                        }.onFailure {
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.e("MainActivity", "Backup share failed", error)
                             Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
                         }
                     }

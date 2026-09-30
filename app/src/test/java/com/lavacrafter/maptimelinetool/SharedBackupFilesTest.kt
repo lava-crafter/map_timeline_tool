@@ -19,8 +19,10 @@ package com.lavacrafter.maptimelinetool
 import java.io.File
 import java.io.IOException
 import kotlin.io.path.createTempDirectory
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,6 +61,24 @@ class SharedBackupFilesTest {
             }.exceptionOrNull()
 
             assertTrue(failure is IOException)
+            assertEquals(listOf(previous), directory.listFiles()!!.toList())
+            assertEquals(listOf(5), previous.readBytes().map { it.toInt() })
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `cancelled share propagates cancellation and preserves the last finished backup`() {
+        val directory = createTempDirectory("shared-backups-cancelled").toFile()
+        try {
+            val previous = createSharedBackupFile(directory) { it.write(byteArrayOf(5)) }
+            assertThrows(CancellationException::class.java) {
+                createSharedBackupFile(directory) {
+                    it.write(byteArrayOf(9))
+                    throw CancellationException("Cancelled export")
+                }
+            }
             assertEquals(listOf(previous), directory.listFiles()!!.toList())
             assertEquals(listOf(5), previous.readBytes().map { it.toInt() })
         } finally {
