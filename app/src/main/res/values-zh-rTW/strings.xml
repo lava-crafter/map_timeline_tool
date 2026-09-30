@@ -8,6 +8,17 @@
     <string name="action_import_zip">匯入 ZIP</string>
     <string name="toast_import_success">已匯入 %1$d 個打點</string>
     <string name="toast_import_failed">匯入失敗</string>
+    <string name="csv_import_summary">已匯入 %1$d 個打點；略過 %2$d 列無效資料。</string>
+    <string name="csv_skipped_row">資料列 %1$d：%2$s</string>
+    <string name="csv_invalid_coordinates">座標無效</string>
+    <string name="csv_invalid_timestamp">時間戳記無效或缺漏</string>
+    <string name="csv_invalid_text_encoding">編碼文字無效</string>
+    <string name="csv_more_skipped_rows">…另有 %1$d 列無效資料。</string>
+    <string name="toast_restore_settings_warning">已還原 %1$d 個打點，但無法儲存設定</string>
+    <string name="restore_in_progress">正在還原備份</string>
+    <string name="restore_validating">正在驗證並暫存備份資料…</string>
+    <string name="restore_finalizing">正在儲存打點和照片…</string>
+    <string name="toast_quick_add_save_failed">快速打點無法儲存點位，請重試。</string>
     <string name="toast_export_success">已匯出 %1$d 個打點</string>
     <string name="action_clear_cache">清除地圖快取</string>
     <string name="action_back">返回</string>

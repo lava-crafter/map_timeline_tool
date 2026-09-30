@@ -8,6 +8,17 @@
     <string name="action_import_zip">Importer ZIP</string>
     <string name="toast_import_success">%1$d points importés</string>
     <string name="toast_import_failed">Échec de l’import</string>
+    <string name="csv_import_summary">%1$d points importés ; %2$d lignes invalides ignorées.</string>
+    <string name="csv_skipped_row">Ligne de données %1$d : %2$s</string>
+    <string name="csv_invalid_coordinates">coordonnées invalides</string>
+    <string name="csv_invalid_timestamp">horodatage invalide ou manquant</string>
+    <string name="csv_invalid_text_encoding">texte encodé invalide</string>
+    <string name="csv_more_skipped_rows">…et %1$d lignes invalides supplémentaires.</string>
+    <string name="toast_restore_settings_warning">%1$d points restaurés, mais les paramètres n’ont pas pu être enregistrés</string>
+    <string name="restore_in_progress">Restauration de la sauvegarde</string>
+    <string name="restore_validating">Validation et préparation des données de sauvegarde…</string>
+    <string name="restore_finalizing">Enregistrement des points et des photos…</string>
+    <string name="toast_quick_add_save_failed">L’ajout rapide n’a pas pu enregistrer le point. Veuillez réessayer.</string>
     <string name="toast_export_success">%1$d points exportés</string>
     <string name="action_clear_cache">Vider le cache de la carte</string>
     <string name="action_back">Retour</string>

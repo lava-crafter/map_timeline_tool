@@ -46,6 +46,7 @@ import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.ui.ListScreen
 import com.lavacrafter.maptimelinetool.ui.MapScreen
+import com.lavacrafter.maptimelinetool.ui.MapTileAccessPolicy
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,7 +60,7 @@ internal fun MapWithListSheet(
     isActive: Boolean,
     zoomBehavior: ZoomButtonBehavior,
     markerScale: Float,
-    downloadedOnly: Boolean,
+    mapAccessPolicy: MapTileAccessPolicy,
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
     onResolveCenterLocation: ((GeoPoint?) -> Unit) -> Unit,
@@ -88,7 +89,7 @@ internal fun MapWithListSheet(
                 isActive = isActive,
                 zoomBehavior = zoomBehavior,
                 markerScale = markerScale,
-                downloadedOnly = downloadedOnly,
+                mapAccessPolicy = mapAccessPolicy,
                 mapTileSourceId = mapTileSourceId,
                 onMapTileSourceChange = onMapTileSourceChange,
                 onResolveCenterLocation = onResolveCenterLocation

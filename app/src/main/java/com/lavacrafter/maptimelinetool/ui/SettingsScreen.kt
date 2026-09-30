@@ -343,11 +343,7 @@ private fun SettingsOverviewScreen(
                 description = stringResource(R.string.settings_cache_desc),
                 onClick = { onNavigateTo(SettingsRoute.Cache) }
             )
-            SettingsOverviewItem(
-                title = stringResource(R.string.settings_download_title),
-                description = stringResource(R.string.settings_download_desc),
-                onClick = { onNavigateTo(SettingsRoute.Download) }
-            )
+            // Area downloads are frozen: retain the implementation, but expose no navigation entry.
             SettingsOverviewItem(
                 title = stringResource(R.string.settings_default_tags_title),
                 description = stringResource(R.string.settings_default_tags_desc),

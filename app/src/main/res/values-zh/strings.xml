@@ -11,6 +11,16 @@
     <string name="action_share_backup_zip">分享完整备份 ZIP</string>
     <string name="toast_import_success">成功导入 %1$d 个打点</string>
     <string name="toast_import_failed">导入失败</string>
+    <string name="csv_import_summary">已导入 %1$d 个打点；跳过 %2$d 行无效数据。</string>
+    <string name="csv_skipped_row">数据行 %1$d：%2$s</string>
+    <string name="csv_invalid_coordinates">坐标无效</string>
+    <string name="csv_invalid_timestamp">时间戳无效或缺失</string>
+    <string name="csv_invalid_text_encoding">编码文本无效</string>
+    <string name="csv_more_skipped_rows">…另有 %1$d 行无效数据。</string>
+    <string name="toast_restore_settings_warning">已恢复 %1$d 个打点，但无法保存设置</string>
+    <string name="restore_in_progress">正在恢复备份</string>
+    <string name="restore_validating">正在验证并暂存备份数据…</string>
+    <string name="restore_finalizing">正在保存打点和照片…</string>
     <string name="toast_export_success">成功导出 %1$d 个打点</string>
     <string name="action_clear_cache">清除地图缓存</string>
     <string name="action_back">返回</string>

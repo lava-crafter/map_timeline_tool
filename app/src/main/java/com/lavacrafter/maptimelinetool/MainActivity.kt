@@ -107,6 +107,7 @@ import com.lavacrafter.maptimelinetool.ui.SettingsViewModel
 import com.lavacrafter.maptimelinetool.ui.downloadTileSourceById
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
+import com.lavacrafter.maptimelinetool.ui.resolveMapTileAccessPolicy
 import com.lavacrafter.maptimelinetool.ui.applyLanguagePreference
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow
@@ -1181,10 +1182,10 @@ class MainActivity : AppCompatActivity() {
                                 isActive = tab == 0,
                                 zoomBehavior = settingsState.zoomBehavior,
                                 markerScale = settingsState.markerScale,
-                                downloadedOnly = run {
+                                mapAccessPolicy = run {
                                     val isSatellite = settingsState.mapTileSourceId == "eox_sentinel2_cloudless_2024"
                                     val policy = if (isSatellite) settingsState.satelliteCachePolicy else settingsState.cachePolicy
-                                    policy == MapCachePolicy.DISABLED || (policy == MapCachePolicy.WIFI_ONLY && networkStatus != NetworkStatus.WIFI)
+                                    resolveMapTileAccessPolicy(policy, networkStatus)
                                 },
                                 mapTileSourceId = settingsState.mapTileSourceId,
                                 onMapTileSourceChange = settingsViewModel::setMapTileSourceId,

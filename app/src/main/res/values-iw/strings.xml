@@ -8,6 +8,17 @@
     <string name="action_import_zip">ייבוא ZIP</string>
     <string name="toast_import_success">יובאו %1$d נקודות</string>
     <string name="toast_import_failed">הייבוא נכשל</string>
+    <string name="csv_import_summary">יובאו %1$d נקודות; %2$d שורות לא תקינות דולגו.</string>
+    <string name="csv_skipped_row">שורת נתונים %1$d: %2$s</string>
+    <string name="csv_invalid_coordinates">קואורדינטות לא תקינות</string>
+    <string name="csv_invalid_timestamp">חותמת זמן לא תקינה או חסרה</string>
+    <string name="csv_invalid_text_encoding">טקסט בקידוד לא תקין</string>
+    <string name="csv_more_skipped_rows">…ועוד %1$d שורות לא תקינות.</string>
+    <string name="toast_restore_settings_warning">שוחזרו %1$d נקודות, אך לא ניתן היה לשמור את ההגדרות</string>
+    <string name="restore_in_progress">משחזר גיבוי</string>
+    <string name="restore_validating">מאמת ומכין את נתוני הגיבוי…</string>
+    <string name="restore_finalizing">שומר נקודות ותמונות…</string>
+    <string name="toast_quick_add_save_failed">הוספה מהירה לא הצליחה לשמור את הנקודה. נסה שוב.</string>
     <string name="toast_export_success">יוצאו %1$d נקודות</string>
     <string name="action_clear_cache">ניקוי מטמון המפה</string>
     <string name="action_back">חזרה</string>

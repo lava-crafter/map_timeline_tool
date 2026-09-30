@@ -17,6 +17,9 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.Manifest
+import android.app.Activity
+import android.app.Application
+import android.os.Bundle
 import android.view.WindowManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
@@ -41,21 +44,45 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
+import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 
 /** Exercises the same saved Activity state used by camera and document callbacks without opening a camera. */
 @RunWith(AndroidJUnit4::class)
 class ActivityResultRecreationTest {
     private val compose = createAndroidComposeRule<MainActivity>()
+    private val visibleActivityRule = object : ExternalResource() {
+        private val app get() = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as Application
+        private val callbacks = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                if (activity is MainActivity) {
+                    activity.window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        }
+
+        // Window flags do not survive recreation. Apply the existing test-only visibility
+        // policy to every new Activity, including on secure/locked unattended test devices.
+        override fun before() = app.registerActivityLifecycleCallbacks(callbacks)
+        override fun after() = app.unregisterActivityLifecycleCallbacks(callbacks)
+    }
     @get:Rule val rules: RuleChain = RuleChain
         .outerRule(GrantPermissionRule.grant(
             Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION
         ))
+        .around(visibleActivityRule)
         .around(compose)
 
     @Test
     fun addDraftRemainsOpenWithEditedTitleAfterRecreation() {
-        keepActivityVisible()
         compose.onNodeWithText(label(R.string.action_add_point)).performClick()
         compose.onNodeWithText(label(R.string.dialog_title_new_point)).assertIsDisplayed()
         compose.onNodeWithText(label(R.string.dialog_title_label)).performTextInput("Phase 6 draft")
@@ -69,7 +96,6 @@ class ActivityResultRecreationTest {
 
     @Test
     fun editDraftReturnsToTheSamePointAfterRecreation() {
-        keepActivityVisible()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val repository = context.appGraph().pointRepositoryGateway
         val title = "Phase 6 edit ${UUID.randomUUID()}"
@@ -99,14 +125,6 @@ class ActivityResultRecreationTest {
             assertTrue(runBlocking { repository.getAll().any { it.id == id } })
         } finally {
             runBlocking { repository.delete(point.copy(id = id)) }
-        }
-    }
-
-    private fun keepActivityVisible() {
-        compose.runOnUiThread {
-            compose.activity.window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 

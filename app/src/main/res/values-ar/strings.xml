@@ -8,6 +8,17 @@
     <string name="action_import_zip">استيراد ZIP</string>
     <string name="toast_import_success">تم استيراد %1$d نقطة</string>
     <string name="toast_import_failed">فشل الاستيراد</string>
+    <string name="csv_import_summary">تم استيراد %1$d نقطة؛ تم تخطي %2$d صفوف غير صالحة.</string>
+    <string name="csv_skipped_row">صف البيانات %1$d: %2$s</string>
+    <string name="csv_invalid_coordinates">إحداثيات غير صالحة</string>
+    <string name="csv_invalid_timestamp">طابع زمني غير صالح أو مفقود</string>
+    <string name="csv_invalid_text_encoding">نص بترميز غير صالح</string>
+    <string name="csv_more_skipped_rows">…و%1$d صفوف غير صالحة أخرى.</string>
+    <string name="toast_restore_settings_warning">تمت استعادة %1$d نقطة، لكن تعذر حفظ الإعدادات</string>
+    <string name="restore_in_progress">جارٍ استعادة النسخة الاحتياطية</string>
+    <string name="restore_validating">جارٍ التحقق من بيانات النسخة الاحتياطية وتجهيزها…</string>
+    <string name="restore_finalizing">جارٍ حفظ النقاط والصور…</string>
+    <string name="toast_quick_add_save_failed">تعذر على الإضافة السريعة حفظ النقطة. يُرجى المحاولة مرة أخرى.</string>
     <string name="toast_export_success">تم تصدير %1$d نقطة</string>
     <string name="action_clear_cache">مسح ذاكرة التخزين المؤقت للخريطة</string>
     <string name="action_back">رجوع</string>

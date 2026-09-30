@@ -17,6 +17,7 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -28,6 +29,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,8 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -49,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -58,13 +63,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import kotlinx.coroutines.delay
-import org.osmdroid.tileprovider.MapTileProviderBasic
-import org.osmdroid.tileprovider.modules.IFilesystemCache
-import org.osmdroid.tileprovider.modules.INetworkAvailablityCheck
-import org.osmdroid.tileprovider.modules.NetworkAvailabliltyCheck
 import org.osmdroid.tileprovider.modules.SqlTileWriter
 import org.osmdroid.tileprovider.tilesource.ITileSource
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.compass.InternalCompassOrientationProvider
 import org.osmdroid.util.GeoPoint
@@ -78,7 +78,6 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.infowindow.InfoWindow
-import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,7 +91,7 @@ fun MapScreen(
     isActive: Boolean,
     zoomBehavior: ZoomButtonBehavior,
     markerScale: Float,
-    downloadedOnly: Boolean,
+    mapAccessPolicy: MapTileAccessPolicy,
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
     onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit
@@ -180,25 +179,24 @@ fun MapScreen(
     var hasAutoCentered by remember { mutableStateOf(false) }
     var policyNetworkCheck by remember { mutableStateOf<PolicyAwareNetworkCheck?>(null) }
     var policyFilesystemCache by remember { mutableStateOf<PolicyAwareFilesystemCache?>(null) }
-    var previousDownloadedOnly by remember { mutableStateOf(downloadedOnly) }
 
-    Box {
+    fun createTileProvider(viewContext: Context, source: ITileSource): OnlineMapTileProvider {
+        val networkCheck = PolicyAwareNetworkCheck(viewContext).apply {
+            allowNetwork = mapAccessPolicy.allowNetwork
+        }
+        val filesystemCache = PolicyAwareFilesystemCache(SqlTileWriter()).apply {
+            allowWrites = mapAccessPolicy.allowCacheWrites
+        }
+        policyNetworkCheck = networkCheck
+        policyFilesystemCache = filesystemCache
+        return OnlineMapTileProvider(viewContext, source, networkCheck, filesystemCache)
+    }
+
+    Box(modifier = Modifier.fillMaxSize().testTag("map_screen")) {
         AndroidView(
             factory = { viewContext ->
                 val source = mapTileSourceById(mapTileSourceId).toOsmdroidSource(viewContext)
-                val networkCheck = PolicyAwareNetworkCheck(viewContext).apply {
-                    allowNetwork = !downloadedOnly
-                }
-                val filesystemCache = PolicyAwareFilesystemCache(SqlTileWriter()).apply {
-                    allowWrites = !downloadedOnly
-                }
-                val provider = MapTileProviderBasic(
-                    SimpleRegisterReceiver(viewContext),
-                    networkCheck,
-                    source,
-                    viewContext,
-                    filesystemCache
-                )
+                val provider = createTileProvider(viewContext, source)
                 MapView(viewContext, provider).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -207,8 +205,8 @@ fun MapScreen(
                     setTileSource(source)
                     // setUseDataConnection must be applied after setTileSource, otherwise the
                     // provider created by setTileSource may reset network behavior.
-                    setUseDataConnection(!downloadedOnly)
-                    tileProvider.setUseDataConnection(!downloadedOnly)
+                    setUseDataConnection(mapAccessPolicy.allowNetwork)
+                    tileProvider.setUseDataConnection(mapAccessPolicy.allowNetwork)
                     setMultiTouchControls(true)
                     zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                     controller.setZoom(16.0)
@@ -228,8 +226,6 @@ fun MapScreen(
                         }
                     })
                     onResume()
-                    policyNetworkCheck = networkCheck
-                    policyFilesystemCache = filesystemCache
                     mapView = this
                 }
             },
@@ -244,18 +240,18 @@ fun MapScreen(
             update = { map ->
                 val targetSource = mapTileSourceById(mapTileSourceId).toOsmdroidSource(context)
                 if (map.tileProvider.tileSource.name() != targetSource.name()) {
+                    // Keep late downloads from the old source out of the new source's memory cache.
+                    // Replacing only the provider preserves the MapView's viewport and overlays.
+                    policyNetworkCheck?.allowNetwork = false
+                    policyFilesystemCache?.allowWrites = false
+                    map.setTileProvider(createTileProvider(map.context, targetSource))
                     map.setTileSource(targetSource)
                 }
-                policyNetworkCheck?.allowNetwork = !downloadedOnly
-                policyFilesystemCache?.allowWrites = !downloadedOnly
+                policyNetworkCheck?.allowNetwork = mapAccessPolicy.allowNetwork
+                policyFilesystemCache?.allowWrites = mapAccessPolicy.allowCacheWrites
                 // Important: setUseDataConnection must be called after setTileSource to ensure the internal provider respects it.
-                map.setUseDataConnection(!downloadedOnly)
-                map.tileProvider.setUseDataConnection(!downloadedOnly)
-                if (!previousDownloadedOnly && downloadedOnly) {
-                    // Drop in-memory tiles captured while online so the no-network behavior is visible immediately.
-                    map.tileProvider.clearTileCache()
-                }
-                previousDownloadedOnly = downloadedOnly
+                map.setUseDataConnection(mapAccessPolicy.allowNetwork)
+                map.tileProvider.setUseDataConnection(mapAccessPolicy.allowNetwork)
 
                 if (!hasAutoCentered) {
                     if (points.isNotEmpty()) {
@@ -345,6 +341,23 @@ fun MapScreen(
                 overlaysReady = true
             }
         )
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                // Reserve the right-hand column for the layer and zoom buttons; long credits wrap.
+                .padding(start = 8.dp, top = 8.dp, end = 76.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Text(
+                text = stringResource(mapTileSourceById(mapTileSourceId).attributionRes),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .testTag("map_attribution")
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            )
+        }
 
         FloatingActionButton(
             modifier = Modifier
@@ -500,70 +513,6 @@ private fun createCounterIcon(
         canvas.drawText(text, size / 2f, y, textPaint)
     }
     return android.graphics.drawable.BitmapDrawable(context.resources, bitmap)
-}
-
-private class PolicyAwareNetworkCheck(context: android.content.Context) : INetworkAvailablityCheck {
-    private val delegate = NetworkAvailabliltyCheck(context)
-
-    @Volatile
-    var allowNetwork: Boolean = true
-
-    override fun getNetworkAvailable(): Boolean {
-        return allowNetwork && delegate.getNetworkAvailable()
-    }
-
-    override fun getWiFiNetworkAvailable(): Boolean {
-        return allowNetwork && delegate.getWiFiNetworkAvailable()
-    }
-
-    override fun getCellularDataNetworkAvailable(): Boolean {
-        return allowNetwork && delegate.getCellularDataNetworkAvailable()
-    }
-
-    @Deprecated("Deprecated by osmdroid INetworkAvailablityCheck; kept for interface compatibility.")
-    @Suppress("DEPRECATION")
-    override fun getRouteToPathExists(hostAddress: Int): Boolean {
-        return allowNetwork && delegate.getRouteToPathExists(hostAddress)
-    }
-}
-
-private class PolicyAwareFilesystemCache(
-    private val delegate: IFilesystemCache
-) : IFilesystemCache {
-    @Volatile
-    var allowWrites: Boolean = true
-
-    override fun saveFile(
-        pTileSource: ITileSource,
-        pMapTileIndex: Long,
-        pStream: InputStream,
-        pExpirationTime: Long?
-    ): Boolean {
-        if (!allowWrites) {
-            return false
-        }
-        return delegate.saveFile(pTileSource, pMapTileIndex, pStream, pExpirationTime)
-    }
-
-    override fun exists(pTileSource: ITileSource, pMapTileIndex: Long): Boolean {
-        return delegate.exists(pTileSource, pMapTileIndex)
-    }
-
-    override fun onDetach() {
-        delegate.onDetach()
-    }
-
-    override fun remove(pTileSource: ITileSource, pMapTileIndex: Long): Boolean {
-        return delegate.remove(pTileSource, pMapTileIndex)
-    }
-
-    override fun getExpirationTimestamp(pTileSource: ITileSource, pMapTileIndex: Long): Long? {
-        return delegate.getExpirationTimestamp(pTileSource, pMapTileIndex)
-    }
-
-    override fun loadTile(pTileSource: ITileSource, pMapTileIndex: Long): android.graphics.drawable.Drawable? {
-        return delegate.loadTile(pTileSource, pMapTileIndex)
-    }
 }
 
 private val SPECTRUM_COLORS = listOf(

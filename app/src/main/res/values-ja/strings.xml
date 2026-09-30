@@ -8,6 +8,17 @@
     <string name="action_import_zip">ZIPを読み込む</string>
     <string name="toast_import_success">%1$d件の地点を読み込みました</string>
     <string name="toast_import_failed">読み込みに失敗しました</string>
+    <string name="csv_import_summary">%1$d件の地点を読み込み、無効な%2$d行をスキップしました。</string>
+    <string name="csv_skipped_row">データ行%1$d：%2$s</string>
+    <string name="csv_invalid_coordinates">座標が無効</string>
+    <string name="csv_invalid_timestamp">タイムスタンプが無効または未指定</string>
+    <string name="csv_invalid_text_encoding">エンコードされたテキストが無効</string>
+    <string name="csv_more_skipped_rows">…ほかに無効な行が%1$d行あります。</string>
+    <string name="toast_restore_settings_warning">%1$d件の地点を復元しましたが、設定を保存できませんでした</string>
+    <string name="restore_in_progress">バックアップを復元中</string>
+    <string name="restore_validating">バックアップデータを検証して一時保存しています…</string>
+    <string name="restore_finalizing">地点と写真を保存しています…</string>
+    <string name="toast_quick_add_save_failed">クイック追加で地点を保存できませんでした。もう一度お試しください。</string>
     <string name="toast_export_success">%1$d件の地点を書き出しました</string>
     <string name="action_clear_cache">地図キャッシュを消去</string>
     <string name="action_back">戻る</string>

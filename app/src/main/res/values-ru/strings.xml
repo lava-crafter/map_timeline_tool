@@ -8,6 +8,17 @@
     <string name="action_import_zip">Импорт ZIP</string>
     <string name="toast_import_success">Импортировано точек: %1$d</string>
     <string name="toast_import_failed">Не удалось импортировать</string>
+    <string name="csv_import_summary">Импортировано точек: %1$d; пропущено недействительных строк: %2$d.</string>
+    <string name="csv_skipped_row">Строка данных %1$d: %2$s</string>
+    <string name="csv_invalid_coordinates">недействительные координаты</string>
+    <string name="csv_invalid_timestamp">недействительная или отсутствующая отметка времени</string>
+    <string name="csv_invalid_text_encoding">текст с недействительной кодировкой</string>
+    <string name="csv_more_skipped_rows">…и ещё недействительных строк: %1$d.</string>
+    <string name="toast_restore_settings_warning">Восстановлено точек: %1$d, но настройки не удалось сохранить</string>
+    <string name="restore_in_progress">Восстановление резервной копии</string>
+    <string name="restore_validating">Проверка и подготовка данных резервной копии…</string>
+    <string name="restore_finalizing">Сохранение точек и фотографий…</string>
+    <string name="toast_quick_add_save_failed">Не удалось сохранить точку через «Быстрое добавление». Попробуйте ещё раз.</string>
     <string name="toast_export_success">Экспортировано точек: %1$d</string>
     <string name="action_clear_cache">Очистить кэш карты</string>
     <string name="action_back">Назад</string>

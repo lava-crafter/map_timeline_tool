@@ -8,6 +8,17 @@
     <string name="action_import_zip">Importar ZIP</string>
     <string name="toast_import_success">Se importaron %1$d puntos</string>
     <string name="toast_import_failed">Error al importar</string>
+    <string name="csv_import_summary">Se importaron %1$d puntos; se omitieron %2$d filas no válidas.</string>
+    <string name="csv_skipped_row">Fila de datos %1$d: %2$s</string>
+    <string name="csv_invalid_coordinates">coordenadas no válidas</string>
+    <string name="csv_invalid_timestamp">marca de tiempo no válida o ausente</string>
+    <string name="csv_invalid_text_encoding">texto codificado no válido</string>
+    <string name="csv_more_skipped_rows">…y %1$d filas no válidas más.</string>
+    <string name="toast_restore_settings_warning">Se restauraron %1$d puntos, pero no se pudieron guardar los ajustes</string>
+    <string name="restore_in_progress">Restaurando copia de seguridad</string>
+    <string name="restore_validating">Validando y preparando datos de la copia de seguridad…</string>
+    <string name="restore_finalizing">Guardando puntos y fotos…</string>
+    <string name="toast_quick_add_save_failed">La adición rápida no pudo guardar el punto. Inténtalo de nuevo.</string>
     <string name="toast_export_success">Se exportaron %1$d puntos</string>
     <string name="action_clear_cache">Borrar caché del mapa</string>
     <string name="action_back">Atrás</string>
