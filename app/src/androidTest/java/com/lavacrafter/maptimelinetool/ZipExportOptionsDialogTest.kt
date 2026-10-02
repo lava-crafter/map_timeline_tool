@@ -17,10 +17,10 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool
 
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isToggleable
@@ -74,29 +74,48 @@ class ZipExportOptionsDialogTest {
     }
 
     @Test
-    fun choosingPhotosEnablesExportAndForwardsTheCurrentOptions() {
-        var includePhotos by mutableStateOf(false)
-        var includeTags by mutableStateOf(false)
-        var exportedOptions: Pair<Boolean, Boolean>? = null
+    fun photosWithoutPointsCannotBeConfirmed() {
         compose.setContent {
             ZipExportOptionsDialog(
                 includePoints = false,
-                includeTags = includeTags,
+                includeTags = false,
                 includeSensors = false,
-                includePhotos = includePhotos,
+                includePhotos = true,
                 onIncludePointsChange = {},
-                onIncludeTagsChange = { includeTags = it },
+                onIncludeTagsChange = {},
                 onIncludeSensorsChange = {},
-                onIncludePhotosChange = { includePhotos = it },
-                onConfirm = { exportedOptions = includeTags to includePhotos },
+                onIncludePhotosChange = {},
+                onConfirm = {},
                 onDismiss = {}
             )
         }
 
-        compose.onAllNodes(isToggleable())[1].performClick() // Tags checkbox
-        compose.onAllNodes(isToggleable())[3].performClick() // Photos checkbox
-        compose.onNodeWithText(label(R.string.action_export_zip)).assertIsEnabled().performClick()
+        compose.onAllNodes(isToggleable())[3].assertIsNotEnabled() // Photos checkbox
+        compose.onNodeWithText(label(R.string.action_export_zip)).assertIsNotEnabled()
+    }
 
+    @Test
+    fun selectingPointsEnablesPhotosAndForwardsValidOptions() {
+        var includePoints by mutableStateOf(false)
+        var includePhotos by mutableStateOf(false)
+        var exportedOptions: Pair<Boolean, Boolean>? = null
+        compose.setContent {
+            ZipExportOptionsDialog(
+                includePoints = includePoints,
+                includeTags = false,
+                includeSensors = false,
+                includePhotos = includePhotos,
+                onIncludePointsChange = { includePoints = it },
+                onIncludeTagsChange = {},
+                onIncludeSensorsChange = {},
+                onIncludePhotosChange = { includePhotos = it },
+                onConfirm = { exportedOptions = includePoints to includePhotos },
+                onDismiss = {}
+            )
+        }
+        compose.onAllNodes(isToggleable())[0].performClick()
+        compose.onAllNodes(isToggleable())[3].assertIsEnabled().performClick()
+        compose.onNodeWithText(label(R.string.action_export_zip)).assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(true to true, exportedOptions) }
     }
 

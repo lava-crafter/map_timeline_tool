@@ -20,7 +20,9 @@ import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
+import com.lavacrafter.maptimelinetool.domain.usecase.PhotoCommitGuard
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
+import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
 import com.lavacrafter.maptimelinetool.ui.AppViewModel
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import java.io.File
@@ -28,9 +30,16 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeout
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -181,6 +190,286 @@ class ZipRestoreCoordinatorTest {
             assertTrue(committed.exists())
             assertFalse(orphan.exists())
             assertFalse(staging.exists())
+        }
+    }
+
+    @Test fun repeatedRestoreKeepsPhotoCountAndBytesStable() = runBlocking {
+        smallFixture { context, database, repository, archive ->
+            val state = MutableStateFlow<RestoreState>(RestoreState.Idle)
+            repeat(3) {
+                ZipRestoreCoordinator(context, repository).restore(Uri.fromFile(archive), state,
+                    viewModel(repository)::importZipData)
+                assertEquals(RestoreState.Success(1), state.value)
+                assertEquals(1, File(context.filesDir, "point_photos").listFiles().orEmpty().size)
+                assertFalse(File(context.filesDir, "point_photo_imports").listFiles()?.isNotEmpty() == true)
+            }
+            val photos = File(context.filesDir, "point_photos").listFiles().orEmpty()
+            assertEquals(1, database.pointDao().getAll().size)
+            assertEquals(1, photos.size)
+            assertTrue(photos.single().readBytes().contentEquals(jpegFromZipPhoto(archive)))
+        }
+    }
+
+    @Test fun v2RecoveryProtectsCommittedReferencesAndCleansRetiredFiles() = runBlocking {
+        fixture { context, database, repository, _ ->
+            val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+            val committed = File(dir, "point_photo_committed.jpg").apply { writeBytes(jpeg(8)) }
+            val retired = File(dir, "point_photo_retired.jpg").apply { writeBytes(jpeg(8)) }
+            val orphan = File(dir, "point_photo_orphan.jpg").apply { writeBytes(jpeg(8)) }
+            val staging = File(context.filesDir, "point_photo_imports/import_crashed").apply { mkdirs() }
+            File(staging, "restore-journal.json").writeText(
+                "{\"version\":2,\"newPhotos\":[\"${committed.name}\",\"${orphan.name}\"],\"retiredPhotos\":[\"${retired.name}\"]}")
+            database.pointDao().insert(PointEntity(timestamp = 1_710_000_000_000L, latitude = 10.0,
+                longitude = 20.0, title = "Saved", note = "", photoPath = committed.name))
+
+            ZipRestoreCoordinator(context, repository).recover()
+
+            assertTrue(committed.exists())
+            assertFalse(orphan.exists())
+            assertFalse(retired.exists())
+            assertFalse(staging.exists())
+        }
+    }
+
+    @Test fun cleanupFailureWarnsAndRecoveryRetries() = runBlocking {
+        smallFixture { context, database, repository, archive ->
+            val state = MutableStateFlow<RestoreState>(RestoreState.Idle)
+            ZipRestoreCoordinator(context, repository).restore(
+                Uri.fromFile(archive), state, viewModel(repository)::importZipData)
+            val oldPath = database.pointDao().getAll().single().photoPath!!
+            ZipRestoreCoordinator(context, repository, deletePhoto = { false }).restore(
+                Uri.fromFile(archive), state, viewModel(repository)::importZipData)
+            assertTrue(state.value is RestoreState.SuccessWithWarning)
+            assertTrue((state.value as RestoreState.SuccessWithWarning).photoCleanupPending)
+            assertFalse((state.value as RestoreState.SuccessWithWarning).settingsNotApplied)
+            assertTrue(File(context.filesDir, "point_photos/$oldPath").exists())
+            val staging = File(context.filesDir, "point_photo_imports").listFiles().orEmpty().single()
+            assertTrue(File(staging, "restore-journal.json").exists())
+            ZipRestoreCoordinator(context, repository).recover()
+            assertFalse(staging.exists())
+            assertEquals(1, database.pointDao().getAll().size)
+            assertEquals(1, File(context.filesDir, "point_photos").listFiles().orEmpty().size)
+            assertFalse(File(context.filesDir, "point_photos/$oldPath").exists())
+        }
+    }
+
+    @Test fun replacingPhotoKeepsOldFileWhenAnotherPointReferencesIt() = runBlocking {
+        smallFixture { context, database, repository, archive ->
+            val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+            val old = File(dir, "point_photo_shared.jpg").apply { writeBytes(jpeg(8)) }
+            database.pointDao().insert(PointEntity(timestamp = 1_710_000_000_000L, latitude = 10.0,
+                longitude = 20.0, title = "Point", note = "", photoPath = old.name))
+            database.pointDao().insert(PointEntity(timestamp = 1_710_000_000_100L, latitude = 11.0,
+                longitude = 21.0, title = "Other point", note = "", photoPath = old.name))
+            ZipRestoreCoordinator(context, repository).restore(Uri.fromFile(archive),
+                MutableStateFlow(RestoreState.Idle), viewModel(repository)::importZipData)
+            assertTrue(old.exists())
+            assertEquals(2, database.pointDao().getAll().size)
+            assertEquals(2, dir.listFiles().orEmpty().size)
+            assertTrue(database.pointDao().getAll().single { it.title == "Point" }.photoPath != old.name)
+            assertTrue(database.pointDao().getAll().any { it.title == "Other point" && it.photoPath == old.name })
+        }
+    }
+
+    @Test fun rollbackRecoveryKeepsRetiredReferencesAndRemovesNewOrphans() = runBlocking {
+        fixture { context, database, repository, _ ->
+            val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+            val old = File(dir, "legacy_photo.jpg").apply { writeBytes(jpeg(8)) }
+            val moved = File(dir, "point_photo_uncommitted.jpg").apply { writeBytes(jpeg(16)) }
+            val staging = File(context.filesDir, "point_photo_imports/import_crashed").apply { mkdirs() }
+            File(staging, "restore-journal.json").writeText(
+                """{"version":2,"newPhotos":["${moved.name}"],"retiredPhotos":["${old.name}"]}""")
+            database.pointDao().insert(PointEntity(timestamp = 1L, latitude = 10.0,
+                longitude = 20.0, title = "Old", note = "", photoPath = old.name))
+            ZipRestoreCoordinator(context, repository).recover()
+            assertTrue(old.exists())
+            assertFalse(moved.exists())
+            assertFalse(staging.exists())
+            assertEquals(old.name, database.pointDao().getAll().single().photoPath)
+        }
+    }
+
+    @Test fun v2RecoveryPreservesSharedRetiredPhotos() = runBlocking {
+        fixture { context, database, repository, _ ->
+            val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+            val old = File(dir, "shared.jpg").apply { writeBytes(jpeg(8)) }
+            val fresh = File(dir, "point_photo_committed.jpg").apply { writeBytes(jpeg(16)) }
+            val staging = File(context.filesDir, "point_photo_imports/import_crashed").apply { mkdirs() }
+            File(staging, "restore-journal.json").writeText(
+                """{"version":2,"newPhotos":["${fresh.name}"],"retiredPhotos":["${old.name}"]}""")
+            for ((index, path) in listOf(fresh.name, old.name).withIndex()) {
+                database.pointDao().insert(PointEntity(timestamp = index.toLong(), latitude = 10.0,
+                    longitude = 20.0, title = "Point $index", note = "", photoPath = path))
+            }
+            ZipRestoreCoordinator(context, repository).recover()
+            assertTrue(old.exists())
+            assertTrue(fresh.exists())
+            assertFalse(staging.exists())
+        }
+    }
+
+    @Test fun moveAndCommitFailuresKeepExistingRowAndPhoto() = runBlocking {
+        for (failMove in listOf(true, false)) smallFixture { context, database, repository, archive ->
+            val oldFile = File(context.filesDir, "point_photos/legacy.jpg").apply {
+                parentFile!!.mkdirs()
+                writeBytes(jpeg(16))
+            }
+            val original = PointEntity(timestamp = 1_710_000_000_000L, latitude = 10.0,
+                longitude = 20.0, title = "Point", note = "", photoPath = oldFile.name)
+            val id = database.pointDao().insert(original)
+            val failing = object : PointRepositoryGateway by repository {
+                override suspend fun <T> inTransaction(block: suspend () -> T): T = repository.inTransaction {
+                    block()
+                    throw IllegalStateException("Injected transaction commit failure")
+                }
+            }
+            val error = runCatching {
+                ZipRestoreCoordinator(context, repository, movePhoto = { source, target ->
+                    !failMove && source.renameTo(target)
+                }).restore(Uri.fromFile(archive), MutableStateFlow(RestoreState.Idle),
+                    viewModel(if (failMove) repository else failing)::importZipData)
+            }.exceptionOrNull()
+            assertTrue(error is IllegalStateException)
+            assertEquals(original.copy(id = id), database.pointDao().getAll().single())
+            assertTrue(oldFile.readBytes().contentEquals(jpeg(16)))
+            assertEquals(listOf(oldFile.name), oldFile.parentFile!!.listFiles().orEmpty().map { it.name })
+            assertFalse(File(context.filesDir, "point_photo_imports").listFiles()?.isNotEmpty() == true)
+        }
+    }
+
+    @Test fun rollbackCleanupFailureKeepsOriginalErrorAndRecoverableJournal() = runBlocking {
+        smallFixture { context, database, repository, archive ->
+            val dbError = IllegalStateException("Injected commit failure")
+            val failing = object : PointRepositoryGateway by repository {
+                override suspend fun <T> inTransaction(block: suspend () -> T): T = repository.inTransaction {
+                    block()
+                    throw dbError
+                }
+            }
+            val error = runCatching {
+                ZipRestoreCoordinator(context, repository, deletePhoto = { false }).restore(Uri.fromFile(archive),
+                    MutableStateFlow(RestoreState.Idle), viewModel(failing)::importZipData)
+            }.exceptionOrNull()
+            assertSame(dbError, error)
+            assertEquals(1, dbError.suppressed.size)
+            assertTrue(database.pointDao().getAll().isEmpty())
+            val staging = File(context.filesDir, "point_photo_imports").listFiles().orEmpty().single()
+            assertTrue(File(staging, "restore-journal.json").exists())
+            ZipRestoreCoordinator(context, repository).recover()
+            assertEmpty(context, database)
+        }
+    }
+
+    @Test fun invalidJournalCannotDeleteAnyFilesAndIsRetained() = runBlocking {
+        fixture { context, _, repository, _ ->
+            val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+            val photo = File(dir, "point_photo_orphan.jpg").apply { writeBytes(jpeg(8)) }
+            val staging = File(context.filesDir, "point_photo_imports/import_crashed").apply { mkdirs() }
+            val journal = File(staging, "restore-journal.json").apply { writeText(
+                """{"version":2,"newPhotos":["${photo.name}"],"retiredPhotos":["../backup.zip"]}""") }
+            val error = runCatching { ZipRestoreCoordinator(context, repository).recover() }.exceptionOrNull()
+            assertTrue(error is IllegalArgumentException)
+            assertTrue(photo.exists())
+            assertTrue(journal.exists())
+        }
+    }
+
+    @Test fun photosOnlyAndUnreferencedArchivesCannotTouchExistingData() = runBlocking {
+        fixture { context, database, repository, archive ->
+            val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+            val original = File(dir, "existing.jpg").apply { writeBytes(jpeg(16)) }
+            database.pointDao().insert(PointEntity(timestamp = 1L, latitude = 10.0,
+                longitude = 20.0, title = "Original", note = "", photoPath = original.name))
+            val points = "name,description,latitude,longitude,time_utc\nP,,10,20,2024-01-01T00:00:00Z\n"
+            val canonical = """{"backup_version":2,"sections":{"points":false,"photos":true,"tags":false,"settings":false},"counts":{"points":0,"photos":1}}"""
+            for (entries in listOf(
+                listOf("backup_manifest.json" to canonical.toByteArray(), "photos/orphan.jpg" to jpeg(8)),
+                listOf("photos/orphan.jpg" to jpeg(8)),
+                listOf("points.csv" to points.toByteArray(), "photos/orphan.jpg" to jpeg(8))
+            )) {
+                java.util.zip.ZipOutputStream(archive.outputStream()).use { zip ->
+                    entries.forEach { (name, bytes) ->
+                        zip.putNextEntry(java.util.zip.ZipEntry(name))
+                        zip.write(bytes)
+                        zip.closeEntry()
+                    }
+                }
+                val error = runCatching {
+                    ZipRestoreCoordinator(context, repository).restore(Uri.fromFile(archive),
+                        MutableStateFlow(RestoreState.Idle), viewModel(repository)::importZipData)
+                }.exceptionOrNull()
+                assertTrue(error is IllegalArgumentException)
+                assertEquals("Original", database.pointDao().getAll().single().title)
+                assertEquals(listOf(original.name), dir.listFiles().orEmpty().map { it.name })
+                assertTrue(original.readBytes().contentEquals(jpeg(16)))
+                assertFalse(File(context.filesDir, "point_photo_imports").listFiles()?.isNotEmpty() == true)
+            }
+        }
+    }
+
+    @Test fun emptyFullBackupRestoresSuccessfully() = runBlocking {
+        fixture { context, database, repository, archive ->
+            FullBackupAssembler(repository).assemble().writeZip(archive.outputStream(),
+                { null }, SettingsStore.exportBackupJson(context), "test")
+            val state = MutableStateFlow<RestoreState>(RestoreState.Idle)
+            ZipRestoreCoordinator(context, repository).restore(Uri.fromFile(archive), state,
+                viewModel(repository)::importZipData)
+            assertEquals(RestoreState.Success(0), state.value)
+            assertEmpty(context, database)
+        }
+    }
+
+    @Test fun concurrentStaleCandidateCannotReReferenceRetiredPhotoDuringRestore() = runBlocking {
+        smallFixture { context, database, repository, archive ->
+            withTimeout(10_000L) {
+                val dir = File(context.filesDir, "point_photos").apply { mkdirs() }
+                val old = File(dir, "old.jpg").apply { writeBytes(jpeg(16)) }
+                database.pointDao().insert(PointEntity(timestamp = 1_710_000_000_000L, latitude = 10.0,
+                    longitude = 20.0, title = "Point", note = "", photoPath = old.name))
+                val guard = PhotoCommitGuard { resolvePointPhotoFile(context, it)?.isFile == true }
+                val moveStarted = CompletableDeferred<Unit>()
+                val releaseMove = CountDownLatch(1)
+                val sampled = CompletableDeferred<Unit>()
+                val writer = PointWriteUseCase(repository, object : SensorSnapshotPort {
+                    override suspend fun readSnapshot(): PointSensorSnapshot {
+                        sampled.complete(Unit)
+                        return PointSensorSnapshot()
+                    }
+                }, {}, photoCommitGuard = guard)
+                val restore = async(Dispatchers.IO) {
+                    ZipRestoreCoordinator(context, repository, photoCommitGuard = guard,
+                        movePhoto = { source, target ->
+                            moveStarted.complete(Unit)
+                            check(releaseMove.await(5, TimeUnit.SECONDS)) { "Test timed out waiting to release move" }
+                            source.renameTo(target)
+                        }).restore(Uri.fromFile(archive), MutableStateFlow(RestoreState.Idle),
+                            viewModel(repository)::importZipData)
+                }
+                try {
+                    moveStarted.await()
+                    val staleSave = async(Dispatchers.IO) {
+                        runCatching { writer.addPointWithTags("Stale draft", "", GeoPoint(1.0, 2.0),
+                            2L, emptySet(), old.name) }.exceptionOrNull()
+                    }
+                    sampled.await()
+                    assertFalse(staleSave.isCompleted)
+                    releaseMove.countDown()
+                    restore.await()
+                    assertTrue(staleSave.await() is IllegalArgumentException)
+                    assertEquals(1, database.pointDao().getAll().size)
+                    assertFalse(old.exists())
+                    assertEquals(1, dir.listFiles().orEmpty().size)
+                } finally {
+                    releaseMove.countDown()
+                }
+            }
+        }
+    }
+
+    private fun jpegFromZipPhoto(archive: File): ByteArray {
+        java.util.zip.ZipFile(archive).use { zip ->
+            val entry = zip.entries().asSequence().first { it.name.startsWith("photos/") }
+            return zip.getInputStream(entry).use { it.readBytes() }
         }
     }
 

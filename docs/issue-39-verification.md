@@ -69,3 +69,35 @@
 - 设备为 SM-X730 / API 36，测试前 `/data` 可用约 39 GiB；`ANDROID_SERIAL` 明确限定该设备。APK ID / instrumentation target 分别为 `.debug` / `.debug`，test package 为 `.debug.test`。正式包只做只读 `pm path` 检查，完整测试前后的 APK 路径完全一致，没有 clear、uninstall、覆盖安装或启动正式 App。connected 完成后 debug 包已不再安装；restore fixture 内的 staging/journal 清理由断言、recovery 和 teardown 覆盖。
 - runner 有一条 `androidx.test.services` 未安装导致 appops 设置失败的环境提示，但全部 80 个 connected 用例完成且无跳过，整体 `BUILD SUCCESSFUL`；不将该提示当成产品失败或跳过测试的理由。
 - 最终 `git diff --check` 通过，generated OSS resources 和 Room schema 未产生额外 source-tree 修改。
+
+## 剩余修复阶段 1 — ZIP 照片完整性与恢复清理（2026-10-02）
+
+对应 [剩余问题修复计划](https://github.com/lava-crafter/map_timeline_tool/issues/39#issuecomment-5957251841) 的第一阶段，基于 `ffe29b3` 工作树实施；未改 Room schema 或现有 ZIP Point/Tag 幂等匹配规则。
+
+- 普通 ZIP 不能确认仅照片导出；exporter 在写任何输出前拒绝该选项。Importer 对 v1/v2 manifest 与无 manifest 的照片归档都要求 Points，并拒绝未被 Point 引用的照片；合法空 Full Backup 仍可导出恢复。旧 GeoJSON 照片引用保留 archive 路径至最终解析，避免二次映射丢失。
+- `importZipData` 在事务中从实际匹配的旧行收集退休照片路径；coordinator 在 move/Room commit 前持久化 v2 journal，分开记录新文件与退休旧文件。提交、回滚和 recovery 都在共享锁下按全库引用清理，兼容 v1 journal，并保护共享照片。
+- 提交后清理失败不撤销正确恢复的数据；返回明确的照片清理 warning，保留 journal，供下一次启动/restore 重试。回滚清理失败保留原错误（清理错误作为 suppressed）及 journal。整个 journal 的路径验证通过后才允许删除。
+- `AppGraph` 共用 `PhotoCommitGuard`，接入 Add/Edit/Delete/CSV 核心提交、Restore/Recovery 及 UI 候选照片清理。定位、采样、noise、解压不持有该锁；提交前检查照片仍存在。Edit/Delete 读取当前 DB 行的照片路径，不以过期草稿决定清理对象。
+- JVM 回归包含 exporter 拒绝且零输出、无 manifest/manifest 仅照片拒绝、未引用照片拒绝、空备份、旧 GeoJSON 单次映射、共享照片、旧草稿、并发清理与采样/noise 不占提交锁。
+- 新增 connected 回归包含连续三次含照片 ZIP 恢复、共享旧文件、move/DB 故障、v2 提交前/后遗留 journal、清理重试、原异常保护、危险 journal、恶意归档不改原数据、空 Full Backup、Restore 与旧候选提交并发，以及导出选项 UI 正反例。
+
+本轮最终执行：
+
+```bash
+./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
+```
+
+- **BUILD SUCCESSFUL**；最终 JVM XML 为 **171/171，0 failures / errors / skipped**。其中 `PointWriteUseCaseTest` 16/16、`ZipExportImportTest` 18/18、`ZipRestorePreflightTest` 9/9、`ArchiveBoundaryVerificationTest` 7/7。
+- Debug 与 AndroidTest APK 构建、设备测试 Kotlin 编译均通过；APK ID 分别核对为 `com.lavacrafter.maptimelinetool.debug`、`.debug.test`。
+- lint 为 **0 active errors / 7 个既有 warnings**；未修改 baseline 或新增 suppression。`git diff --check` 通过，未产生额外 schema/generated source 修改。
+
+**首次本地验证的设备边界：**当时 `adb devices -l` 无设备，设备测试仅编译；后续设备接入结果见下节。现存 2026-09-30 的 80/80 connected 结果不覆盖本轮改动。未进行真实进程 kill 或突然断电测试，也不宣称跨断电文件系统原子性。
+
+### 设备接入后的补充验收（2026-10-02）
+
+- SM-X730 / API 36 已连接，使用 `ANDROID_SERIAL=localhost:54461` 限定目标。APK badging 与 instrumentation manifest 分别确认 application ID 和 targetPackage 均为 `com.lavacrafter.maptimelinetool.debug`，测试包为 `.debug.test`。
+- 第一阶段定向 connected：`ZipRestoreCoordinatorTest`、`ZipExportOptionsDialogTest`、`DataIntegrityVerificationTest`、`PointPhotoUtilsTest`，原始结果 XML 为 **54/54，0 failures / errors / skipped**，Gradle **BUILD SUCCESSFUL**。
+- 随后执行完整 `:app:connectedDebugAndroidTest`，原始结果 XML 为 **93/93，0 failures / errors / skipped**，Gradle **BUILD SUCCESSFUL**。包含新增照片恢复/并发清理用例及既有迁移、Activity recreation、地图、导出、传感器与设置回归。
+- 运行器提示定向仅取到 4/54、全量仅取到 2/93 用例的 logcat，但全部测试完成且通过；这是日志采集限制，不是跳过或失败。
+- 测试前后对正式包仅执行只读 `pm path com.lavacrafter.maptimelinetool`，均无输出（该设备没有已安装的正式包），保存的前后结果 `cmp` 一致；未 clear/uninstall/覆盖安装或启动正式包。最终 `git diff --check` 通过。
+- 第一阶段本地/设备自动验收完成：**JVM 171/171 + connected 93/93**。进程中断覆盖仍是 journal 边界模拟，不宣称真实 kill/断电验证；第二阶段尚未实施。

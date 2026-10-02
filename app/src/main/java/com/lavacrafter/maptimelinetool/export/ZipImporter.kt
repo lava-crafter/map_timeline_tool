@@ -167,12 +167,14 @@ object ZipImporter {
         }
 
         if (points.isEmpty() && !pointsGeoJsonText.isNullOrBlank()) {
-            points = GeoJsonExporter.parsePointsFromGeoJson(requireNotNull(pointsGeoJsonText)) { relPath ->
-                photoMapping[normalizePhotoRelPath(relPath)]
-            }
+            // Keep archive paths until the final resolution pass (also used by CSV).
+            points = GeoJsonExporter.parsePointsFromGeoJson(requireNotNull(pointsGeoJsonText)) { it }
         }
         if (points.size > limits.maxPoints) throw ZipImportLimitExceededException("Too many points in backup")
 
+        manifest?.let { declared ->
+            require(!declared.sections.photos || declared.sections.points) { "Photo backups must include points" }
+        }
         manifest?.takeIf { it.version >= 2 }?.let { declared ->
             val sections = declared.sections
             require(sections.points == hasPointsEntry) { "Points section does not match backup manifest" }
@@ -199,6 +201,9 @@ object ZipImporter {
                 "Missing or unreferenced backup photos"
             }
         }
+        require(importedPhotoMetadata.isEmpty() || hasPointsEntry) { "Photo backups must include points" }
+        val referencedPhotoPaths = points.mapNotNull { it.photoPath?.let(::normalizePhotoRelPath) }.toSet()
+        require(referencedPhotoPaths.containsAll(importedPhotoMetadata.keys)) { "Unreferenced backup photos" }
         val tagIds = tags.mapTo(HashSet(tags.size)) { it.legacyId }
         require(pointTags.all { it.pointIndex in points.indices && it.legacyTagId in tagIds }) {
             "Invalid point-tag reference in backup"

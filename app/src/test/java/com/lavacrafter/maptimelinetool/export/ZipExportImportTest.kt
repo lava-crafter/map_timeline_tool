@@ -271,27 +271,42 @@ class ZipExportImportTest {
     }
 
     @Test
-    fun `zip export photos only writes photos folder entries`() {
+    fun `zip export rejects photos without points before writing output`() {
         val tempDir = createTempDirectory("zip-export-photos-only-test").toFile()
         val photo = File(tempDir, "a.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val output = ByteArrayOutputStream()
 
-        ZipExporter.export(
-            points = listOf(
-                Point(
-                    timestamp = 1710000000000L,
-                    latitude = 10.0,
-                    longitude = 20.0,
-                    title = "A",
-                    note = "B",
-                    photoPath = photo.absolutePath
+        try {
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                ZipExporter.export(
+                    points = listOf(
+                        Point(
+                            timestamp = 1710000000000L,
+                            latitude = 10.0,
+                            longitude = 20.0,
+                            title = "A",
+                            note = "B",
+                            photoPath = photo.absolutePath
+                        )
+                    ),
+                    outputStream = output,
+                    resolvePhotoFile = { path -> File(path) },
+                    options = ZipExporter.ExportOptions(includePoints = false, includeTags = false, includeSensors = false, includePhotos = true)
                 )
-            ),
-            outputStream = output,
-            resolvePhotoFile = { path -> File(path) },
-            options = ZipExporter.ExportOptions(includePoints = false, includeTags = false, includeSensors = false, includePhotos = true)
-        )
+            }
+            assertTrue(output.toByteArray().isEmpty())
+        } finally { tempDir.deleteRecursively() }
+    }
 
+    @Test
+    fun `zip export allows empty points section backup`() {
+        val output = ByteArrayOutputStream()
+        ZipExporter.export(
+            points = emptyList(),
+            outputStream = output,
+            resolvePhotoFile = { null },
+            options = ZipExporter.ExportOptions(includePoints = true, includePhotos = true)
+        )
         val entryNames = mutableSetOf<String>()
         java.util.zip.ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
             while (true) {
@@ -300,9 +315,13 @@ class ZipExportImportTest {
                 zip.closeEntry()
             }
         }
-        assertTrue(entryNames.none { it == "points.csv" })
-        assertTrue(entryNames.any { it.startsWith("photos/") })
+        assertTrue(entryNames.contains("points.csv"))
         assertTrue(entryNames.contains("backup_manifest.json"))
+        val imported = ZipImporter.importZip(ByteArrayInputStream(output.toByteArray())) { _, _ ->
+            throw AssertionError("Empty backup must not contain photos")
+        }
+        assertTrue(imported.points.isEmpty())
+        assertEquals(0, imported.importedPhotoCount)
     }
 
     @Test
@@ -330,6 +349,32 @@ class ZipExportImportTest {
         assertNull(imported.points.first().photoPath)
         assertEquals(1, imported.missingPhotoCount)
         assertNotNull(imported.points.first().title)
+    }
+
+    @Test
+    fun `zip import rejects photo entries without points or references`() {
+        val photoOnlyZip = ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(photoOnlyZip).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("photos/orphan.jpg"))
+            zip.write(byteArrayOf(1, 2, 3))
+            zip.closeEntry()
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            ZipImporter.importZip(ByteArrayInputStream(photoOnlyZip.toByteArray())) { _, _ -> "stored/photo.jpg" }
+        }
+
+        val unreferencedPhotoZip = ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(unreferencedPhotoZip).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("points.csv"))
+            zip.write(CsvExporter.buildCsv(emptyList()).toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("photos/orphan.jpg"))
+            zip.write(byteArrayOf(1, 2, 3))
+            zip.closeEntry()
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            ZipImporter.importZip(ByteArrayInputStream(unreferencedPhotoZip.toByteArray())) { _, _ -> "stored/photo.jpg" }
+        }
     }
 
     @Test

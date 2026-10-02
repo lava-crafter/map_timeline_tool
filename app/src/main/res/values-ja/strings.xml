@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">エンコードされたテキストが無効</string>
     <string name="csv_more_skipped_rows">…ほかに無効な行が%1$d行あります。</string>
     <string name="toast_restore_settings_warning">%1$d件の地点を復元しましたが、設定を保存できませんでした</string>
+    <string name="toast_restore_cleanup_warning">写真のクリーンアップは保留中で、再試行されます。</string>
     <string name="restore_in_progress">バックアップを復元中</string>
     <string name="restore_validating">バックアップデータを検証して一時保存しています…</string>
     <string name="restore_finalizing">地点と写真を保存しています…</string>

@@ -32,6 +32,7 @@ interface PointRepositoryGateway {
     suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?)
     suspend fun delete(point: Point)
     suspend fun getAll(): List<Point>
+    suspend fun getById(pointId: Long): Point? = getAll().firstOrNull { it.id == pointId }
     suspend fun isPhotoReferenced(photoPath: String): Boolean = getAll().any { it.photoPath == photoPath }
     suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point?
     suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point>

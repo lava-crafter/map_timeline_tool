@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">編碼文字無效</string>
     <string name="csv_more_skipped_rows">…另有 %1$d 列無效資料。</string>
     <string name="toast_restore_settings_warning">已還原 %1$d 個打點，但無法儲存設定</string>
+    <string name="toast_restore_cleanup_warning">照片清理尚未完成，將自動重試。</string>
     <string name="restore_in_progress">正在還原備份</string>
     <string name="restore_validating">正在驗證並暫存備份資料…</string>
     <string name="restore_finalizing">正在儲存打點和照片…</string>

@@ -30,6 +30,7 @@ import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveResolver
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
+import com.lavacrafter.maptimelinetool.domain.usecase.PhotoCommitGuard
 import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
 import com.lavacrafter.maptimelinetool.notification.isQuickAddNotificationAvailable
@@ -78,8 +79,13 @@ class AppGraph(
 ) {
     private val database: AppDatabase by lazy { AppDatabase.get(app) }
 
+    val photoCommitGuard = PhotoCommitGuard { path ->
+        val file = resolvePointPhotoFile(app, path)
+        path == path.trim() && file != null && file.name == path && file.isFile
+    }
+
     val zipRestoreCoordinator: ZipRestoreCoordinator by lazy {
-        ZipRestoreCoordinator(app, pointRepositoryGateway)
+        ZipRestoreCoordinator(app, pointRepositoryGateway, photoCommitGuard = photoCommitGuard)
     }
 
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
@@ -176,7 +182,8 @@ class AppGraph(
             sensorSnapshotPort = sensorSnapshotPort,
             deletePhoto = { photoPath -> deletePointPhotoFile(app, photoPath) },
             shouldCollectNoise = { settingsManagementUseCase.getNoiseEnabled() },
-            collectNoiseDb = { com.lavacrafter.maptimelinetool.sensor.captureNoiseDb(app) }
+            collectNoiseDb = { com.lavacrafter.maptimelinetool.sensor.captureNoiseDb(app) },
+            photoCommitGuard = photoCommitGuard
         )
     }
 }

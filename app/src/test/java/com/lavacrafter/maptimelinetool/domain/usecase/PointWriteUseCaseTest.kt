@@ -27,6 +27,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -220,6 +224,126 @@ class PointWriteUseCaseTest {
         assertTrue(failure is CancellationException)
         assertTrue(committed)
         assertEquals(1, repo.inserted.size)
+    }
+
+    @Test
+    fun `missing photos cannot be inserted updated or imported`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "existing.jpg")
+        val repo = FakePointRepository().apply { inserted += old }
+        val guard = PhotoCommitGuard { it == "existing.jpg" }
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, photoCommitGuard = guard)
+        var committed = false
+        val failures = listOf(
+            runCatching { writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 2L,
+                emptySet(), "missing.jpg", onCoreSaved = { committed = true }) }.exceptionOrNull(),
+            runCatching { writer.updatePoint(old, "Changed", "", "missing.jpg",
+                onCoreSaved = { committed = true }) }.exceptionOrNull(),
+            runCatching { writer.importPoints(listOf(point().copy(photoPath = "missing.jpg"))) }.exceptionOrNull()
+        )
+        assertTrue(failures.all { it is IllegalArgumentException })
+        assertFalse(committed)
+        assertEquals(listOf(old), repo.inserted)
+    }
+
+    @Test
+    fun `cleanup and new references use one guard and stale candidates cannot resurrect deleted photos`() = runBlocking {
+        withTimeout(5_000L) {
+            val old = point().copy(id = 10L, photoPath = "old.jpg")
+            val repo = FakePointRepository().apply { inserted += old }
+            var fileExists = true
+            val guard = PhotoCommitGuard { fileExists }
+            val cleanupEntered = CompletableDeferred<Unit>()
+            val finishCleanup = CompletableDeferred<Unit>()
+            val writer = PointWriteUseCase(repo, snapshotPort(), deletePhoto = {
+                cleanupEntered.complete(Unit)
+                finishCleanup.await()
+                fileExists = false
+            }, photoCommitGuard = guard)
+            val deletion = async { writer.deletePoint(old) }
+            cleanupEntered.await()
+            val staleSave = async(start = CoroutineStart.UNDISPATCHED) {
+                runCatching { writer.addPointWithTags("Stale", "", GeoPoint(1.0, 2.0), 2L,
+                    emptySet(), "old.jpg") }.exceptionOrNull()
+            }
+            assertFalse(staleSave.isCompleted)
+            finishCleanup.complete(Unit)
+            deletion.await()
+            assertTrue(staleSave.await() is IllegalArgumentException)
+            assertTrue(repo.inserted.isEmpty())
+        }
+    }
+
+    @Test
+    fun `shared photos survive edit and delete cleanup`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "shared.jpg")
+        val other = point().copy(id = 11L, photoPath = "shared.jpg")
+        val repo = FakePointRepository().apply { inserted += listOf(old, other) }
+        val deleted = mutableListOf<String?>()
+        val writer = writer(repo) { deleted += it }
+        writer.updatePoint(old, "Edited", "", "new.jpg")
+        assertTrue(deleted.isEmpty())
+        writer.deletePoint(other)
+        assertEquals(listOf("shared.jpg"), deleted)
+        assertEquals("new.jpg", repo.inserted.single().photoPath)
+    }
+
+    @Test
+    fun `edit and delete clean current database photos rather than stale drafts`() = runBlocking {
+        val stale = point().copy(id = 10L, photoPath = "before_restore.jpg")
+        val current = stale.copy(photoPath = "restored.jpg", pressureHpa = 1001f)
+        val repo = FakePointRepository().apply { inserted += current }
+        val deleted = mutableListOf<String?>()
+        val writer = writer(repo) { deleted += it }
+        writer.updatePoint(stale, "Edited", "", "edited.jpg")
+        assertEquals(listOf("restored.jpg"), deleted)
+        assertEquals(1001f, repo.inserted.single().pressureHpa)
+        writer.deletePoint(stale)
+        assertEquals(listOf("restored.jpg", "edited.jpg"), deleted)
+        assertTrue(repo.inserted.isEmpty())
+    }
+
+    @Test
+    fun `optional noise never holds the photo commit guard`() = runBlocking {
+        withTimeout(5_000L) {
+            val guard = PhotoCommitGuard()
+            val noiseStarted = CompletableDeferred<Unit>()
+            val finishNoise = CompletableDeferred<Unit>()
+            val writer = PointWriteUseCase(FakePointRepository(), snapshotPort(), {},
+                shouldCollectNoise = { true }, collectNoiseDb = {
+                    noiseStarted.complete(Unit)
+                    finishNoise.await()
+                    null
+                }, photoCommitGuard = guard)
+            val save = async { writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, emptySet()) }
+            noiseStarted.await()
+            guard.withLock { assertFalse(save.isCompleted) }
+            finishNoise.complete(Unit)
+            save.await()
+            Unit
+        }
+    }
+
+    @Test
+    fun `sampling happens before acquiring the photo commit guard`() = runBlocking {
+        withTimeout(5_000L) {
+            val guard = PhotoCommitGuard()
+            val sampled = CompletableDeferred<Unit>()
+            val writer = PointWriteUseCase(FakePointRepository(), object : SensorSnapshotPort {
+                override suspend fun readSnapshot(): PointSensorSnapshot {
+                    sampled.complete(Unit)
+                    return PointSensorSnapshot()
+                }
+            }, {}, photoCommitGuard = guard)
+            lateinit var save: kotlinx.coroutines.Deferred<Long>
+            guard.withLock {
+                save = async(start = CoroutineStart.UNDISPATCHED) {
+                    writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, emptySet())
+                }
+                sampled.await()
+                assertFalse(save.isCompleted)
+            }
+            assertEquals(10L, save.await())
+        }
     }
 
     private fun snapshotPort() = object : SensorSnapshotPort {

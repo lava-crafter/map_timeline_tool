@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">texte encodé invalide</string>
     <string name="csv_more_skipped_rows">…et %1$d lignes invalides supplémentaires.</string>
     <string name="toast_restore_settings_warning">%1$d points restaurés, mais les paramètres n’ont pas pu être enregistrés</string>
+    <string name="toast_restore_cleanup_warning">Le nettoyage des photos est en attente et sera réessayé.</string>
     <string name="restore_in_progress">Restauration de la sauvegarde</string>
     <string name="restore_validating">Validation et préparation des données de sauvegarde…</string>
     <string name="restore_finalizing">Enregistrement des points et des photos…</string>

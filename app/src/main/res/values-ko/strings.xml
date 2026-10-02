@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">유효하지 않은 인코딩된 텍스트</string>
     <string name="csv_more_skipped_rows">…유효하지 않은 행이 %1$d개 더 있습니다.</string>
     <string name="toast_restore_settings_warning">%1$d개의 지점을 복원했지만 설정을 저장하지 못했습니다</string>
+    <string name="toast_restore_cleanup_warning">사진 정리가 보류 중이며 다시 시도됩니다.</string>
     <string name="restore_in_progress">백업 복원 중</string>
     <string name="restore_validating">백업 데이터를 검증하고 임시로 저장하는 중…</string>
     <string name="restore_finalizing">지점과 사진을 저장하는 중…</string>

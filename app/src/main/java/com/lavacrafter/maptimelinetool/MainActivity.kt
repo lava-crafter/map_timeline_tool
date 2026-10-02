@@ -285,20 +285,24 @@ class MainActivity : AppCompatActivity() {
                     val photoPath = pendingAddPhotoPath
                     if (!isSuccess || !showDialog || pendingTimestamp == null || photoPath == null) {
                         scope.launch(Dispatchers.IO) {
-                            if (photoPath != null && runCatching {
-                                    graph.pointRepositoryGateway.isPhotoReferenced(photoPath)
-                                }.getOrDefault(true) == false) {
-                                deletePointPhotoFile(context, photoPath)
+                            graph.photoCommitGuard.withLock {
+                                if (photoPath != null && runCatching {
+                                        graph.pointRepositoryGateway.isPhotoReferenced(photoPath)
+                                    }.getOrDefault(true) == false) {
+                                    deletePointPhotoFile(context, photoPath)
+                                }
                             }
                         }
                         pendingAddPhotoPath = if (showDialog && pendingTimestamp != null) replacedAddPhotoPath else null
                     } else {
                         val obsoletePath = replacedAddPhotoPath
                         scope.launch(Dispatchers.IO) {
-                            if (obsoletePath != null && runCatching {
-                                    graph.pointRepositoryGateway.isPhotoReferenced(obsoletePath)
-                                }.getOrDefault(true) == false) {
-                                deletePointPhotoFile(context, obsoletePath)
+                            graph.photoCommitGuard.withLock {
+                                if (obsoletePath != null && runCatching {
+                                        graph.pointRepositoryGateway.isPhotoReferenced(obsoletePath)
+                                    }.getOrDefault(true) == false) {
+                                    deletePointPhotoFile(context, obsoletePath)
+                                }
                             }
                         }
                     }
@@ -463,7 +467,15 @@ class MainActivity : AppCompatActivity() {
                         }
                         is RestoreState.SuccessWithWarning -> {
                             settingsViewModel.reloadFromStore()
-                            Toast.makeText(context, context.getString(R.string.toast_restore_settings_warning, result.points), Toast.LENGTH_LONG).show()
+                            if (!result.settingsNotApplied) {
+                                applyLanguagePreference(settingsViewModel.uiState.value.languagePreference)
+                            }
+                            val message = listOfNotNull(
+                                context.getString(if (result.settingsNotApplied) R.string.toast_restore_settings_warning
+                                    else R.string.toast_import_success, result.points),
+                                if (result.photoCleanupPending) context.getString(R.string.toast_restore_cleanup_warning) else null
+                            ).joinToString("\n")
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
                         is RestoreState.Failure -> {
                             Log.e("MainActivity", "ZIP restore failed: ${result.reason}")
@@ -521,10 +533,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 fun deletePhotoOnIo(path: String?) {
                     scope.launch(Dispatchers.IO) {
-                        if (path != null && runCatching {
-                                graph.pointRepositoryGateway.isPhotoReferenced(path)
-                            }.getOrDefault(true) == false) {
-                            deletePointPhotoFile(context, path)
+                        graph.photoCommitGuard.withLock {
+                            if (path != null && runCatching {
+                                    graph.pointRepositoryGateway.isPhotoReferenced(path)
+                                }.getOrDefault(true) == false) {
+                                deletePointPhotoFile(context, path)
+                            }
                         }
                     }
                 }
@@ -569,17 +583,19 @@ class MainActivity : AppCompatActivity() {
                 suspend fun rollbackPhotoUnlessCommitted(prepared: PreparedPhoto?) {
                     if (prepared == null) return
                     withContext(NonCancellable) {
-                        // Cancellation can race with Room returning a committed ID. Keep a generated file
-                        // whenever the DB may reference it; an orphan is safer than a missing user photo.
-                        val referenced = prepared.generatedPath?.let { path ->
-                            try {
-                                graph.pointRepositoryGateway.isPhotoReferenced(path)
-                            } catch (error: Exception) {
-                                Log.w("MainActivity", "Unable to verify photo reference after failed write", error)
-                                true
-                            }
-                        } ?: false
-                        if (!referenced) prepared.rollback(context)
+                        graph.photoCommitGuard.withLock {
+                            // Cancellation can race with Room returning a committed ID. Keep a generated file
+                            // whenever the DB may reference it; an orphan is safer than a missing user photo.
+                            val referenced = prepared.generatedPath?.let { path ->
+                                try {
+                                    graph.pointRepositoryGateway.isPhotoReferenced(path)
+                                } catch (error: Exception) {
+                                    Log.w("MainActivity", "Unable to verify photo reference after failed write", error)
+                                    true
+                                }
+                            } ?: false
+                            if (!referenced) prepared.rollback(context)
+                        }
                     }
                 }
                 fun hasLocationPermission(): Boolean {
@@ -760,7 +776,9 @@ class MainActivity : AppCompatActivity() {
                     }
                     try {
                         withContext(NonCancellable) {
-                            prepared.commitCleanup(context) { graph.pointRepositoryGateway.isPhotoReferenced(it) }
+                            graph.photoCommitGuard.withLock {
+                                prepared.commitCleanup(context) { graph.pointRepositoryGateway.isPhotoReferenced(it) }
+                            }
                         }
                     } catch (error: Exception) {
                         Log.w("MainActivity", "Photo source cleanup failed after save", error)
@@ -1628,7 +1646,9 @@ class MainActivity : AppCompatActivity() {
                                     }
                                     try {
                                         withContext(NonCancellable) {
-                                            prepared.commitCleanup(context) { graph.pointRepositoryGateway.isPhotoReferenced(it) }
+                                            graph.photoCommitGuard.withLock {
+                                                prepared.commitCleanup(context) { graph.pointRepositoryGateway.isPhotoReferenced(it) }
+                                            }
                                         }
                                     } catch (error: Exception) {
                                         Log.w("MainActivity", "Photo source cleanup failed after update", error)

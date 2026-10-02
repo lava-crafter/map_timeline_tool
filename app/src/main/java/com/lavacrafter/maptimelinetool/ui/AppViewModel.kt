@@ -124,12 +124,13 @@ class AppViewModel(
 
     suspend fun importZipData(
         importStats: ZipImporter.ImportStats,
-        beforeTransactionEnd: suspend () -> Unit = {}
+        beforeTransactionEnd: suspend (Set<String>) -> Unit = {}
     ): ZipImportResult {
         return repo.inTransaction {
             val pointIdByIndex = if (importStats.manifest.sections.tags) mutableMapOf<Int, Long>() else null
             val existingPointsByKey = repo.getAll().groupBy { Triple(it.timestamp, it.latitude, it.longitude) }
             val matchedPointIds = mutableSetOf<Long>()
+            val retiredPhotoPaths = mutableSetOf<String>()
             importStats.points.forEachIndexed { index, point ->
                 val normalizedPoint = point.copy(
                     title = sanitizePointTitle(point.title).ifBlank { formatPointTimestamp(point.timestamp) },
@@ -142,6 +143,7 @@ class AppViewModel(
                 } ?: candidates.firstOrNull()
                 val actualId = if (existing != null) {
                     val merged = mergeImportedPoint(existing, normalizedPoint, importStats.manifest)
+                    existing.photoPath?.takeIf { it != merged.photoPath }?.let(retiredPhotoPaths::add)
                     repo.update(merged)
                     existing.id
                 } else {
@@ -177,7 +179,8 @@ class AppViewModel(
                     }
                 }
             }
-            beforeTransactionEnd()
+            // The coordinator persists these candidates before moving files/committing Room.
+            beforeTransactionEnd(retiredPhotoPaths)
             ZipImportResult(legacyTagIdToActualId = legacyTagIdToActualId)
         }
     }

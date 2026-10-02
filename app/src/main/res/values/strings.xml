@@ -18,6 +18,7 @@
     <string name="csv_invalid_text_encoding">invalid encoded text</string>
     <string name="csv_more_skipped_rows">…and %1$d more invalid rows.</string>
     <string name="toast_restore_settings_warning">Restored %1$d points, but settings could not be saved</string>
+    <string name="toast_restore_cleanup_warning">Photo cleanup is pending and will be retried.</string>
     <string name="restore_in_progress">Restoring backup</string>
     <string name="restore_validating">Validating and staging backup data…</string>
     <string name="restore_finalizing">Saving points and photos…</string>

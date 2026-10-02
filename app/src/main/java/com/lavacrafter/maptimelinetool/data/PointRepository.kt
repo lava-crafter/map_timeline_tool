@@ -41,6 +41,7 @@ class PointRepository(
         check(dao.delete(point.toEntity()) == 1) { "Point no longer exists" }
     }
     override suspend fun getAll() = dao.getAll().map { it.toDomain() }
+    override suspend fun getById(pointId: Long) = dao.getById(pointId)?.toDomain()
     override suspend fun isPhotoReferenced(photoPath: String) = dao.isPhotoReferenced(photoPath)
     override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double) =
         dao.findByImportKey(timestamp, latitude, longitude)?.toDomain()

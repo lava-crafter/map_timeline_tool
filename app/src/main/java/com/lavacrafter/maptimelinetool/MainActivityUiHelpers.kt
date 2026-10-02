@@ -111,7 +111,7 @@ internal fun ZipExportOptionsDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val canExport = includePoints || includePhotos
+    val canExport = includePoints
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -142,7 +142,8 @@ internal fun ZipExportOptionsDialog(
                 Row {
                     Checkbox(
                         checked = includePhotos,
-                        onCheckedChange = onIncludePhotosChange
+                        onCheckedChange = onIncludePhotosChange,
+                        enabled = includePoints
                     )
                     Text(stringResource(R.string.export_zip_option_photos))
                 }

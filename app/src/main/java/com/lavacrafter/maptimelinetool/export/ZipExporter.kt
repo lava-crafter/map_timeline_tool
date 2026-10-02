@@ -63,6 +63,9 @@ object ZipExporter {
         settingsJsonProvider: (() -> String?)? = null,
         appVersion: String? = null
     ): ExportStats {
+        require(options.includePoints || !options.includePhotos) {
+            "Photos cannot be exported without the points section"
+        }
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }

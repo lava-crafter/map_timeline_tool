@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">טקסט בקידוד לא תקין</string>
     <string name="csv_more_skipped_rows">…ועוד %1$d שורות לא תקינות.</string>
     <string name="toast_restore_settings_warning">שוחזרו %1$d נקודות, אך לא ניתן היה לשמור את ההגדרות</string>
+    <string name="toast_restore_cleanup_warning">ניקוי התמונות ממתין וינוסה שוב.</string>
     <string name="restore_in_progress">משחזר גיבוי</string>
     <string name="restore_validating">מאמת ומכין את נתוני הגיבוי…</string>
     <string name="restore_finalizing">שומר נקודות ותמונות…</string>

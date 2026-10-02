@@ -20,9 +20,15 @@ class ZipRestorePreflightTest {
     }
 
     @Test fun defaultEntryBudgetAcceptsThousandsOfEntriesAndRejectsOverflow() {
-        val manyEntries = (0 until 1_201).map { "photos/$it.jpg" to "bytes" } + ("points.csv" to csv)
+        val referencedCsv = buildString {
+            append("name,description,latitude,longitude,time_utc,photo_rel_path\n")
+            for (index in 0 until 1_201) {
+                append("P$index,,10,20,2024-01-01T00:00:00Z,photos/$index.jpg\n")
+            }
+        }
+        val manyEntries = (0 until 1_201).map { "photos/$it.jpg" to "bytes" } + ("points.csv" to referencedCsv)
         val restored = restore(zip(manyEntries))
-        assertEquals(1, restored.points.size)
+        assertEquals(1_201, restored.points.size)
         assertEquals(1_201, restored.importedPhotoCount)
 
         val limits = ZipImportLimits()
@@ -38,6 +44,22 @@ class ZipRestorePreflightTest {
         val entries = (0..3).map { "photos/$it.jpg" to "bytes" }
         assertThrows(ZipImportLimitExceededException::class.java) {
             restore(zip(entries), ZipImportLimits(maxPhotos = 3))
+        }
+    }
+
+    @Test fun legacyGeoJsonPhotoReferencesAreResolvedExactlyOnce() {
+        val geoJson = """{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[20,10]},"properties":{"name":"P","timestamp_ms":1710000000000,"photo_rel_path":"photos/a.jpg"}}]}"""
+        val restored = restore(zip(listOf("points.geojson" to geoJson, "photos/a.jpg" to "bytes")))
+        assertEquals("saved.jpg", restored.points.single().photoPath)
+        assertEquals(0, restored.missingPhotoCount)
+    }
+
+    @Test fun photosSectionCannotExistWithoutPointsEvenWhenThereAreNoPhotos() {
+        for (version in 1..2) {
+            val photoOnlyManifest = """{"backup_version":$version,"sections":{"points":false,"photos":true,"tags":false,"settings":false},"counts":{"points":0,"photos":0}}"""
+            assertThrows(IllegalArgumentException::class.java) {
+                restore(zip(listOf("backup_manifest.json" to photoOnlyManifest)))
+            }
         }
     }
 

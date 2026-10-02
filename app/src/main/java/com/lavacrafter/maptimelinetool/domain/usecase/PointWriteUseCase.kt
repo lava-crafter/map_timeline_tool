@@ -36,7 +36,8 @@ class PointWriteUseCase(
     private val deletePhoto: suspend (String?) -> Unit,
     private val shouldCollectNoise: () -> Boolean = { false },
     private val collectNoiseDb: suspend () -> Float? = { null },
-    private val onOptionalFailure: (Exception) -> Unit = { it.printStackTrace() }
+    private val onOptionalFailure: (Exception) -> Unit = { it.printStackTrace() },
+    private val photoCommitGuard: PhotoCommitGuard = PhotoCommitGuard()
 ) {
     suspend fun addPointWithTags(
         title: String,
@@ -57,12 +58,14 @@ class PointWriteUseCase(
             timestamp = timestamp,
             photoPath = photoPath
         )
-        val id = repository.inTransaction {
-            val insertedId = repository.insert(point)
-            tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
-            insertedId
+        val id = photoCommitGuard.withLock {
+            photoCommitGuard.requirePhoto(photoPath)
+            repository.inTransaction {
+                val insertedId = repository.insert(point)
+                tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
+                insertedId
+            }.also(onCoreSaved)
         }
-        onCoreSaved(id)
         try {
             if (shouldCollectNoise()) {
                 withContext(Dispatchers.IO) {
@@ -85,35 +88,49 @@ class PointWriteUseCase(
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { point.title }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
-        repository.inTransaction {
-            repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
-            if (tagIds != null) {
-                val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
-                (oldTagIds - tagIds).forEach { repository.deletePointTag(point.id, it) }
-                (tagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+        photoCommitGuard.withLock {
+            photoCommitGuard.requirePhoto(photoPath)
+            val retiredPhoto = repository.inTransaction {
+                val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                repository.update(current.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
+                if (tagIds != null) {
+                    val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
+                    (oldTagIds - tagIds).forEach { repository.deletePointTag(point.id, it) }
+                    (tagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+                }
+                current.photoPath?.takeIf { it != photoPath }
             }
+            onCoreSaved()
+            cleanupUnreferencedPhoto(retiredPhoto)
         }
-        onCoreSaved()
-        cleanupUnreferencedPhoto(point.photoPath?.takeIf { it != photoPath })
     }
 
     suspend fun deletePoint(point: Point) {
-        repository.delete(point)
-        cleanupUnreferencedPhoto(point.photoPath)
+        photoCommitGuard.withLock {
+            val retiredPhoto = repository.inTransaction {
+                val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                repository.delete(current)
+                current.photoPath
+            }
+            cleanupUnreferencedPhoto(retiredPhoto)
+        }
     }
 
     data class ImportResult(val imported: Int)
 
     suspend fun importPoints(pointsList: List<Point>): ImportResult {
-        repository.inTransaction {
-            pointsList.forEach { p ->
-                val normalizedPoint = p.copy(
-                    title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
-                        .ifBlank { formatPointTimestamp(p.timestamp) },
-                    note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
-                )
-                // Ordinary CSV is an exchange format: even identical coordinates/times are independent rows.
-                repository.insert(normalizedPoint.copy(id = 0))
+        photoCommitGuard.withLock {
+            repository.inTransaction {
+                pointsList.forEach { p ->
+                    photoCommitGuard.requirePhoto(p.photoPath)
+                    val normalizedPoint = p.copy(
+                        title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
+                            .ifBlank { formatPointTimestamp(p.timestamp) },
+                        note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
+                    )
+                    // Ordinary CSV is an exchange format: even identical coordinates/times are independent rows.
+                    repository.insert(normalizedPoint.copy(id = 0))
+                }
             }
         }
         return ImportResult(pointsList.size)

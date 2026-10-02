@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">texto codificado no válido</string>
     <string name="csv_more_skipped_rows">…y %1$d filas no válidas más.</string>
     <string name="toast_restore_settings_warning">Se restauraron %1$d puntos, pero no se pudieron guardar los ajustes</string>
+    <string name="toast_restore_cleanup_warning">La limpieza de fotos está pendiente y se volverá a intentar.</string>
     <string name="restore_in_progress">Restaurando copia de seguridad</string>
     <string name="restore_validating">Validando y preparando datos de la copia de seguridad…</string>
     <string name="restore_finalizing">Guardando puntos y fotos…</string>

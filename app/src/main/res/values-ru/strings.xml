@@ -15,6 +15,7 @@
     <string name="csv_invalid_text_encoding">текст с недействительной кодировкой</string>
     <string name="csv_more_skipped_rows">…и ещё недействительных строк: %1$d.</string>
     <string name="toast_restore_settings_warning">Восстановлено точек: %1$d, но настройки не удалось сохранить</string>
+    <string name="toast_restore_cleanup_warning">Очистка фотографий ожидает выполнения и будет повторена.</string>
     <string name="restore_in_progress">Восстановление резервной копии</string>
     <string name="restore_validating">Проверка и подготовка данных резервной копии…</string>
     <string name="restore_finalizing">Сохранение точек и фотографий…</string>
