@@ -32,13 +32,13 @@ class QuickAddResolverTest {
             fixTimeMs = 90_000L,
             provider = "gps"
         )
-        val cache = QuickAddLocationCache(wallClockMs = { 100_000L }).apply { update(cachedLocation) }
+        val cache = QuickAddLocationCache(wallClockMs = { 125_000L }).apply { update(cachedLocation) }
         val provider = FakeLocationProvider(
             preciseLocation = GeoPoint(
                 latitude = 3.0,
                 longitude = 4.0,
                 accuracyMeters = 10f,
-                fixTimeMs = 99_000L,
+                fixTimeMs = 124_000L,
                 provider = "fused"
             )
         )
@@ -55,7 +55,7 @@ class QuickAddResolverTest {
                 savedTimestamp = timestamp
                 onCoreSaved()
             },
-            wallClockMs = { 100_000L },
+            wallClockMs = { 125_000L },
             titleFormatter = { "title-$it" }
         ).savePoint(timeoutMs = 5_000L, clickTimeMs = 123_456L)
 

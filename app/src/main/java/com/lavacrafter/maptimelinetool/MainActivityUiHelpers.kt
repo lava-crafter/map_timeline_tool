@@ -46,6 +46,7 @@ import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.ui.ListScreen
 import com.lavacrafter.maptimelinetool.ui.MapScreen
+import com.lavacrafter.maptimelinetool.ui.CenterLocationResult
 import com.lavacrafter.maptimelinetool.ui.MapTileAccessPolicy
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
 
@@ -64,7 +65,10 @@ internal fun MapWithListSheet(
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
     onResolveCenterLocation: ((GeoPoint?) -> Unit) -> Unit,
-    scaffoldState: BottomSheetScaffoldState
+    scaffoldState: BottomSheetScaffoldState,
+    onCenterRequest: (() -> Unit)? = null,
+    centerResult: CenterLocationResult? = null,
+    onCenterResultConsumed: (String) -> Unit = {}
 ) {
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
@@ -92,7 +96,10 @@ internal fun MapWithListSheet(
                 mapAccessPolicy = mapAccessPolicy,
                 mapTileSourceId = mapTileSourceId,
                 onMapTileSourceChange = onMapTileSourceChange,
-                onResolveCenterLocation = onResolveCenterLocation
+                onResolveCenterLocation = onResolveCenterLocation,
+                onCenterRequest = onCenterRequest,
+                centerResult = centerResult,
+                onCenterResultConsumed = onCenterResultConsumed
             )
         }
     }

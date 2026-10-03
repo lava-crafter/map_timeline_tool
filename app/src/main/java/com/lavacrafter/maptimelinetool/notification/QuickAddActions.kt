@@ -88,8 +88,8 @@ internal fun Context.isQuickAddNotificationAvailable(enabled: Boolean): Boolean 
         )
 }
 
-internal suspend fun Context.performQuickAdd(deadlineElapsedMs: Long = SystemClock.elapsedRealtime() + QUICK_ADD_OVERALL_TIMEOUT_MS) {
-    val clickTimeMs = System.currentTimeMillis()
+internal suspend fun Context.performQuickAdd(deadlineElapsedMs: Long = SystemClock.elapsedRealtime() + QUICK_ADD_OVERALL_TIMEOUT_MS,
+    clickTimeMs: Long = System.currentTimeMillis()) {
     var committedResult: QuickAddResult? = null
     var blocked = false
     val result = try {

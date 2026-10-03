@@ -20,6 +20,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lavacrafter.maptimelinetool.data.toDomain
@@ -27,6 +29,7 @@ import com.lavacrafter.maptimelinetool.data.toEntity
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.AppGraph
+import com.lavacrafter.maptimelinetool.notification.performQuickAdd
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.model.Tag
@@ -60,7 +63,10 @@ class AppViewModel(
     private val repo: PointRepositoryGateway,
     private val pointWriteUseCase: PointWriteUseCase,
     private val tagManagementUseCase: TagManagementUseCase,
-    private val locationProvider: LocationProvider
+    private val locationProvider: LocationProvider,
+    private val savedStateHandle: SavedStateHandle? = null,
+    operationPhotos: PointOperationPhotos? = null,
+    resolveSaveLocation: (suspend (com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow) -> com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision)? = null
 ) : AndroidViewModel(app) {
     data class ZipImportResult(
         val legacyTagIdToActualId: Map<Long, Long>
@@ -76,6 +82,48 @@ class AppViewModel(
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Idle)
     val restoreState = _restoreState.asStateFlow()
     private var restoreJob: kotlinx.coroutines.Job? = null
+
+    val pointWrites: PointWriteOperations? = operationPhotos?.let { photos ->
+        PointWriteOperations(viewModelScope, repo, pointWriteUseCase, requireNotNull(resolveSaveLocation), photos,
+            saveConfirmation = { savedStateHandle?.set("point_confirmation", it?.toBundle()) },
+            initialConfirmation = confirmationFromBundle(savedStateHandle?.get("point_confirmation")))
+    }
+    private val _centerResult = MutableStateFlow<CenterLocationResult?>(null)
+    val centerResult = _centerResult.asStateFlow()
+    private var centerJob: kotlinx.coroutines.Job? = null
+    fun requestCenterLocation(id: String) {
+        centerJob?.cancel()
+        centerJob = viewModelScope.launch {
+            val location = try { getBestEffortLocation(5_000L) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            _centerResult.value = CenterLocationResult(id, location)
+        }
+    }
+    fun consumeCenterLocation(id: String) {
+        if (_centerResult.value?.id == id) _centerResult.value = null
+    }
+    private var quickEntryJob: kotlinx.coroutines.Job? = null
+    private val _quickEntryRequest = MutableStateFlow(actionFromBundle(savedStateHandle?.get("quick_entry")))
+    val quickEntryRequest = _quickEntryRequest.asStateFlow()
+    fun queueQuickAddEntry() {
+        if (_quickEntryRequest.value != null || quickEntryJob?.isActive == true) return
+        val request = LocationPermissionRequest(LocationAction.QUICK_ADD_ENTRY)
+        savedStateHandle?.set("quick_entry", request.toActionBundle())
+        _quickEntryRequest.value = request
+    }
+    fun consumeQuickAddEntry(id: String) {
+        if (_quickEntryRequest.value?.id == id) {
+            savedStateHandle?.set<android.os.Bundle?>("quick_entry", null)
+            _quickEntryRequest.value = null
+        }
+    }
+    fun performQuickAdd(eventTimeMs: Long) {
+        if (quickEntryJob?.isActive == true) return
+        quickEntryJob = viewModelScope.launch {
+            getApplication<Application>().performQuickAdd(clickTimeMs = eventTimeMs)
+        }
+    }
 
     fun restoreZip(uri: Uri, coordinator: ZipRestoreCoordinator) {
         if (restoreJob?.isActive == true) return
@@ -103,8 +151,7 @@ class AppViewModel(
         photoPath: String? = null,
         onCoreSaved: (Long) -> Unit = {}
     ): Long {
-        val normalizedTimestamp = normalizeTimestamp(timestamp, location)
-        return pointWriteUseCase.addPointWithTags(title, note, location, normalizedTimestamp, tagIds, photoPath, onCoreSaved)
+        return pointWriteUseCase.addPointWithTags(title, note, location, timestamp, tagIds, photoPath, onCoreSaved)
     }
 
     suspend fun updatePoint(
@@ -240,20 +287,11 @@ class AppViewModel(
             val timestamp = createdAt
             val location = getBestEffortLocation(5_000L)
             if (location != null) {
-                val normalizedTimestamp = normalizeTimestamp(timestamp, location)
-                val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(normalizedTimestamp))
-                pointWriteUseCase.addPointWithTags(title, "", location, normalizedTimestamp, emptySet())
+                val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+                pointWriteUseCase.addPointWithTags(title, "", location, timestamp, emptySet())
                 _autoAdded.tryEmit(Unit)
             }
         }
-    }
-
-    private fun normalizeTimestamp(eventTimeMs: Long, location: GeoPoint): Long {
-        val fixTime = location.fixTimeMs ?: return eventTimeMs
-        if (fixTime <= 0L) {
-            return eventTimeMs
-        }
-        return maxOf(eventTimeMs, fixTime)
     }
 
     fun cancelAutoAdd() {
@@ -273,7 +311,10 @@ class AppViewModel(
                     repo = graph.pointRepositoryGateway,
                     pointWriteUseCase = graph.pointWriteUseCase,
                     tagManagementUseCase = graph.tagManagementUseCase,
-                    locationProvider = graph.locationProvider
+                    locationProvider = graph.locationProvider,
+                    savedStateHandle = createSavedStateHandle(),
+                    operationPhotos = com.lavacrafter.maptimelinetool.AndroidPointOperationPhotos(app, graph.pointRepositoryGateway, graph.photoCommitGuard),
+                    resolveSaveLocation = { flow -> graph.locationSaveResolver.resolve(flow, 5_000L) }
                 )
             }
         }

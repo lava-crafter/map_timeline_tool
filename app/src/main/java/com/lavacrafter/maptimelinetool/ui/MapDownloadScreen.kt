@@ -83,10 +83,26 @@ fun MapDownloadScreen(
     useMultiThreadDownload: Boolean,
     downloadThreadCount: Int,
     downloadedOnly: Boolean,
-    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit
+    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit,
+    onCenterRequest: (() -> Unit)? = null,
+    centerResult: CenterLocationResult? = null,
+    onCenterResultConsumed: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     var mapView: MapView? by remember { mutableStateOf(null) }
+    LaunchedEffect(centerResult?.id, mapView) {
+        val result = centerResult ?: return@LaunchedEffect
+        val map = mapView ?: return@LaunchedEffect
+        val location = result.location
+        if (location == null) {
+            Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+        } else {
+            map.controller.setZoom(15.0)
+            map.controller.setCenter(GeoPoint(location.latitude, location.longitude))
+        }
+        onCenterResultConsumed(result.id)
+    }
     var cacheManagerRef: CacheManager? by remember { mutableStateOf(null) }
     var minZoom by remember { mutableStateOf(8) }
     var maxZoom by remember { mutableStateOf(14) }
@@ -212,7 +228,9 @@ fun MapDownloadScreen(
                         .padding(12.dp)
                         .size(44.dp),
                     onClick = {
-                        onResolveCenterLocation { loc ->
+                        if (onCenterRequest != null) {
+                            onCenterRequest()
+                        } else onResolveCenterLocation { loc ->
                             val map = mapView ?: return@onResolveCenterLocation
                             if (loc == null) {
                                 Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
@@ -394,7 +412,7 @@ fun MapDownloadScreen(
                         )
                     }
                     isDownloading = false
-                    statusText = context.getString(R.string.map_download_status_idle)
+                    statusText = resources.getString(R.string.map_download_status_idle)
                     Configuration.getInstance().setTileDownloadThreads(initialDownloadThreads.toShort())
                 }) {
                     Text(stringResource(R.string.map_download_cancel_keep))
@@ -409,7 +427,7 @@ fun MapDownloadScreen(
                     } catch (e: Exception) {
                     }
                     isDownloading = false
-                    statusText = context.getString(R.string.map_download_status_idle)
+                    statusText = resources.getString(R.string.map_download_status_idle)
                     Configuration.getInstance().setTileDownloadThreads(initialDownloadThreads.toShort())
                 }) {
                     Text(stringResource(R.string.map_download_cancel_abandon))

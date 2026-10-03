@@ -94,9 +94,13 @@ fun MapScreen(
     mapAccessPolicy: MapTileAccessPolicy,
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
-    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit
+    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit,
+    onCenterRequest: (() -> Unit)? = null,
+    centerResult: CenterLocationResult? = null,
+    onCenterResultConsumed: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapView: MapView? by remember { mutableStateOf(null) }
@@ -136,6 +140,19 @@ fun MapScreen(
         val target = selectedPointId?.let { id -> points.find { it.id == id } } ?: return@LaunchedEffect
         map.controller.setZoom(16.0)
         map.controller.animateTo(GeoPoint(target.latitude, target.longitude))
+    }
+
+    LaunchedEffect(centerResult?.id, mapView) {
+        val result = centerResult ?: return@LaunchedEffect
+        val map = mapView ?: return@LaunchedEffect
+        val location = result.location
+        if (location == null) {
+            Toast.makeText(context, resources.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+        } else {
+            map.controller.setZoom(16.0)
+            map.controller.setCenter(GeoPoint(location.latitude, location.longitude))
+        }
+        onCenterResultConsumed(result.id)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -364,10 +381,12 @@ fun MapScreen(
                 .align(Alignment.BottomStart)
                 .padding(16.dp),
             onClick = {
-                onResolveCenterLocation { location ->
+                if (onCenterRequest != null) {
+                    onCenterRequest()
+                } else onResolveCenterLocation { location ->
                     val map = mapView ?: return@onResolveCenterLocation
                     if (location == null) {
-                        Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, resources.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
                         return@onResolveCenterLocation
                     }
                     map.controller.setZoom(16.0)

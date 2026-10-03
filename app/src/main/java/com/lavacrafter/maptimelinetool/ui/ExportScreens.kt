@@ -40,6 +40,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +66,33 @@ sealed class ExportKind {
 
 data class ExportSelection(val kind: ExportKind)
 
+/** Lightweight state saver suitable for rememberSaveable/rememberSaveable(stateSaver = ...). */
+val ExportSelectionSaver: Saver<ExportSelection?, Any> = listSaver(
+    save = { selection ->
+        when (val kind = selection?.kind) {
+            null -> listOf(-1)
+            ExportKind.All -> listOf(0)
+            is ExportKind.ByTag -> listOf(1, kind.tagId)
+            is ExportKind.ByTime -> listOf(2, kind.fromMs, kind.toMs)
+            is ExportKind.Manual -> listOf(3, kind.ids.size.toLong()) + kind.ids
+        }
+    },
+    restore = { saved ->
+        when (saved.firstOrNull()?.toInt()) {
+            0 -> ExportSelection(ExportKind.All)
+            -1 -> null
+            1 -> (saved.getOrNull(1) as? Long)?.let { ExportSelection(ExportKind.ByTag(it)) }
+            2 -> if (saved.size == 3) ExportSelection(ExportKind.ByTime(saved[1] as Long, saved[2] as Long)) else null
+            3 -> {
+                val count = (saved.getOrNull(1) as? Long)?.toInt() ?: return@listSaver null
+                if (count < 0 || saved.size != count + 2) null
+                else ExportSelection(ExportKind.Manual(saved.drop(2).map { it as Long }))
+            }
+            else -> null
+        }
+    }
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportScreens(
@@ -71,7 +101,7 @@ fun ExportScreens(
     onSelectExport: (ExportSelection) -> Unit,
     onBack: () -> Unit
 ) {
-    var route by remember { mutableStateOf(0) }
+    var route by rememberSaveable { mutableStateOf(0) }
     when (route) {
         0 -> SubsetMenuScreen(
             onChooseByTag = { route = 1 },
@@ -103,18 +133,18 @@ private fun SubsetMenuScreen(onChooseByTag: () -> Unit, onChooseByTime: () -> Un
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TagPickerScreen(tags: List<com.lavacrafter.maptimelinetool.data.TagEntity>, onSelectTag: (Long) -> Unit, onBack: () -> Unit) {
-    var selectedTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
+    var selectedTagId by rememberSaveable { mutableStateOf<Long?>(null) }
     BackHandler { onBack() }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.export_by_tag)) }) }) { padding ->
         Column(modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             tags.forEach { tag ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = selectedTag == tag, onClick = { selectedTag = tag })
+                    RadioButton(selected = selectedTagId == tag.id, onClick = { selectedTagId = tag.id })
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = tag.name)
                 }
             }
-            Button(onClick = { if (selectedTag != null) onSelectTag(selectedTag!!.id) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_export_csv)) }
+            Button(onClick = { selectedTagId?.let(onSelectTag) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_export_csv)) }
         }
     }
 }
@@ -124,10 +154,12 @@ private fun TagPickerScreen(tags: List<com.lavacrafter.maptimelinetool.data.TagE
 private fun TimeRangePickerScreen(onExport: (Long, Long) -> Unit, onBack: () -> Unit) {
     val zoneId = remember { ZoneId.systemDefault() }
     val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault()) }
-    var startDate by remember { mutableStateOf(LocalDate.now(zoneId)) }
-    var endDate by remember { mutableStateOf(LocalDate.now(zoneId)) }
-    var showStartPicker by remember { mutableStateOf(false) }
-    var showEndPicker by remember { mutableStateOf(false) }
+    var startEpochDay by rememberSaveable { mutableStateOf(LocalDate.now(zoneId).toEpochDay()) }
+    var endEpochDay by rememberSaveable { mutableStateOf(LocalDate.now(zoneId).toEpochDay()) }
+    val startDate = LocalDate.ofEpochDay(startEpochDay)
+    val endDate = LocalDate.ofEpochDay(endEpochDay)
+    var showStartPicker by rememberSaveable { mutableStateOf(false) }
+    var showEndPicker by rememberSaveable { mutableStateOf(false) }
     val toLocalDate: (Long) -> LocalDate = { millis ->
         Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
     }
@@ -171,8 +203,8 @@ private fun TimeRangePickerScreen(onExport: (Long, Long) -> Unit, onBack: () -> 
             confirmButton = {
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { millis ->
-                        startDate = toLocalDate(millis)
-                        if (endDate.isBefore(startDate)) endDate = startDate
+                        startEpochDay = toLocalDate(millis).toEpochDay()
+                        if (endEpochDay < startEpochDay) endEpochDay = startEpochDay
                     }
                     showStartPicker = false
                 }) { Text(stringResource(R.string.action_ok)) }
@@ -194,8 +226,8 @@ private fun TimeRangePickerScreen(onExport: (Long, Long) -> Unit, onBack: () -> 
             confirmButton = {
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { millis ->
-                        endDate = toLocalDate(millis)
-                        if (endDate.isBefore(startDate)) startDate = endDate
+                        endEpochDay = toLocalDate(millis).toEpochDay()
+                        if (endDate.isBefore(startDate)) startEpochDay = endEpochDay
                     }
                     showEndPicker = false
                 }) { Text(stringResource(R.string.action_ok)) }
@@ -212,7 +244,10 @@ private fun TimeRangePickerScreen(onExport: (Long, Long) -> Unit, onBack: () -> 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ManualSelectScreen(points: List<PointEntity>, onExport: (List<Long>) -> Unit, onBack: () -> Unit) {
-    var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    var selectedIds by rememberSaveable(stateSaver = listSaver(
+        save = { it.toList() },
+        restore = { it.toSet() }
+    )) { mutableStateOf(setOf<Long>()) }
     BackHandler { onBack() }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.export_manual_select)) }) }) { padding ->
         Column(modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

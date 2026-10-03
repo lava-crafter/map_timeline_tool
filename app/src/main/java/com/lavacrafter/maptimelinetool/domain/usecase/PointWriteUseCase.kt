@@ -60,11 +60,15 @@ class PointWriteUseCase(
         )
         val id = photoCommitGuard.withLock {
             photoCommitGuard.requirePhoto(photoPath)
-            repository.inTransaction {
-                val insertedId = repository.insert(point)
-                tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
-                insertedId
-            }.also(onCoreSaved)
+            // Once commit starts, finish its transaction and publish the result even if the owner
+            // is cancelled. Do not mask cancellation while waiting for the guard or sampling.
+            withContext(NonCancellable) {
+                repository.inTransaction {
+                    val insertedId = repository.insert(point)
+                    tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
+                    insertedId
+                }.also(onCoreSaved)
+            }
         }
         try {
             if (shouldCollectNoise()) {
@@ -90,29 +94,34 @@ class PointWriteUseCase(
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
         photoCommitGuard.withLock {
             photoCommitGuard.requirePhoto(photoPath)
-            val retiredPhoto = repository.inTransaction {
-                val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
-                repository.update(current.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
-                if (tagIds != null) {
-                    val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
-                    (oldTagIds - tagIds).forEach { repository.deletePointTag(point.id, it) }
-                    (tagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+            withContext(NonCancellable) {
+                val retiredPhoto = repository.inTransaction {
+                    val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                    repository.update(current.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
+                    if (tagIds != null) {
+                        val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
+                        (oldTagIds - tagIds).forEach { repository.deletePointTag(point.id, it) }
+                        (tagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+                    }
+                    current.photoPath?.takeIf { it != photoPath }
                 }
-                current.photoPath?.takeIf { it != photoPath }
+                onCoreSaved()
+                cleanupUnreferencedPhoto(retiredPhoto)
             }
-            onCoreSaved()
-            cleanupUnreferencedPhoto(retiredPhoto)
         }
     }
 
-    suspend fun deletePoint(point: Point) {
+    suspend fun deletePoint(point: Point, onCoreSaved: () -> Unit = {}) {
         photoCommitGuard.withLock {
-            val retiredPhoto = repository.inTransaction {
-                val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
-                repository.delete(current)
-                current.photoPath
+            withContext(NonCancellable) {
+                val retiredPhoto = repository.inTransaction {
+                    val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                    repository.delete(current)
+                    current.photoPath
+                }
+                onCoreSaved()
+                cleanupUnreferencedPhoto(retiredPhoto)
             }
-            cleanupUnreferencedPhoto(retiredPhoto)
         }
     }
 

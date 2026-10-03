@@ -101,3 +101,30 @@
 - 运行器提示定向仅取到 4/54、全量仅取到 2/93 用例的 logcat，但全部测试完成且通过；这是日志采集限制，不是跳过或失败。
 - 测试前后对正式包仅执行只读 `pm path com.lavacrafter.maptimelinetool`，均无输出（该设备没有已安装的正式包），保存的前后结果 `cmp` 一致；未 clear/uninstall/覆盖安装或启动正式包。最终 `git diff --check` 通过。
 - 第一阶段本地/设备自动验收完成：**JVM 171/171 + connected 93/93**。进程中断覆盖仍是 journal 边界模拟，不宣称真实 kill/断电验证；第二阶段尚未实施。
+
+## 剩余修复阶段 2 — 写入重建、权限续办与事件时间
+
+基于 `6268706` 的干净工作树实施；下列改动尚未提交，不进入阶段 3–6。
+
+- Add/Edit/Delete 请求复制标签集合，提交即同步设置 operation ID/Running，由 `AppViewModel.viewModelScope` 内的 `PointWriteOperations` 持有定位、照片 prepare、核心提交、可选 noise 和清理任务。Compose 只提交请求、观察状态、重置相应草稿及按 ID acknowledge；重建不会重置 saving guard。成功状态尚未被 UI 消费时禁止再次提交。
+- 核心事务开始后，以 `NonCancellable` 完成事务及 core-commit callback（定位、采样、等锁仍可取消）；取消发生在提交后时终态保持成功，不能变成可重复重试的失败。照片 adapter 仅持 application context，复用阶段 1 guard 和全库引用检查；失败回滚生成照片，保留源候选供重试。
+- 前台权限续办保存动作 enum、UUID 和点击时间，并分别保存 foreground/notification/settings result 的请求 ID；先清除待办再按匹配 ID 派发。缺元数据、失配或拒绝安全取消。覆盖 New Point、主地图/冻结下载页面定位中心、Quick Add 启用与既有 `ACTION_QUICK_ADD` 入口；不保存任意 lambda。入口请求由 ViewModel 保存，避免 Compose 尚未订阅时 SharedFlow 丢失；中心结果由新 MapView 消费，不调用旧地图闭包。
+- 手动位置确认在 `SavedStateHandle` 保存轻量草稿和 fix metadata，点击确认重新评估 fix 年龄，过期/缺 fix 不提交。共享自动保存 gate 在确认、相机未返回、写入及失败暂停时同时禁止倒计时推进和自动提交。
+- 普通 Add 及旧定时入口不再使用 `max(eventTime, fixTime)`；新 Point timestamp 和默认标题使用 event time，fix 单独存入既有 `locationFixTimeMs`。Quick Add 保留 click-time，权限等待不重置该时间。历史数据与 Room schema 不变。
+- 导出 subset route、tag ID、manual IDs、日期 epochDay、日期 picker 开放状态及 ZIP options 保存恢复；pending selection 只保存 discriminator/IDs/range，并从 repository 重新解析，避免重建时 UI 空快照产生空导出。没有实施阶段 3 的 LazyColumn/Marker/日期架构。
+
+新增覆盖：JVM 可控挂起定位/采样/事务返回/optional noise、取消前后状态、重复提交、DB 故障照片回滚与重试、不可变标签、确认恢复过期、auto-save gate、event 早于 fix；connected 为真实 MainActivity + 注入的保留 ViewModel/in-memory Room 的保存中重建及失败草稿重试，确认参数序列化、ActivityResultRegistry 可控权限结果恢复及匹配检查，以及 subset selection save/restore。
+
+**验证边界：**权限结果用真实 ActivityResultRegistry 控制派发，不宣称操作 OEM 系统权限窗口；照片/标签候选重试的一项设备测试使用不可变请求快照与 fake prepare，未操作真实相机；时间 picker 覆盖恢复开放状态与默认范围，非自定义日期完整组合。进程 kill/突然断电与真实外部相机返回时序仍未验证；自动重建测试不能替代这些边界。
+
+### 阶段 2 最终验证
+
+```bash
+ANDROID_SERIAL=localhost:54461 ./gradlew :app:testDebugUnitTest :app:connectedDebugAndroidTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+- **BUILD SUCCESSFUL**；JVM XML **180/180**（`PointWriteOperationsTest` 9/9），完整 connected XML **104/104**，均为 **0 failures / errors / skipped**。完整设备回归包含停止 UI 后成功提交、重建后消费终态且不重试的新增用例；此前定向 17/17 结果不替代最终全量报告。
+- SM-X730 / API 36；APK badging 与 instrumentation target 均核对为 `.debug`，测试包 `.debug.test`。正式包仅只读 `pm path` 检查，前后保存结果 `cmp` 一致；未 clear/uninstall/覆盖或启动正式包。
+- lint **0 active errors / 7 个既有 warnings**，baseline 未改，无新增 suppression。曾遇到一次 lint 分析器异常；稳定重试正常完成，暴露的资源读取错误与 SavedStateHandle 测试构造器警告已修正。编译仍提示测试 API/窗口 flags 的弃用，不影响通过结果。
+- runner 只采集到 8/104 用例的 logcat，但所有测试均完成且通过；日志采集限制不是 skipped。
+- 原始日志：`/tmp/opencode/issue39-phase2-verified.log`。最终 `git diff --check` 通过，未修改 schema/generated source；改动尚未提交，未开始阶段 3。

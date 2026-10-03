@@ -19,7 +19,6 @@ package com.lavacrafter.maptimelinetool
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation
-import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
 import com.lavacrafter.maptimelinetool.export.ZipExporter
 import java.io.File
 import java.io.OutputStream
@@ -80,15 +79,6 @@ internal fun PendingExportPayload.writeOrdinaryZip(
         appVersion = appVersion
     )
 }
-
-internal data class PendingManualSaveConfirmation(
-    val title: String,
-    val note: String,
-    val createdAt: Long,
-    val selectedTags: Set<Long>,
-    val photoPath: String?,
-    val decision: LocationSaveDecision
-)
 
 internal fun buildStandardExportPayload(
     points: List<Point>,
