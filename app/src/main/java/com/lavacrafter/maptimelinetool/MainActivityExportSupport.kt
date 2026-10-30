@@ -123,3 +123,29 @@ internal fun buildExportBaseName(date: Date = Date()): String {
     val format = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
     return "map_timeline_${format.format(date)}"
 }
+
+/**
+ * Resolves the export rows when the file is written. Points deleted after selection are skipped rather than
+ * failing the whole export; "all points" reads the database, not a UI snapshot.
+ */
+internal suspend fun buildExportPayload(
+    repository: PointRepositoryGateway,
+    kind: ExportFileKind,
+    pointIds: List<Long>,
+    allPoints: Boolean,
+    zipOptions: ZipExporter.ExportOptions
+): PendingExportPayload {
+    val current = repository.getAll()
+    val points = if (allPoints) {
+        current
+    } else {
+        val byId = current.associateBy { it.id }
+        pointIds.mapNotNull { byId[it] }
+    }
+    return if (kind == ExportFileKind.ZIP) {
+        buildZipExportPayload(points, zipOptions.includePoints, zipOptions.includeTags, zipOptions.includeSensors,
+            zipOptions.includePhotos, repository)
+    } else {
+        buildStandardExportPayload(points, kind)
+    }
+}

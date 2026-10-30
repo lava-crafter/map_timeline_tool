@@ -82,6 +82,7 @@ import com.lavacrafter.maptimelinetool.export.FullBackupAssembler
 import com.lavacrafter.maptimelinetool.export.KmlExporter
 import com.lavacrafter.maptimelinetool.export.KmzExporter
 import com.lavacrafter.maptimelinetool.export.RestoreState
+import com.lavacrafter.maptimelinetool.export.ZipExporter
 import com.lavacrafter.maptimelinetool.ui.ExportSelection
 import com.lavacrafter.maptimelinetool.ui.ExportKind
 import com.lavacrafter.maptimelinetool.ui.ExportScreens
@@ -92,6 +93,9 @@ import kotlinx.coroutines.flow.first
 import com.lavacrafter.maptimelinetool.ui.AboutScreen
 import com.lavacrafter.maptimelinetool.ui.AddPointDialog
 import com.lavacrafter.maptimelinetool.ui.AppViewModel
+import com.lavacrafter.maptimelinetool.ui.FileTaskKind
+import com.lavacrafter.maptimelinetool.ui.FileTaskResult
+import com.lavacrafter.maptimelinetool.ui.FileTaskState
 import com.lavacrafter.maptimelinetool.ui.EditPointDialog
 import com.lavacrafter.maptimelinetool.ui.EditTagDialog
 import com.lavacrafter.maptimelinetool.ui.ListScreen
@@ -100,6 +104,7 @@ import com.lavacrafter.maptimelinetool.ui.TagDetailScreen
 import com.lavacrafter.maptimelinetool.ui.TagListScreen
 import com.lavacrafter.maptimelinetool.ui.TagSelectionDialog
 import com.lavacrafter.maptimelinetool.ui.SettingsRoute
+import com.lavacrafter.maptimelinetool.ui.SettingsRouteSaver
 import com.lavacrafter.maptimelinetool.ui.SettingsScreen
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import com.lavacrafter.maptimelinetool.ui.SettingsViewModel
@@ -127,14 +132,6 @@ import com.lavacrafter.maptimelinetool.ui.canAdvanceAutoSave
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.modules.SqlTileWriter
-
-private data class CsvImportSummary(
-    val imported: Int,
-    val skipped: Int,
-    val warnings: List<CsvImporter.SkippedRow>
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : AppCompatActivity() {
@@ -160,10 +157,10 @@ class MainActivity : AppCompatActivity() {
                 val resources = LocalResources.current
                 var showTagPickerForAdd by remember { mutableStateOf(false) }
                 var showTagPickerForEdit by remember { mutableStateOf(false) }
-                var showMapDownload by remember { mutableStateOf(false) }
+                var showMapDownload by rememberSaveable { mutableStateOf(false) }
                 var showExportFlow by rememberSaveable { mutableStateOf(false) }
                 var showZipExportOptions by rememberSaveable { mutableStateOf(false) }
-                var settingsRoute by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Main) }
+                var settingsRoute by rememberSaveable(stateSaver = SettingsRouteSaver) { mutableStateOf<SettingsRoute>(SettingsRoute.Main) }
                 var newPointSelectedTagIds by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
                 var showPinLimitDialog by remember { mutableStateOf(false) }
                 var showExitDialog by remember { mutableStateOf(false) }
@@ -184,6 +181,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val editWriteInProgress = pointWriteState != PointWriteState.Idle
                 var tagWriteInProgress by remember { mutableStateOf(false) }
+                var cacheClearInProgress by remember { mutableStateOf(false) }
                 var pendingLocationRequest by rememberSaveable(stateSaver = LocationPermissionRequestSaver) { mutableStateOf<LocationPermissionRequest?>(null) }
                 var foregroundPermissionRequestId by rememberSaveable { mutableStateOf<String?>(null) }
                 var notificationPermissionRequestId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -197,7 +195,7 @@ class MainActivity : AppCompatActivity() {
                 val scaffoldState = rememberBottomSheetScaffoldState()
                 val sheetState = scaffoldState.bottomSheetState
                 var tab by rememberSaveable { mutableStateOf(0) }
-                var showAbout by remember { mutableStateOf(false) }
+                var showAbout by rememberSaveable { mutableStateOf(false) }
                 var showDialog by rememberSaveable { mutableStateOf(false) }
                 var pendingTimestamp by rememberSaveable { mutableStateOf<Long?>(null) }
                 var selectedPointId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -212,8 +210,13 @@ class MainActivity : AppCompatActivity() {
                 var editingCaptureCandidatePhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
                 var editingCapturePointId by rememberSaveable { mutableStateOf<Long?>(null) }
                 var pendingEditPhotoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-                var editingTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
-                var selectedTag by remember { mutableStateOf<com.lavacrafter.maptimelinetool.data.TagEntity?>(null) }
+                // Save IDs and resolve against the live tag list, so recreation keeps the screen and a renamed or
+                // deleted tag is never shown from a stale copy.
+                val tagsState = viewModel.tags.collectAsState().value
+                var editingTagId by rememberSaveable { mutableStateOf<Long?>(null) }
+                var selectedTagId by rememberSaveable { mutableStateOf<Long?>(null) }
+                val editingTag = editingTagId?.let { id -> tagsState.firstOrNull { it.id == id } }
+                val selectedTag = selectedTagId?.let { id -> tagsState.firstOrNull { it.id == id } }
 
                 val recordRecentTag: (Long) -> Unit = { tagId ->
                     settingsViewModel.addRecentTagId(tagId)
@@ -237,6 +240,9 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val scope = rememberCoroutineScope()
+                fun showNoAppToast() {
+                    Toast.makeText(context, context.getString(R.string.toast_no_app_available), Toast.LENGTH_SHORT).show()
+                }
                 val showPhotoActionFailure: (PointPhotoExternalActionResult, Boolean) -> Unit = { result, isShare ->
                     val message = when (result) {
                         PointPhotoExternalActionResult.LAUNCHED -> null
@@ -263,9 +269,12 @@ class MainActivity : AppCompatActivity() {
                 // Save only the request, never an unbounded List<Point> in the Activity state Bundle.
                 var pendingExportKind by rememberSaveable { mutableStateOf<String?>(null) }
                 var pendingExportPointIds by rememberSaveable { mutableStateOf(longArrayOf()) }
+                // "All points" exports save a flag and resolve rows at write time: no full ID list in the Bundle,
+                // and no dependency on the possibly still-empty UI snapshot.
+                var pendingExportAllPoints by rememberSaveable { mutableStateOf(false) }
                 var pendingImportKind by rememberSaveable { mutableStateOf<String?>(null) }
                 var pendingExportSelection by rememberSaveable(stateSaver = ExportSelectionSaver) { mutableStateOf<ExportSelection?>(null) }
-                var csvImportSummary by remember { mutableStateOf<CsvImportSummary?>(null) }
+                val fileTaskState by viewModel.fileTasks.state.collectAsState()
                 var zipIncludePoints by rememberSaveable { mutableStateOf(true) }
                 var zipIncludeTags by rememberSaveable { mutableStateOf(true) }
                 var zipIncludeSensors by rememberSaveable { mutableStateOf(true) }
@@ -274,23 +283,14 @@ class MainActivity : AppCompatActivity() {
                 fun clearExportRequest() {
                     pendingExportKind = null
                     pendingExportPointIds = longArrayOf()
+                    pendingExportAllPoints = false
                 }
-                fun beginExport(kind: ExportFileKind, pointIds: LongArray) {
+                fun canStartFileTask(): Boolean = pendingExportKind == null && fileTaskState == FileTaskState.Idle
+                fun beginExport(kind: ExportFileKind, pointIds: LongArray = longArrayOf(), allPoints: Boolean = false) {
                     check(pendingExportKind == null) { "Export already in progress" }
                     pendingExportPointIds = pointIds
+                    pendingExportAllPoints = allPoints
                     pendingExportKind = kind.name
-                }
-                suspend fun exportPayload(kind: ExportFileKind): PendingExportPayload {
-                    check(pendingExportKind == kind.name) { "Missing or mismatched export request" }
-                    val ids = pendingExportPointIds.toList()
-                    val byId = viewModel.getAllPoints().associateBy { it.id }
-                    val points = ids.map { id -> requireNotNull(byId[id]) { "Export point is no longer available" }.toDomain() }
-                    return if (kind == ExportFileKind.ZIP) {
-                        buildZipExportPayload(points, zipIncludePoints, zipIncludeTags, zipIncludeSensors,
-                            zipIncludePhotos, graph.pointRepositoryGateway)
-                    } else {
-                        buildStandardExportPayload(points, kind)
-                    }
                 }
                 val addPhotoLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.TakePicture()
@@ -323,60 +323,60 @@ class MainActivity : AppCompatActivity() {
                     pendingAddPhotoUri = null
                 }
                 fun exportToDocument(uri: Uri?, kind: ExportFileKind) {
-                    if (uri == null) {
-                        clearExportRequest()
-                        return
-                    }
-                    scope.launch {
-                        try {
-                            val count = writeCreatedDocument(context, uri) { output ->
-                                val pending = exportPayload(kind)
-                                val pointTagNameMap = if (kind != ExportFileKind.CSV && kind != ExportFileKind.ZIP) {
-                                    buildPointTagNameMap(graph.pointRepositoryGateway, pending.points)
-                                } else {
-                                    emptyMap()
-                                }
-                                when (kind) {
-                                    ExportFileKind.CSV -> CsvExporter.writeCsv(pending.points, output)
-                                    ExportFileKind.GEOJSON -> GeoJsonExporter.writeGeoJson(
-                                        points = pending.points,
-                                        outputStream = output,
-                                        includeSensors = true,
-                                        pointTagNamesByPointId = pointTagNameMap,
-                                        photoRelPathResolver = { null }
-                                    )
-                                    ExportFileKind.KML -> KmlExporter.writeKml(
-                                        points = pending.points,
-                                        outputStream = output,
-                                        includeSensors = true,
-                                        pointTagNamesByPointId = pointTagNameMap,
-                                        photoRelPathResolver = { null }
-                                    )
-                                    ExportFileKind.KMZ -> KmzExporter.export(
-                                        points = pending.points,
-                                        outputStream = output,
-                                        resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
-                                        includeSensors = true,
-                                        includePhotos = true,
-                                        pointTagNamesByPointId = pointTagNameMap
-                                    )
-                                    ExportFileKind.ZIP -> pending.writeOrdinaryZip(
-                                        outputStream = output,
-                                        resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
-                                        appVersion = packageManager.getPackageInfo(packageName, 0).versionName
-                                    )
-                                }
-                                pending.points.size
+                    val requestMatches = pendingExportKind == kind.name
+                    val ids = pendingExportPointIds.toList()
+                    val allPoints = pendingExportAllPoints
+                    val zipOptions = ZipExporter.ExportOptions(zipIncludePoints, zipIncludeTags, zipIncludeSensors, zipIncludePhotos)
+                    clearExportRequest()
+                    if (uri == null || !requestMatches) return
+                    // Captured into a ViewModel-scoped task: use only the application context, never the Activity.
+                    val appContext = context.applicationContext
+                    val appVersion = packageManager.getPackageInfo(packageName, 0).versionName
+                    val started = viewModel.fileTasks.start(FileTaskKind.EXPORT) {
+                        val count = writeCreatedDocument(appContext, uri) { output ->
+                            val repository = appContext.appGraph().pointRepositoryGateway
+                            val pending = buildExportPayload(repository, kind, ids, allPoints, zipOptions)
+                            val pointTagNameMap = if (kind != ExportFileKind.CSV && kind != ExportFileKind.ZIP) {
+                                buildPointTagNameMap(repository, pending.points)
+                            } else {
+                                emptyMap()
                             }
-                            Toast.makeText(context, context.getString(R.string.toast_export_success, count), Toast.LENGTH_SHORT).show()
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (error: Exception) {
-                            Log.e("MainActivity", "Document export failed", error)
-                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
-                        } finally {
-                            clearExportRequest()
+                            when (kind) {
+                                ExportFileKind.CSV -> CsvExporter.writeCsv(pending.points, output)
+                                ExportFileKind.GEOJSON -> GeoJsonExporter.writeGeoJson(
+                                    points = pending.points,
+                                    outputStream = output,
+                                    includeSensors = true,
+                                    pointTagNamesByPointId = pointTagNameMap,
+                                    photoRelPathResolver = { null }
+                                )
+                                ExportFileKind.KML -> KmlExporter.writeKml(
+                                    points = pending.points,
+                                    outputStream = output,
+                                    includeSensors = true,
+                                    pointTagNamesByPointId = pointTagNameMap,
+                                    photoRelPathResolver = { null }
+                                )
+                                ExportFileKind.KMZ -> KmzExporter.export(
+                                    points = pending.points,
+                                    outputStream = output,
+                                    resolvePhotoFile = { photoPath -> resolvePointPhotoFile(appContext, photoPath) },
+                                    includeSensors = true,
+                                    includePhotos = true,
+                                    pointTagNamesByPointId = pointTagNameMap
+                                )
+                                ExportFileKind.ZIP -> pending.writeOrdinaryZip(
+                                    outputStream = output,
+                                    resolvePhotoFile = { photoPath -> resolvePointPhotoFile(appContext, photoPath) },
+                                    appVersion = appVersion
+                                )
+                            }
+                            pending.points.size
                         }
+                        FileTaskResult.Exported(count)
+                    }
+                    if (!started) {
+                        Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
                 val exportCsvLauncher = rememberLauncherForActivityResult(
@@ -401,21 +401,18 @@ class MainActivity : AppCompatActivity() {
                     }
                     pendingImportKind = null
                     if (uri == null) return@rememberLauncherForActivityResult
-                    scope.launch {
-                        try {
-                            val parsed = withContext(Dispatchers.IO) {
-                                context.contentResolver.openInputStream(uri)?.use { input ->
-                                    CsvImporter.parseOrdinaryCsv(input.reader(Charsets.UTF_8))
-                                } ?: throw IOException("Failed to open CSV import")
-                            }
-                            val result = viewModel.importPoints(parsed.points)
-                            csvImportSummary = CsvImportSummary(result.imported, parsed.skipped, parsed.warnings)
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (error: Exception) {
-                            Log.e("MainActivity", "CSV import failed", error)
-                            Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
+                    val appContext = context.applicationContext
+                    val started = viewModel.fileTasks.start(FileTaskKind.CSV_IMPORT) {
+                        val parsed = withContext(Dispatchers.IO) {
+                            appContext.contentResolver.openInputStream(uri)?.use { input ->
+                                CsvImporter.parseOrdinaryCsv(input.reader(Charsets.UTF_8))
+                            } ?: throw IOException("Failed to open CSV import")
                         }
+                        val result = viewModel.importPoints(parsed.points)
+                        FileTaskResult.CsvImported(result.imported, parsed.skipped, parsed.warnings)
+                    }
+                    if (!started) {
+                        Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
                 val importZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -428,9 +425,11 @@ class MainActivity : AppCompatActivity() {
                     viewModel.restoreZip(uri, graph.zipRestoreCoordinator)
                 }
 
-                csvImportSummary?.let { summary ->
+                (fileTaskState as? FileTaskState.Done)?.takeIf { it.result is FileTaskResult.CsvImported }?.let { done ->
+                    val summary = done.result as FileTaskResult.CsvImported
+                    // The result stays pending until dismissed, so recreation re-shows rather than loses it.
                     AlertDialog(
-                        onDismissRequest = { csvImportSummary = null },
+                        onDismissRequest = { viewModel.fileTasks.acknowledge(done) },
                         title = { Text(stringResource(R.string.action_import_csv)) },
                         text = {
                             Column {
@@ -449,7 +448,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         },
                         confirmButton = {
-                            TextButton(onClick = { csvImportSummary = null }) { Text(stringResource(R.string.action_ok)) }
+                            TextButton(onClick = { viewModel.fileTasks.acknowledge(done) }) { Text(stringResource(R.string.action_ok)) }
                         }
                     )
                 }
@@ -494,8 +493,9 @@ class MainActivity : AppCompatActivity() {
                             Log.e("MainActivity", "ZIP restore failed: ${result.reason}")
                             Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
                         }
-                        else -> Unit
+                        else -> return@LaunchedEffect
                     }
+                    viewModel.acknowledgeRestoreResult()
                 }
 
                 var onQuickAddEnableRequest: () -> Unit = {}
@@ -635,11 +635,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 fun openAppSettings() {
-                    appSettingsPermissionLauncher.launch(
+                    appSettingsPermissionLauncher.launchOrElse(
                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", context.packageName, null)
                         }
-                    )
+                    ) { showNoAppToast() }
                 }
 
                 fun requestLocationPermission() {
@@ -869,7 +869,7 @@ class MainActivity : AppCompatActivity() {
                         resetEditingPointState()
                     }
                 }
-                BackHandler(editingTag != null) { if (!tagWriteInProgress) editingTag = null }
+                BackHandler(editingTag != null) { if (!tagWriteInProgress) editingTagId = null }
                 BackHandler(showDialog && pendingManualSaveConfirmation == null && !showTagPickerForAdd && !showTagPickerForEdit) {
                     if (!addSaveInProgress && pendingAddPhotoUri == null) {
                         viewModel.cancelAutoAdd()
@@ -880,9 +880,14 @@ class MainActivity : AppCompatActivity() {
                 BackHandler(showMapDownload) { showMapDownload = false }
                 BackHandler(showZipExportOptions) { showZipExportOptions = false }
                 BackHandler(tab == 2 && settingsRoute != SettingsRoute.Main) { settingsRoute = SettingsRoute.Main }
-                BackHandler(selectedTag != null) { selectedTag = null }
+                BackHandler(selectedTag != null) { selectedTagId = null }
                 BackHandler(!showDialog && !showTagPickerForAdd && !showTagPickerForEdit && editingPoint == null && editingTag == null && !showAbout && selectedTag == null && sheetState.currentValue != SheetValue.Expanded) {
                     showExitDialog = true
+                }
+                // Higher priority than the exit prompt above: Back first collapses an expanded point list.
+                BackHandler(tab == 0 && !showDialog && editingPoint == null && editingTag == null && !showAbout &&
+                    sheetState.currentValue == SheetValue.Expanded) {
+                    scope.launch { sheetState.partialExpand() }
                 }
                 BackHandler(showExitDialog) {
                     finishAffinity()
@@ -948,19 +953,18 @@ class MainActivity : AppCompatActivity() {
                             currentPoints.filter { ids.contains(it.id) }
                         }
                     }
-                    if (pendingExportKind != null) {
+                    if (!canStartFileTask()) {
                         pendingExportSelection = null
                         return@LaunchedEffect
                     }
                     val baseName = buildExportBaseName()
                     beginExport(ExportFileKind.CSV, pointsToExport.map { it.id }.toLongArray())
-                    exportCsvLauncher.launch("$baseName.csv")
+                    exportCsvLauncher.launchOrElse("$baseName.csv") { clearExportRequest(); showNoAppToast() }
                     pendingExportSelection = null
                     showExportFlow = false
                     tab = 2
                     settingsRoute = SettingsRoute.Main
                 }
-                val tagsState = viewModel.tags.collectAsState().value
                 val quickTags = remember(tagsState, settingsState.pinnedTagIds, settingsState.recentTagIds) {
                     val pinned = tagsState.filter { settingsState.pinnedTagIds.contains(it.id) }
                     val recent = settingsState.recentTagIds.mapNotNull { id -> tagsState.firstOrNull { it.id == id } }
@@ -972,27 +976,21 @@ class MainActivity : AppCompatActivity() {
                     showExportFlow = true
                 }
                 val exportGeoJson: () -> Unit = {
-                    scope.launch {
-                        if (pendingExportKind != null) return@launch
-                        val baseName = buildExportBaseName()
-                        beginExport(ExportFileKind.GEOJSON, pointsState.map { it.id }.toLongArray())
-                        exportGeoJsonLauncher.launch("$baseName.geojson")
+                    if (canStartFileTask()) {
+                        beginExport(ExportFileKind.GEOJSON, allPoints = true)
+                        exportGeoJsonLauncher.launchOrElse("${buildExportBaseName()}.geojson") { clearExportRequest(); showNoAppToast() }
                     }
                 }
                 val exportKml: () -> Unit = {
-                    scope.launch {
-                        if (pendingExportKind != null) return@launch
-                        val baseName = buildExportBaseName()
-                        beginExport(ExportFileKind.KML, pointsState.map { it.id }.toLongArray())
-                        exportKmlLauncher.launch("$baseName.kml")
+                    if (canStartFileTask()) {
+                        beginExport(ExportFileKind.KML, allPoints = true)
+                        exportKmlLauncher.launchOrElse("${buildExportBaseName()}.kml") { clearExportRequest(); showNoAppToast() }
                     }
                 }
                 val exportKmz: () -> Unit = {
-                    scope.launch {
-                        if (pendingExportKind != null) return@launch
-                        val baseName = buildExportBaseName()
-                        beginExport(ExportFileKind.KMZ, pointsState.map { it.id }.toLongArray())
-                        exportKmzLauncher.launch("$baseName.kmz")
+                    if (canStartFileTask()) {
+                        beginExport(ExportFileKind.KMZ, allPoints = true)
+                        exportKmzLauncher.launchOrElse("${buildExportBaseName()}.kmz") { clearExportRequest(); showNoAppToast() }
                     }
                 }
                 val exportZip: () -> Unit = {
@@ -1003,45 +1001,55 @@ class MainActivity : AppCompatActivity() {
                     showZipExportOptions = true
                 }
                 val shareBackupZip: () -> Unit = {
-                    scope.launch {
-                        try {
+                    val appContext = context.applicationContext
+                    val appVersion = packageManager.getPackageInfo(packageName, 0).versionName
+                    // Single-flight: a second tap cannot start a job that deletes this one's pending file.
+                    if (canStartFileTask()) viewModel.fileTasks.start(FileTaskKind.SHARE_BACKUP) {
+                        withContext(Dispatchers.IO) {
+                            val backup = FullBackupAssembler(appContext.appGraph().pointRepositoryGateway).assemble()
+                            val portableSettings = SettingsStore.exportBackupJson(appContext)
                             var missingPhotoCount = 0
-                            val (shareUri, totalPointCount) = withContext(Dispatchers.IO) {
-                                val backup = FullBackupAssembler(context.appGraph().pointRepositoryGateway).assemble()
-                                val portableSettings = SettingsStore.exportBackupJson(context)
-                                val backupZip = createSharedBackupFile(java.io.File(context.filesDir, "shared_backups")) { output ->
-                                    missingPhotoCount = backup.writeZip(
-                                        outputStream = output,
-                                        resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
-                                        settingsJson = portableSettings,
-                                        appVersion = packageManager.getPackageInfo(packageName, 0).versionName
-                                    ).missingPhotoCount
-                                }
-                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", backupZip) to backup.points.size
+                            val backupZip = createSharedBackupFile(java.io.File(appContext.filesDir, "shared_backups")) { output ->
+                                missingPhotoCount = backup.writeZip(
+                                    outputStream = output,
+                                    resolvePhotoFile = { photoPath -> resolvePointPhotoFile(appContext, photoPath) },
+                                    settingsJson = portableSettings,
+                                    appVersion = appVersion
+                                ).missingPhotoCount
                             }
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "application/zip"
-                                putExtra(Intent.EXTRA_STREAM, shareUri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(
-                                Intent.createChooser(
-                                    shareIntent,
-                                    context.getString(R.string.action_share_backup_zip)
-                                )
-                            )
-                            if (missingPhotoCount > 0) {
-                                Toast.makeText(context, context.getString(R.string.toast_backup_missing_photos, missingPhotoCount), Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, context.getString(R.string.toast_export_success, totalPointCount), Toast.LENGTH_SHORT).show()
-                            }
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (error: Exception) {
-                            Log.e("MainActivity", "Backup share failed", error)
-                            Toast.makeText(context, context.getString(R.string.toast_export_failed), Toast.LENGTH_SHORT).show()
+                            val shareUri = FileProvider.getUriForFile(appContext, "${appContext.packageName}.fileprovider", backupZip)
+                            FileTaskResult.BackupReady(shareUri, backup.points.size, missingPhotoCount)
                         }
                     }
+                }
+
+                LaunchedEffect(fileTaskState) {
+                    val done = fileTaskState as? FileTaskState.Done ?: return@LaunchedEffect
+                    when (val result = done.result) {
+                        is FileTaskResult.CsvImported -> return@LaunchedEffect // acknowledged by its dialog
+                        is FileTaskResult.Exported ->
+                            Toast.makeText(context, context.getString(R.string.toast_export_success, result.count), Toast.LENGTH_SHORT).show()
+                        is FileTaskResult.BackupReady -> {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_STREAM, result.uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            val launched = runCatching {
+                                context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.action_share_backup_zip)))
+                            }.isSuccess
+                            val message = when {
+                                !launched -> context.getString(R.string.toast_export_failed)
+                                result.missingPhotoCount > 0 -> context.getString(R.string.toast_backup_missing_photos, result.missingPhotoCount)
+                                else -> context.getString(R.string.toast_export_success, result.count)
+                            }
+                            Toast.makeText(context, message, if (result.missingPhotoCount > 0) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+                        }
+                        is FileTaskResult.Failed -> Toast.makeText(context, context.getString(
+                            if (result.kind == FileTaskKind.CSV_IMPORT) R.string.toast_import_failed else R.string.toast_export_failed
+                        ), Toast.LENGTH_SHORT).show()
+                    }
+                    viewModel.fileTasks.acknowledge(done)
                 }
 
                 Scaffold(
@@ -1122,9 +1130,10 @@ class MainActivity : AppCompatActivity() {
                             )
                             1 -> {
                                 if (selectedTag != null) {
-                                    val tagPoints = viewModel.observePointsForTag(selectedTag!!.id).collectAsState(emptyList()).value
+                                    val tagPointsFlow = remember(selectedTag.id) { viewModel.observePointsForTag(selectedTag.id) }
+                                    val tagPoints = tagPointsFlow.collectAsState(emptyList()).value
                                     TagDetailScreen(
-                                        tag = selectedTag!!,
+                                        tag = selectedTag,
                                         points = tagPoints,
                                         allPoints = pointsState,
                                         onSelectPoint = { point ->
@@ -1132,17 +1141,17 @@ class MainActivity : AppCompatActivity() {
                                             tab = 0
                                         },
                                         onLongPressPoint = { point -> editingPointId = point.id },
-                                        onAddPointToTag = { point -> viewModel.setTagForPoint(point.id, selectedTag!!.id, true) },
-                                        onRemovePointFromTag = { point -> viewModel.setTagForPoint(point.id, selectedTag!!.id, false) },
-                                        onBack = { selectedTag = null }
+                                        onAddPointToTag = { point -> viewModel.setTagForPoint(point.id, selectedTag.id, true) },
+                                        onRemovePointFromTag = { point -> viewModel.setTagForPoint(point.id, selectedTag.id, false) },
+                                        onBack = { selectedTagId = null }
                                     )
                                 } else {
                                     TagListScreen(
                                         tags = tagsState,
                                         pinnedTagIds = settingsState.pinnedTagIds,
                                         onAddTag = viewModel::addTag,
-                                        onOpenTag = { tag -> selectedTag = tag },
-                                        onEditTag = { tag -> editingTag = tag },
+                                        onOpenTag = { tag -> selectedTagId = tag.id },
+                                        onEditTag = { tag -> editingTagId = tag.id },
                                         onTogglePin = { tag, shouldPin ->
                                             if (shouldPin && settingsState.pinnedTagIds.size >= 3) {
                                                 showPinLimitDialog = true
@@ -1260,52 +1269,29 @@ class MainActivity : AppCompatActivity() {
                                     onImportCsv = {
                                         if (pendingImportKind == null) {
                                             pendingImportKind = "CSV"
-                                            importCsvLauncher.launch("text/*")
+                                            importCsvLauncher.launchOrElse("text/*") { pendingImportKind = null; showNoAppToast() }
                                         }
                                     },
                                     onImportZip = {
                                         if (pendingImportKind == null) {
                                             pendingImportKind = "ZIP"
-                                            importZipLauncher.launch("application/zip")
+                                            importZipLauncher.launchOrElse("application/zip") { pendingImportKind = null; showNoAppToast() }
                                         }
                                     },
                                     onClearCache = {
                                         if (settingsState.downloadedAreas.isNotEmpty()) {
                                             Toast.makeText(context, context.getString(R.string.toast_cache_skip_downloaded), Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            val config = Configuration.getInstance()
-                                            val cacheDirs = buildList {
-                                                config.osmdroidTileCache?.let { add(it) }
-                                                config.osmdroidBasePath?.let { basePath ->
-                                                    val legacyTilesDir = java.io.File(basePath, "tiles")
-                                                    add(legacyTilesDir)
+                                        } else if (!cacheClearInProgress) {
+                                            cacheClearInProgress = true
+                                            scope.launch {
+                                                val cleared = try {
+                                                    withContext(Dispatchers.IO) { clearOsmdroidTileCache() }
+                                                } finally {
+                                                    cacheClearInProgress = false
                                                 }
-                                            }.distinctBy { it.absolutePath }
-
-                                            val purgedByWriter = runCatching {
-                                                SqlTileWriter().purgeCache()
-                                            }.getOrDefault(false)
-
-                                            val deleted = runCatching {
-                                                cacheDirs.all { dir ->
-                                                    if (!dir.exists()) true else dir.deleteRecursively()
-                                                }
-                                            }.getOrDefault(false)
-
-                                            val recreated = if (deleted) {
-                                                runCatching {
-                                                    cacheDirs.all { dir -> dir.mkdirs() || dir.exists() }
-                                                }.getOrDefault(false)
-                                            } else {
-                                                false
+                                                val messageRes = if (cleared) R.string.toast_cache_cleared else R.string.toast_cache_clear_failed
+                                                Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
                                             }
-
-                                            val messageRes = if (purgedByWriter && deleted && recreated) {
-                                                R.string.toast_cache_cleared
-                                            } else {
-                                                R.string.toast_cache_clear_failed
-                                            }
-                                            Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     onOpenAbout = { showAbout = true },
@@ -1351,10 +1337,9 @@ class MainActivity : AppCompatActivity() {
                                     zipIncludePhotos = checked
                                 },
                                 onConfirm = {
-                                    scope.launch {
-                                        if (pendingExportKind != null) return@launch
-                                        beginExport(ExportFileKind.ZIP, pointsState.map { it.id }.toLongArray())
-                                        exportZipLauncher.launch("${buildExportBaseName()}.zip")
+                                    if (canStartFileTask()) {
+                                        beginExport(ExportFileKind.ZIP, allPoints = true)
+                                        exportZipLauncher.launchOrElse("${buildExportBaseName()}.zip") { clearExportRequest(); showNoAppToast() }
                                         showZipExportOptions = false
                                     }
                                 },
@@ -1379,7 +1364,13 @@ class MainActivity : AppCompatActivity() {
                             replacedAddPhotoPath = oldPath
                             pendingAddPhotoPath = toStoredPhotoPath(file)
                             pendingAddPhotoUri = uri
-                            addPhotoLauncher.launch(uri)
+                            addPhotoLauncher.launchOrElse(uri) {
+                                file.delete()
+                                pendingAddPhotoPath = oldPath
+                                replacedAddPhotoPath = null
+                                pendingAddPhotoUri = null
+                                showNoAppToast()
+                            }
                         }
                     }
                     AddPointDialog(
@@ -1525,7 +1516,13 @@ class MainActivity : AppCompatActivity() {
                             editingCaptureCandidatePhotoPath = newPath
                             editingCapturePointId = point.id
                             pendingEditPhotoUri = uri
-                            editPhotoLauncher.launch(uri)
+                            editPhotoLauncher.launchOrElse(uri) {
+                                file.delete()
+                                editingCaptureCandidatePhotoPath = null
+                                editingCapturePointId = null
+                                pendingEditPhotoUri = null
+                                showNoAppToast()
+                            }
                         }
                     }
                     EditPointDialog(
@@ -1572,7 +1569,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (editingTag != null) {
-                    val tag = editingTag!!
+                    val tag = editingTag
                     EditTagDialog(
                         tag = tag,
                         isSaving = tagWriteInProgress,
@@ -1585,7 +1582,7 @@ class MainActivity : AppCompatActivity() {
                                     scope.launch {
                                         try {
                                             viewModel.renameTag(tag, name)
-                                            editingTag = null
+                                            editingTagId = null
                                         } catch (cancelled: CancellationException) {
                                             throw cancelled
                                         } catch (error: Exception) {
@@ -1605,8 +1602,8 @@ class MainActivity : AppCompatActivity() {
                                     try {
                                         viewModel.deleteTag(tag.id)
                                         settingsViewModel.onTagDeleted(tag.id)
-                                        if (selectedTag?.id == tag.id) selectedTag = null
-                                        editingTag = null
+                                        if (selectedTagId == tag.id) selectedTagId = null
+                                        editingTagId = null
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (error: Exception) {
@@ -1618,7 +1615,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         },
-                        onDismiss = { if (!tagWriteInProgress) editingTag = null }
+                        onDismiss = { if (!tagWriteInProgress) editingTagId = null }
                     )
                 }
 

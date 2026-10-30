@@ -27,4 +27,13 @@ internal object LocationFixValidity {
         ) return null
         return (nowMs - fixTimeMs).coerceAtLeast(0L)
     }
+
+    /**
+     * GNSS fix times are satellite UTC, while age checks use the device clock. When the fix carries a monotonic
+     * timestamp, re-express it on the device clock so a skewed wall clock cannot reject (or age) every fix.
+     */
+    fun deviceClockFixTimeMs(fixTimeMs: Long, fixElapsedNanos: Long, nowMs: Long, elapsedNowNanos: Long): Long {
+        if (fixElapsedNanos <= 0L || fixElapsedNanos > elapsedNowNanos) return fixTimeMs
+        return nowMs - (elapsedNowNanos - fixElapsedNanos) / 1_000_000L
+    }
 }

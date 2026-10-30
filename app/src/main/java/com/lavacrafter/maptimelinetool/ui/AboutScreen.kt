@@ -16,8 +16,11 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -95,7 +98,7 @@ fun AboutScreen(onBack: () -> Unit) {
             )
 
             OutlinedButton(
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(repoUrl))) },
+                onClick = { context.startActivityOrToast(Intent(Intent.ACTION_VIEW, Uri.parse(repoUrl))) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.about_open_repository))
@@ -107,7 +110,7 @@ fun AboutScreen(onBack: () -> Unit) {
             )
 
             OutlinedButton(
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(playUrl))) },
+                onClick = { context.startActivityOrToast(Intent(Intent.ACTION_VIEW, Uri.parse(playUrl))) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.about_open_play))
@@ -140,5 +143,13 @@ fun AboutScreen(onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall
             )
         }
+    }
+}
+
+private fun Context.startActivityOrToast(intent: Intent) {
+    try {
+        startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(this, getString(R.string.toast_no_app_available), Toast.LENGTH_SHORT).show()
     }
 }

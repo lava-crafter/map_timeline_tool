@@ -22,6 +22,7 @@
     <string name="toast_quick_add_save_failed">تعذر على الإضافة السريعة حفظ النقطة. يُرجى المحاولة مرة أخرى.</string>
     <string name="toast_export_success">تم تصدير %1$d نقطة</string>
     <string name="toast_backup_missing_photos">تم إنشاء النسخة الاحتياطية؛ تم تخطي %1$d صورة مفقودة</string>
+    <string name="toast_no_app_available">لا يتوفر تطبيق لتنفيذ هذا الإجراء</string>
     <string name="action_clear_cache">مسح ذاكرة التخزين المؤقت للخريطة</string>
     <string name="action_back">رجوع</string>
     <string name="action_center">توسيط</string>

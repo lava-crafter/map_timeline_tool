@@ -163,7 +163,7 @@ class GoogleFusedLocationProvider(
         maxAccuracyMeters: Float,
         requireAccuracy: Boolean = false
     ): Boolean {
-        val ageMs = LocationFixValidity.ageMs(location.latitude, location.longitude, location.time, nowMs)
+        val ageMs = LocationFixValidity.ageMs(location.latitude, location.longitude, location.deviceClockFixTimeMs(nowMs), nowMs)
             ?: return false
         if (ageMs > maxAgeMs) {
             return false
@@ -221,7 +221,7 @@ private fun Location.toGeoPointAndCache(context: Context): GeoPoint {
         latitude = latitude,
         longitude = longitude,
         accuracyMeters = if (hasAccuracy()) accuracy else null,
-        fixTimeMs = time.takeIf { it > 0L },
+        fixTimeMs = deviceClockFixTimeMs().takeIf { it > 0L },
         provider = provider?.ifBlank { "fused" } ?: "fused",
         isMock = isMockCompat()
     )

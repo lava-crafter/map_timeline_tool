@@ -24,6 +24,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.lavacrafter.maptimelinetool.locationListenerCompat
 
 class QuickAddPassiveLocationUpdater(
     context: Context,
@@ -31,9 +32,9 @@ class QuickAddPassiveLocationUpdater(
 ) {
     private val appContext = context.applicationContext
     private val locationManager: LocationManager? = appContext.getSystemService(LocationManager::class.java)
-    private val listener = LocationListener { location ->
+    private val listener: LocationListener = locationListenerCompat(onLocation = { location ->
         locationCache.update(location.toQuickAddLocation())
-    }
+    })
 
     @Volatile
     private var registered = false

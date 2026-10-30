@@ -22,6 +22,7 @@
     <string name="toast_quick_add_save_failed">הוספה מהירה לא הצליחה לשמור את הנקודה. נסה שוב.</string>
     <string name="toast_export_success">יוצאו %1$d נקודות</string>
     <string name="toast_backup_missing_photos">הגיבוי נוצר; %1$d תמונות חסרות דולגו</string>
+    <string name="toast_no_app_available">אין אפליקציה זמינה לפעולה זו</string>
     <string name="action_clear_cache">ניקוי מטמון המפה</string>
     <string name="action_back">חזרה</string>
     <string name="action_center">מרכוז</string>

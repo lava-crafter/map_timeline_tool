@@ -41,7 +41,7 @@ private fun android.location.Location.toGeoPoint(): GeoPoint = GeoPoint(
     latitude = latitude,
     longitude = longitude,
     accuracyMeters = if (hasAccuracy()) accuracy else null,
-    fixTimeMs = time.takeIf { it > 0L },
+    fixTimeMs = deviceClockFixTimeMs().takeIf { it > 0L },
     provider = provider,
     isMock = isMockCompat()
 )

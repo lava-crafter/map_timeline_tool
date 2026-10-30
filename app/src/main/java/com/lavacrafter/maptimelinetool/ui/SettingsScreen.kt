@@ -487,8 +487,9 @@ private fun MapOperationsSettings(
                 OutlinedTextField(
                     value = textValue,
                     onValueChange = { value ->
-                        textValue = value.filter { it.isDigit() }
-                        textValue.toIntOrNull()?.let(onTimeoutSecondsChange)
+                        textValue = value.filter { it.isDigit() }.take(3)
+                        // Commit only complete in-range values so typing "15" does not save 1 (clamped to 5) first.
+                        textValue.toIntOrNull()?.takeIf { it in 5..300 }?.let(onTimeoutSecondsChange)
                     },
                     label = { Text(stringResource(R.string.settings_timeout_hint)) },
                     modifier = Modifier.fillMaxWidth()

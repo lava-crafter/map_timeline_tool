@@ -101,7 +101,8 @@ class SettingsViewModel(
 
     fun setTimeoutSeconds(seconds: Int) {
         settingsUseCase.setTimeoutSeconds(seconds)
-        _uiState.update { it.copy(timeoutSeconds = seconds) }
+        // The store clamps the value; mirror what was persisted so the countdown never starts at 0.
+        _uiState.update { it.copy(timeoutSeconds = settingsUseCase.getTimeoutSeconds()) }
     }
 
     fun setCachePolicy(policy: MapCachePolicy) {

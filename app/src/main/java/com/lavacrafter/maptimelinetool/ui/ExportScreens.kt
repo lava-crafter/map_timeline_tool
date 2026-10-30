@@ -227,7 +227,7 @@ private fun TimeRangePickerScreen(onExport: (Long, Long) -> Unit, onBack: () -> 
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { millis ->
                         endEpochDay = toLocalDate(millis).toEpochDay()
-                        if (endDate.isBefore(startDate)) startEpochDay = endEpochDay
+                        if (endEpochDay < startEpochDay) startEpochDay = endEpochDay
                     }
                     showEndPicker = false
                 }) { Text(stringResource(R.string.action_ok)) }

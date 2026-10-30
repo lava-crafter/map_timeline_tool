@@ -22,6 +22,7 @@
     <string name="toast_quick_add_save_failed">L’ajout rapide n’a pas pu enregistrer le point. Veuillez réessayer.</string>
     <string name="toast_export_success">%1$d points exportés</string>
     <string name="toast_backup_missing_photos">Sauvegarde créée ; %1$d photos manquantes ont été ignorées</string>
+    <string name="toast_no_app_available">Aucune application disponible pour cette action</string>
     <string name="action_clear_cache">Vider le cache de la carte</string>
     <string name="action_back">Retour</string>
     <string name="action_center">Centrer</string>

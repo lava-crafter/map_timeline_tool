@@ -76,6 +76,9 @@ class AppViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tags = tagManagementUseCase.observeTags().map { list -> list.map { it.toEntity() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val fileTasks = FileTasks(viewModelScope) { kind, error ->
+        android.util.Log.e("AppViewModel", "File task $kind failed", error)
+    }
     private var autoAddJob: kotlinx.coroutines.Job? = null
     private val _autoAdded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val autoAdded = _autoAdded
@@ -122,6 +125,14 @@ class AppViewModel(
         if (quickEntryJob?.isActive == true) return
         quickEntryJob = viewModelScope.launch {
             getApplication<Application>().performQuickAdd(clickTimeMs = eventTimeMs)
+        }
+    }
+
+    /** Called once the UI has shown a terminal restore result, so recreation does not replay it. */
+    fun acknowledgeRestoreResult() {
+        val current = _restoreState.value
+        if (current is RestoreState.Success || current is RestoreState.SuccessWithWarning || current is RestoreState.Failure) {
+            _restoreState.compareAndSet(current, RestoreState.Idle)
         }
     }
 

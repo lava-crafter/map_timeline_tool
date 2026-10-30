@@ -16,10 +16,12 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +51,9 @@ import com.lavacrafter.maptimelinetool.ui.MapScreen
 import com.lavacrafter.maptimelinetool.ui.CenterLocationResult
 import com.lavacrafter.maptimelinetool.ui.MapTileAccessPolicy
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
+import java.io.File
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.modules.SqlTileWriter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -236,3 +241,34 @@ private fun getNetworkStatus(context: Context): NetworkStatus {
         else -> NetworkStatus.NONE
     }
 }
+
+/**
+ * Empties the osmdroid tile cache. The SQLite cache file is shared through a static handle that a live tile
+ * provider may hold open, so its rows are purged instead of deleting the file underneath that handle.
+ */
+internal fun clearOsmdroidTileCache(): Boolean {
+    val config = Configuration.getInstance()
+    val purged = runCatching { SqlTileWriter().purgeCache() }.getOrDefault(false)
+    val cacheDirs = listOfNotNull(
+        config.osmdroidTileCache,
+        config.osmdroidBasePath?.let { File(it, "tiles") }
+    ).distinctBy { it.absolutePath }
+    val deleted = runCatching {
+        cacheDirs.all { dir ->
+            dir.listFiles().orEmpty()
+                .filterNot { it.name.startsWith(SqlTileWriter.DATABASE_FILENAME) }
+                .all { it.deleteRecursively() }
+        }
+    }.getOrDefault(false)
+    return purged && deleted
+}
+
+/** Camera/document pickers can be missing (kiosk, managed profiles); report instead of crashing. */
+internal fun <I> ActivityResultLauncher<I>.launchOrElse(input: I, onNoHandler: () -> Unit): Boolean =
+    try {
+        launch(input)
+        true
+    } catch (_: ActivityNotFoundException) {
+        onNoHandler()
+        false
+    }

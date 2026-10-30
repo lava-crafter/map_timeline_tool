@@ -22,6 +22,7 @@
     <string name="toast_quick_add_save_failed">Не удалось сохранить точку через «Быстрое добавление». Попробуйте ещё раз.</string>
     <string name="toast_export_success">Экспортировано точек: %1$d</string>
     <string name="toast_backup_missing_photos">Резервная копия создана; пропущено отсутствующих фото: %1$d</string>
+    <string name="toast_no_app_available">Нет приложения для этого действия</string>
     <string name="action_clear_cache">Очистить кэш карты</string>
     <string name="action_back">Назад</string>
     <string name="action_center">Центрировать</string>
