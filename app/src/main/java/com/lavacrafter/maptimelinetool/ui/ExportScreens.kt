@@ -19,6 +19,8 @@ package com.lavacrafter.maptimelinetool.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -244,20 +246,23 @@ private fun TimeRangePickerScreen(onExport: (Long, Long) -> Unit, onBack: () -> 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ManualSelectScreen(points: List<PointEntity>, onExport: (List<Long>) -> Unit, onBack: () -> Unit) {
-    var selectedIds by rememberSaveable(stateSaver = listSaver(
-        save = { it.toList() },
+    // Primitive LongArray keeps the saved state compact for large selections.
+    var selectedIds by rememberSaveable(stateSaver = Saver<Set<Long>, LongArray>(
+        save = { it.toLongArray() },
         restore = { it.toSet() }
     )) { mutableStateOf(setOf<Long>()) }
     BackHandler { onBack() }
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.export_manual_select)) }) }) { padding ->
-        Column(modifier = Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            points.forEach { p ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = selectedIds.contains(p.id), onCheckedChange = { checked ->
-                        selectedIds = if (checked) selectedIds + p.id else selectedIds - p.id
-                    })
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = p.title)
+        Column(modifier = Modifier.padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(points, key = { it.id }) { p ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = selectedIds.contains(p.id), onCheckedChange = { checked ->
+                            selectedIds = if (checked) selectedIds + p.id else selectedIds - p.id
+                        })
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = p.title)
+                    }
                 }
             }
             Button(onClick = { if (selectedIds.isNotEmpty()) onExport(selectedIds.toList()) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.action_export_csv)) }

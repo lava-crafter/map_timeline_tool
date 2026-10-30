@@ -38,6 +38,7 @@ import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
+import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
 import com.lavacrafter.maptimelinetool.export.ZipRestoreCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +74,8 @@ class MapTimelineApp : Application() {
         val basePath = File(cacheDir, "osmdroid")
         config.osmdroidBasePath = basePath
         config.osmdroidTileCache = File(basePath, "tiles")
+        // The tile DB trims itself once, when it is first opened; apply the cap before any MapView exists.
+        applyMapCachePolicy(this, graph.settingsManagementUseCase.getMapTileSourceId())
         val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
         graph.quickAddPassiveLocationUpdater.refreshRegistration(
             isQuickAddNotificationAvailable(quickAddEnabled)

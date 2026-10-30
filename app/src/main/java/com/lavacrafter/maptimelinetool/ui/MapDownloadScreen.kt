@@ -107,6 +107,7 @@ fun MapDownloadScreen(
     var minZoom by remember { mutableStateOf(8) }
     var maxZoom by remember { mutableStateOf(14) }
     var isDownloading by remember { mutableStateOf(false) }
+    var downloadZoomRange by remember { mutableStateOf<IntRange?>(null) }
     var statusText by remember { mutableStateOf(context.getString(R.string.map_download_status_idle)) }
     var showHelp by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -215,10 +216,16 @@ fun MapDownloadScreen(
                         }
                     },
                     update = { map ->
-                        map.setTileSource(tileSource.toOsmdroidSource(context))
+                        // setTileSource rebuilds the provider; only do it when the source actually changes.
+                        val targetSource = tileSource.toOsmdroidSource(context)
+                        if (map.tileProvider.tileSource.name() != targetSource.name()) map.setTileSource(targetSource)
                         map.setUseDataConnection(!downloadedOnly)
                         map.tileProvider.setUseDataConnection(!downloadedOnly)
                         mapView = map
+                    },
+                    onRelease = { map ->
+                        map.onDetach()
+                        mapView = null
                     }
                 )
 
@@ -256,7 +263,8 @@ fun MapDownloadScreen(
                     minZoom = newValue
                 },
                 valueRange = 3f..19f,
-                steps = 15
+                steps = 15,
+                enabled = !isDownloading
             )
 
             Text(text = stringResource(R.string.map_download_max_zoom, maxZoom))
@@ -267,7 +275,8 @@ fun MapDownloadScreen(
                     maxZoom = newValue
                 },
                 valueRange = 3f..19f,
-                steps = 15
+                steps = 15,
+                enabled = !isDownloading
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -294,8 +303,12 @@ fun MapDownloadScreen(
                         Configuration.getInstance().setTileDownloadThreads(desiredThreads.toShort())
                         isDownloading = true
                         statusText = context.getString(R.string.map_download_status_running)
+                        // Record the range that was actually requested, not whatever the sliders show later.
+                        val startMinZoom = minZoom
+                        val startMaxZoom = maxZoom
+                        downloadZoomRange = startMinZoom..startMaxZoom
                         runCatching {
-                            cacheManager.downloadAreaAsync(context, bbox, minZoom, maxZoom, object : CacheManager.CacheManagerCallback {
+                            cacheManager.downloadAreaAsync(context, bbox, startMinZoom, startMaxZoom, object : CacheManager.CacheManagerCallback {
                                 override fun downloadStarted() {
                                     mainHandler.post {
                                         if (cacheManagerRef !== cacheManager) return@post
@@ -307,7 +320,7 @@ fun MapDownloadScreen(
                                 override fun setPossibleTilesInArea(total: Int) {
                                     mainHandler.post {
                                         if (cacheManagerRef !== cacheManager) return@post
-                                        statusText = context.getString(R.string.map_download_status_running_detail, 0, minZoom)
+                                        statusText = context.getString(R.string.map_download_status_running_detail, 0, startMinZoom)
                                     }
                                 }
 
@@ -323,8 +336,8 @@ fun MapDownloadScreen(
                                                 south = bbox.latSouth,
                                                 east = bbox.lonEast,
                                                 west = bbox.lonWest,
-                                                minZoom = minZoom,
-                                                maxZoom = maxZoom
+                                                minZoom = startMinZoom,
+                                                maxZoom = startMaxZoom
                                             )
                                         )
                                     }
@@ -399,15 +412,16 @@ fun MapDownloadScreen(
                     } catch (e: Exception) {
                     }
                     val bbox = currentBbox.value
-                    if (bbox != null) {
+                    val zoomRange = downloadZoomRange
+                    if (bbox != null && zoomRange != null) {
                         onAreaDownloaded(
                             DownloadedArea(
                                 north = bbox.latNorth,
                                 south = bbox.latSouth,
                                 east = bbox.lonEast,
                                 west = bbox.lonWest,
-                                minZoom = minZoom,
-                                maxZoom = maxZoom
+                                minZoom = zoomRange.first,
+                                maxZoom = zoomRange.last
                             )
                         )
                     }

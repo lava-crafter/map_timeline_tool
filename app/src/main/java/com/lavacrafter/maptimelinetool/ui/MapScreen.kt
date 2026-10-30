@@ -104,17 +104,19 @@ fun MapScreen(
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapView: MapView? by remember { mutableStateOf(null) }
-    val locationProvider = remember {
+    // Destroyed in the lifecycle effect's onDispose, so recreate them together with that effect.
+    val locationProvider = remember(lifecycleOwner) {
         GpsMyLocationProvider(context).apply {
             clearLocationSources()
             addLocationSource(LocationManager.GPS_PROVIDER)
             addLocationSource(LocationManager.NETWORK_PROVIDER)
         }
     }
-    val orientationProvider = remember { InternalCompassOrientationProvider(context) }
+    val orientationProvider = remember(lifecycleOwner) { InternalCompassOrientationProvider(context) }
     val headingOverlay = remember { HeadingLocationOverlay(context) }
     headingOverlay.invalidateMap = { mapView?.postInvalidateOnAnimation() }
-    val todayOrderById = remember(points) { buildTodayOrder(points) }
+    val today by rememberCurrentLocalDay()
+    val todayOrderById = remember(points, today) { buildTodayOrder(points, today) }
     var interactionToken by remember { mutableStateOf(0) }
     var showZoomTransient by remember { mutableStateOf(false) }
     val onMapInteraction = rememberUpdatedState {
@@ -135,11 +137,15 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(selectedPointId, mapView, points) {
+    // Re-center only when the selection or the selected point's position changes; noise/note edits or other
+    // points arriving must not pull the user's viewport back.
+    val selectedTarget = selectedPointId?.let { id -> points.find { it.id == id } }
+        ?.let { GeoPoint(it.latitude, it.longitude) }
+    LaunchedEffect(selectedPointId, selectedTarget?.latitude, selectedTarget?.longitude, mapView) {
         val map = mapView ?: return@LaunchedEffect
-        val target = selectedPointId?.let { id -> points.find { it.id == id } } ?: return@LaunchedEffect
+        val target = selectedTarget ?: return@LaunchedEffect
         map.controller.setZoom(16.0)
-        map.controller.animateTo(GeoPoint(target.latitude, target.longitude))
+        map.controller.animateTo(target)
     }
 
     LaunchedEffect(centerResult?.id, mapView) {
@@ -155,11 +161,12 @@ fun MapScreen(
         onCenterResultConsumed(result.id)
     }
 
+    val currentIsActive by rememberUpdatedState(isActive)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    if (isActive) {
+                    if (currentIsActive) {
                         locationProvider.startLocationProvider(headingOverlay)
                         orientationProvider.startOrientationProvider(headingOverlay)
                     }
@@ -209,6 +216,47 @@ fun MapScreen(
         return OnlineMapTileProvider(viewContext, source, networkCheck, filesystemCache)
     }
 
+    val markerCache = remember { HashMap<Long, Pair<MarkerSignature, Marker>>() }
+
+    fun buildPointMarker(map: MapView, p: PointEntity, order: Int?): Marker {
+        val color = if (order != null) spectrumColor(order) else DEFAULT_MARKER_COLOR
+        val lookDirection = p.toLookDirection()
+        val timeDescription = sdf.format(Date(p.timestamp))
+        val lookDescription = lookDirection?.let { direction ->
+            context.getString(
+                R.string.label_sensor_view_direction,
+                direction.azimuthDegrees,
+                direction.pitchDegrees
+            )
+        }
+        return Marker(map).apply {
+            id = p.id.toString()
+            position = GeoPoint(p.latitude, p.longitude)
+            title = p.title
+            snippet = p.note
+            subDescription = if (lookDescription != null) {
+                "$timeDescription\n$lookDescription"
+            } else {
+                timeDescription
+            }
+            icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
+            infoWindow = object : org.osmdroid.views.overlay.infowindow.MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
+                override fun onOpen(item: Any?) {
+                    super.onOpen(item)
+                    mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
+                    mView.setOnClickListener {
+                        onEditPoint(p)
+                    }
+                }
+            }
+            setOnMarkerClickListener { clicked, mapView ->
+                InfoWindow.closeAllInfoWindowsOn(mapView)
+                clicked.showInfoWindow()
+                true
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().testTag("map_screen")) {
         AndroidView(
             factory = { viewContext ->
@@ -248,6 +296,7 @@ fun MapScreen(
             },
             onRelease = { map ->
                 map.onPause()
+                markerCache.clear()
                 map.onDetach()
                 policyNetworkCheck = null
                 policyFilesystemCache = null
@@ -287,54 +336,34 @@ fun MapScreen(
                 val signature = MapOverlaySignature(
                     selectedPointId = selectedPointId,
                     markerScale = markerScale,
+                    todayOrderById = todayOrderById,
                     points = points.map { it.toOverlaySignature() }
                 )
                 if (overlaysReady && signature == lastOverlaySignature) {
                     return@AndroidView
                 }
-                map.overlays.clear()
-                points.forEach { p ->
+                // Open bubbles may belong to markers being replaced; close them so none shows (or edits) stale data.
+                InfoWindow.closeAllInfoWindowsOn(map)
+                // Reuse markers (and their icon bitmaps) whose rendered content is unchanged, so a single point
+                // update allocates a constant number of markers instead of rebuilding all of them.
+                val livePointIds = HashSet<Long>(points.size)
+                val markers = points.map { p ->
                     val order = todayOrderById[p.id]
-                    val color = if (order != null) spectrumColor(order) else DEFAULT_MARKER_COLOR
-                    val lookDirection = p.toLookDirection()
-                    val timeDescription = sdf.format(Date(p.timestamp))
-                    val lookDescription = lookDirection?.let { direction ->
-                        context.getString(
-                            R.string.label_sensor_view_direction,
-                            direction.azimuthDegrees,
-                            direction.pitchDegrees
-                        )
-                    }
-                    val marker = Marker(map).apply {
-                        position = GeoPoint(p.latitude, p.longitude)
-                        title = p.title
-                        snippet = p.note
-                        subDescription = if (lookDescription != null) {
-                            "$timeDescription\n$lookDescription"
-                        } else {
-                            timeDescription
-                        }
-                        icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
-                        infoWindow = object : org.osmdroid.views.overlay.infowindow.MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
-                            override fun onOpen(item: Any?) {
-                                super.onOpen(item)
-                                mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
-                                mView.setOnClickListener {
-                                    onEditPoint(p)
-                                }
-                            }
-                        }
-                        setOnMarkerClickListener { clicked, mapView ->
-                            InfoWindow.closeAllInfoWindowsOn(mapView)
-                            clicked.showInfoWindow()
-                            true
-                        }
-                    }
-                    map.overlays.add(marker)
-                    if (p.id == selectedPointId) {
-                        marker.showInfoWindow()
+                    val markerSignature = MarkerSignature(p.toOverlaySignature(), order, markerScale)
+                    livePointIds += p.id
+                    val cached = markerCache[p.id]
+                    if (cached != null && cached.first == markerSignature) {
+                        cached.second
+                    } else {
+                        cached?.second?.onDetach(map)
+                        buildPointMarker(map, p, order).also { markerCache[p.id] = markerSignature to it }
                     }
                 }
+                val removedIds = markerCache.keys - livePointIds
+                removedIds.forEach { id -> markerCache.remove(id)?.second?.onDetach(map) }
+                map.overlays.clear()
+                map.overlays.addAll(markers)
+                markers.firstOrNull { it.id == selectedPointId?.toString() }?.showInfoWindow()
                 map.overlays.add(
                     MapEventsOverlay(object : MapEventsReceiver {
                         override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
@@ -460,7 +489,14 @@ fun MapScreen(
 private data class MapOverlaySignature(
     val selectedPointId: Long?,
     val markerScale: Float,
+    val todayOrderById: Map<Long, Int>,
     val points: List<PointOverlaySignature>
+)
+
+private data class MarkerSignature(
+    val point: PointOverlaySignature,
+    val todayOrder: Int?,
+    val markerScale: Float
 )
 
 private data class PointOverlaySignature(
