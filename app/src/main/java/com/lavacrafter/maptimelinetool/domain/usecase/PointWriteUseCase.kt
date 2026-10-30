@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
@@ -170,7 +171,15 @@ class PointWriteUseCase(
         timestamp: Long,
         photoPath: String? = null
     ): Point {
-        val sensorSnapshot = sensorSnapshotPort.readSnapshot()
+        // Sensors are optional metadata: a failing sensor must not block saving the point itself.
+        val sensorSnapshot = try {
+            sensorSnapshotPort.readSnapshot()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            onOptionalFailure(error)
+            PointSensorSnapshot()
+        }
         return Point(
             timestamp = timestamp,
             latitude = location.latitude,

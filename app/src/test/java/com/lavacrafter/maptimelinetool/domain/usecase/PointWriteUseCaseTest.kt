@@ -285,6 +285,20 @@ class PointWriteUseCaseTest {
     }
 
     @Test
+    fun `a failing sensor read degrades to an empty snapshot instead of blocking the save`() = runBlocking {
+        val repo = FakePointRepository()
+        val failures = mutableListOf<Exception>()
+        val writer = PointWriteUseCase(repo, object : SensorSnapshotPort {
+            override suspend fun readSnapshot(): PointSensorSnapshot = throw IllegalStateException("sensor service died")
+        }, {}, onOptionalFailure = { failures += it })
+
+        writer.addPointWithTags("Saved", "", GeoPoint(1.0, 2.0), 2L, emptySet())
+
+        assertEquals(null, repo.inserted.single().pressureHpa)
+        assertEquals(1, failures.size)
+    }
+
+    @Test
     fun `cleanup and new references use one guard and stale candidates cannot resurrect deleted photos`() = runBlocking {
         withTimeout(5_000L) {
             val old = point().copy(id = 10L, photoPath = "old.jpg")

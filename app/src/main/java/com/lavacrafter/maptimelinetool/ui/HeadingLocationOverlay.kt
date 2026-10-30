@@ -23,6 +23,8 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Point
 import android.location.Location
+import android.view.Surface
+import androidx.core.content.ContextCompat
 import com.lavacrafter.maptimelinetool.LocationUtils
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -55,8 +57,17 @@ class HeadingLocationOverlay(private val context: Context) : Overlay(), IMyLocat
     }
 
     override fun onOrientationChanged(orientation: Float, provider: IOrientationProvider?) {
-        bearing = orientation
+        // The compass reports the heading of the device's natural "up"; in landscape the screen's up is rotated
+        // from that, so add the display rotation (as osmdroid's CompassOverlay does).
+        bearing = (orientation + displayRotationDegrees()) % 360f
         invalidateMap?.invoke()
+    }
+
+    private fun displayRotationDegrees(): Float = when (ContextCompat.getDisplayOrDefault(context).rotation) {
+        Surface.ROTATION_90 -> 90f
+        Surface.ROTATION_180 -> 180f
+        Surface.ROTATION_270 -> 270f
+        else -> 0f
     }
 
     override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
