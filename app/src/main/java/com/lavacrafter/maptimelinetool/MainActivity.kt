@@ -408,7 +408,7 @@ class MainActivity : AppCompatActivity() {
                     val started = viewModel.fileTasks.start(FileTaskKind.CSV_IMPORT) {
                         val parsed = withContext(Dispatchers.IO) {
                             appContext.contentResolver.openInputStream(uri)?.use { input ->
-                                CsvImporter.parseOrdinaryCsv(input.reader(Charsets.UTF_8))
+                                CsvImporter.parseOrdinaryCsv(CsvImporter.strictUtf8Reader(input))
                             } ?: throw IOException("Failed to open CSV import")
                         }
                         val result = viewModel.importPoints(parsed.points)

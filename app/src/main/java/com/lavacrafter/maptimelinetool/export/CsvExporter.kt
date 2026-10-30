@@ -73,6 +73,8 @@ object CsvExporter {
         photoRelPathResolver: (Point) -> String? = { null }
     ) {
         OutputStreamWriter(outputStream, Charsets.UTF_8).use { writer ->
+            // A BOM makes Excel open the file as UTF-8 (otherwise CJK text is garbled); our importer skips it.
+            writer.write('\uFEFF'.code)
             writeCsv(points, writer, photoRelPathResolver)
         }
     }

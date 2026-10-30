@@ -17,14 +17,18 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.io.PushbackReader
 import java.io.Reader
 import java.io.StringReader
-import java.io.PushbackReader
+import java.nio.charset.CodingErrorAction
 import java.text.SimpleDateFormat
 import java.text.ParsePosition
 import java.util.Locale
 import java.util.TimeZone
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizeLocationProvider
 import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 
@@ -37,6 +41,14 @@ object CsvImporter {
     data class OrdinaryCsvResult(val points: List<Point>, val skipped: Int, val warnings: List<SkippedRow>)
 
     /** Stream the input and bound all rows (including rejected ones) before committing anything to Room. */
+    /** Rejects non-UTF-8 files (e.g. re-saved by Excel in GBK) instead of silently importing U+FFFD text. */
+    fun strictUtf8Reader(input: InputStream): Reader = InputStreamReader(
+        input,
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+    )
+
     fun parseOrdinaryCsv(reader: Reader, maxRecords: Int = MAX_ORDINARY_RECORDS): OrdinaryCsvResult {
         val points = mutableListOf<Point>()
         val warnings = mutableListOf<SkippedRow>()
@@ -93,6 +105,8 @@ object CsvImporter {
         while (true) {
             val record = readCsvRecord(pushbackReader, limits, strictRows) ?: break
             if (record.isEmpty()) continue
+            // Ordinary CSVs edited in spreadsheets may start with blank lines or Excel's "sep=," directive.
+            if (!strictRows && (record.all { it.isBlank() } || isSeparatorDirective(record))) continue
             val candidate = record.map { it.trim() }
             val normalized = candidate.map { it.lowercase(Locale.US) }
             if (normalized.contains("name") && normalized.contains("latitude") && normalized.contains("longitude")) {
@@ -178,7 +192,7 @@ object CsvImporter {
                     longitude = lon,
                     locationAccuracyMeters = row.valueOf(indexMap, "location_accuracy_meters").toFiniteFloatOrNull(),
                     locationFixTimeMs = row.valueOf(indexMap, "location_fix_time_ms").toFiniteLongOrNull(),
-                    locationProvider = decodedProvider.toTrimmedOrNull(),
+                    locationProvider = sanitizeLocationProvider(decodedProvider),
                     title = title,
                     note = note,
                     pressureHpa = row.valueOf(indexMap, "pressure_hpa").toFiniteFloatOrNull(),
@@ -227,13 +241,13 @@ object CsvImporter {
         return parsed.takeIf { it.isFinite() }
     }
 
+    private fun isSeparatorDirective(record: List<String>): Boolean =
+        record.size <= 2 && record.joinToString(",").trim().startsWith("sep=", ignoreCase = true)
+
     private fun String?.toFiniteLongOrNull(): Long? {
         return this?.trim()?.takeIf { it.isNotEmpty() }?.toLongOrNull()
     }
 
-    private fun String?.toTrimmedOrNull(): String? {
-        return this?.trim()?.takeIf { it.isNotEmpty() }
-    }
 
     private fun readCsvRecord(reader: PushbackReader, limits: Limits, strict: Boolean): List<String>? {
         val record = mutableListOf<String>()

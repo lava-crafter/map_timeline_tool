@@ -37,6 +37,7 @@ import com.lavacrafter.maptimelinetool.notification.isQuickAddNotificationAvaila
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import com.lavacrafter.maptimelinetool.ui.SettingsStore
 import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
 import com.lavacrafter.maptimelinetool.export.ZipRestoreCoordinator
@@ -65,8 +66,12 @@ class MapTimelineApp : Application() {
             try {
                 val removed = graph.pointRepositoryGateway.deleteOrphanPointTags()
                 if (removed > 0) Log.i("MapTimelineApp", "Removed $removed orphan point-tag relations")
+                // Early builds inserted raw tag names; give blank ones a visible name instead of hiding them.
+                graph.pointRepositoryGateway.getAllTags()
+                    .filter { sanitizeTagName(it.name).isBlank() }
+                    .forEach { graph.pointRepositoryGateway.updateTag(it.copy(name = "tag_${it.id}")) }
             } catch (error: Exception) {
-                Log.e("MapTimelineApp", "Orphan point-tag cleanup failed", error)
+                Log.e("MapTimelineApp", "Startup data repair failed", error)
             }
         }
         val config = Configuration.getInstance()

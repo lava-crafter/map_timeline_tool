@@ -17,7 +17,9 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import java.io.File
+import java.io.IOException
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.security.MessageDigest
@@ -73,7 +75,8 @@ object ZipExporter {
         val includeTagsInArchive = options.includePoints && options.includeTags
         val exportedTags = if (includeTagsInArchive) tags else emptyList()
         val exportedTagIds = exportedTags.mapTo(mutableSetOf()) { it.id }
-        val photoEntries = mutableMapOf<String, File>()
+        // Case-insensitive like the importer's duplicate check, so IMG.jpg and img.jpg get distinct entry names.
+        val photoEntries: MutableMap<String, File> = java.util.TreeMap(String.CASE_INSENSITIVE_ORDER)
         val pointPhotoMeta = points.map { point ->
             buildPhotoMeta(
                 point = point,
@@ -158,7 +161,9 @@ object ZipExporter {
                 val tagWriter = OutputStreamWriter(zip, Charsets.UTF_8)
                 CsvExporter.writeRow(tagWriter, listOf("tag_id", "name"))
                 exportedTags.forEach { tag ->
-                    CsvExporter.writeRow(tagWriter, listOf(tag.id.toString(), tag.name))
+                    // Early builds stored unsanitized names; a blank one would make the backup unrestorable.
+                    val name = sanitizeTagName(tag.name).ifBlank { "tag_${tag.id}" }
+                    CsvExporter.writeRow(tagWriter, listOf(tag.id.toString(), name))
                 }
                 tagWriter.flush()
                 zip.closeEntry()
@@ -176,9 +181,25 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
+            val expectedHashByPath = pointPhotoMeta.mapNotNull { meta -> meta.relPath?.let { it to meta.sha256 } }.toMap()
             photoEntries.forEach { (relPath, file) ->
                 zip.putNextEntry(ZipEntry(relPath))
-                file.inputStream().buffered().use { input -> input.copyTo(zip) }
+                // points.csv already recorded this file's hash; fail now rather than write an archive whose
+                // restore is rejected later because the photo changed in between.
+                val digest = MessageDigest.getInstance("SHA-256")
+                file.inputStream().buffered().use { input ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        digest.update(buffer, 0, read)
+                        zip.write(buffer, 0, read)
+                    }
+                }
+                val actual = digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+                if (expectedHashByPath[relPath]?.let { it != actual } == true) {
+                    throw IOException("Photo changed during export: $relPath")
+                }
                 zip.closeEntry()
             }
 

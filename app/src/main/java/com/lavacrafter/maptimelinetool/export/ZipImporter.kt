@@ -201,6 +201,8 @@ object ZipImporter {
                 "Missing or unreferenced backup photos"
             }
         }
+        // e.g. a backup re-zipped inside a folder: report it instead of "restoring" 0 points successfully.
+        require(seenEntries.isNotEmpty()) { "No backup data found in archive" }
         require(importedPhotoMetadata.isEmpty() || hasPointsEntry) { "Photo backups must include points" }
         val referencedPhotoPaths = points.mapNotNull { it.photoPath?.let(::normalizePhotoRelPath) }.toSet()
         require(referencedPhotoPaths.containsAll(importedPhotoMetadata.keys)) { "Unreferenced backup photos" }

@@ -24,6 +24,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizeLocationProvider
 import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import org.json.JSONArray
@@ -160,13 +161,12 @@ object GeoJsonExporter {
                 "GeoJSON feature[$index] longitude is out of bounds: $lon"
             }
 
-            val title = properties?.optString("title")
-                ?.takeIf { it.isNotBlank() }
-                ?: properties?.optString("name")
+            // optString() turns JSON null into the text "null"; treat null like a missing value.
+            val title = properties?.optStringOrNull("title")
+                ?: properties?.optStringOrNull("name")
                 ?: ""
-            val note = properties?.optString("note")
-                ?.takeIf { it.isNotBlank() }
-                ?: properties?.optString("description")
+            val note = properties?.optStringOrNull("note")
+                ?: properties?.optStringOrNull("description")
                 ?: ""
 
             val timestampMs = properties?.optLongOrNull("timestamp_ms")
@@ -175,7 +175,7 @@ object GeoJsonExporter {
             val normalizedTitle = sanitizePointTitle(title).ifBlank { formatPointTimestamp(timestampMs) }
             val normalizedNote = sanitizePointNote(note)
 
-            val relPhotoPath = properties?.optString("photo_rel_path")?.trim().orEmpty()
+            val relPhotoPath = properties?.optStringOrNull("photo_rel_path").orEmpty()
             val resolvedPhotoPath = relPhotoPath.takeIf { it.isNotEmpty() }?.let(resolvePhotoPath)
 
             points.add(
@@ -185,7 +185,7 @@ object GeoJsonExporter {
                     longitude = lon,
                     locationAccuracyMeters = properties?.optFloatOrNull("location_accuracy_meters"),
                     locationFixTimeMs = properties?.optLongOrNull("location_fix_time_ms"),
-                    locationProvider = properties?.optStringOrNull("location_provider"),
+                    locationProvider = sanitizeLocationProvider(properties?.optStringOrNull("location_provider")),
                     title = normalizedTitle,
                     note = normalizedNote,
                     pressureHpa = properties?.optFloatOrNull("pressure_hpa"),

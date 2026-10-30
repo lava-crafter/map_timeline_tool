@@ -78,7 +78,8 @@ class ZipRestoreCoordinator(
             var failure: Throwable? = null
             try {
                 val free = context.filesDir.usableSpace
-                val reserve = maxOf(512L * 1024 * 1024, free / 10)
+                // Keep a safety margin, but not a fixed 512 MB that blocks even tiny restores on a fuller phone.
+                val reserve = (free / 10).coerceIn(64L * 1024 * 1024, 512L * 1024 * 1024)
                 if (free <= reserve) throw IOException("Not enough free storage to stage a backup safely")
                 val budget = minOf(32L * 1024 * 1024 * 1024, free - reserve)
                 staging = createPointPhotoImportStagingDir(context)
@@ -157,8 +158,11 @@ class ZipRestoreCoordinator(
                             Log.w("ZipRestoreCoordinator", "Photo cleanup will retry from the restore journal", error)
                         }
                         val settingsApplied = imported.settingsJson?.let { json ->
+                            // Old archives default to tags=true even without tags.csv; with nothing to map,
+                            // remapping would wipe the current pinned/recent/default tags, so keep them.
+                            val restoreTagSettings = imported.manifest.sections.tags && imported.tags.isNotEmpty()
                             runCatching { applySettings(json, result.legacyTagIdToActualId,
-                                imported.manifest.sections.tags) }.getOrDefault(false)
+                                restoreTagSettings) }.getOrDefault(false)
                         } ?: true
                         val warnings = listOfNotNull(
                             if (!settingsApplied) "Settings could not be saved" else null,
@@ -219,6 +223,11 @@ class ZipRestoreCoordinator(
             output.fd.sync()
         }
         check(tmp.renameTo(journal)) { "Cannot persist restore journal" }
+        // Make the rename itself durable so a power loss cannot drop or truncate the journal.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) runCatching {
+            java.nio.channels.FileChannel.open(requireNotNull(journal.parentFile).toPath(),
+                java.nio.file.StandardOpenOption.READ).use { it.force(true) }
+        }
     }
 
     private fun requireSafePhotoName(name: String) {
