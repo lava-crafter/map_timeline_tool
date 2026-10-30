@@ -43,7 +43,8 @@ object ZipExporter {
 
     data class ExportStats(
         val pointCount: Int,
-        val photoCount: Int
+        val photoCount: Int,
+        val missingPhotoCount: Int = 0
     )
 
     private data class PointPhotoMeta(

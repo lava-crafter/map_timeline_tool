@@ -21,6 +21,7 @@
     <string name="restore_finalizing">Guardando puntos y fotos…</string>
     <string name="toast_quick_add_save_failed">La adición rápida no pudo guardar el punto. Inténtalo de nuevo.</string>
     <string name="toast_export_success">Se exportaron %1$d puntos</string>
+    <string name="toast_backup_missing_photos">Copia creada; se omitieron %1$d fotos que faltaban</string>
     <string name="action_clear_cache">Borrar caché del mapa</string>
     <string name="action_back">Atrás</string>
     <string name="action_center">Centrar</string>

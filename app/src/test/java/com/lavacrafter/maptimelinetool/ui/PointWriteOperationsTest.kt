@@ -188,6 +188,7 @@ private class OperationRepo : PointRepositoryGateway {
     override suspend fun getPageAfterId(afterId: Long, limit: Int) = emptyList<Point>()
     override fun observeTags() = flowOf(emptyList<Tag>())
     override suspend fun getAllTags() = emptyList<Tag>()
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>) = tagIds
     override suspend fun insertTag(tag: Tag) = 0L
     override suspend fun updateTag(tag: Tag) = Unit
     override suspend fun deleteTag(tagId: Long) = Unit

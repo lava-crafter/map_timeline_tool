@@ -246,6 +246,32 @@ class PointWriteUseCaseTest {
     }
 
     @Test
+    fun `editing a point whose unchanged photo is missing still saves`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "gone.jpg")
+        val repo = FakePointRepository().apply { inserted += old }
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, photoCommitGuard = PhotoCommitGuard { false })
+
+        writer.updatePoint(old, "Renamed", "", "gone.jpg")
+
+        assertEquals("Renamed", repo.inserted.single().title)
+        assertEquals("gone.jpg", repo.inserted.single().photoPath)
+    }
+
+    @Test
+    fun `tags deleted before commit are not linked and stale links are dropped on edit`() = runBlocking {
+        val repo = FakePointRepository().apply { missingTagIds = setOf(3L) }
+        val writer = writer(repo) {}
+
+        val id = writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 2L, setOf(2L, 3L))
+        assertEquals(listOf(id to 2L), repo.insertedTags)
+
+        repo.inserted[0] = repo.inserted[0].copy(id = id)
+        repo.insertedTags += id to 3L
+        writer.updatePoint(repo.inserted.single(), "Edited", "", null, setOf(2L, 3L))
+        assertEquals(listOf(id to 2L), repo.insertedTags)
+    }
+
+    @Test
     fun `cleanup and new references use one guard and stale candidates cannot resurrect deleted photos`() = runBlocking {
         withTimeout(5_000L) {
             val old = point().copy(id = 10L, photoPath = "old.jpg")
@@ -366,6 +392,9 @@ private class FakePointRepository : PointRepositoryGateway {
     var updateFailure: Exception? = null
     var deleteFailure: Exception? = null
     var noiseFailure: Exception? = null
+    var missingTagIds: Set<Long> = emptySet()
+
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> = tagIds - missingTagIds
 
     override suspend fun <T> inTransaction(block: suspend () -> T): T {
         val previousPoints = inserted.toList()

@@ -17,6 +17,7 @@ import java.io.IOException
 import java.util.Locale
 import java.util.UUID
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -59,7 +60,7 @@ class ZipRestoreCoordinator(
     private val stagingRoot get() = File(context.filesDir, "point_photo_imports")
 
     suspend fun recover() = withContext(Dispatchers.IO) {
-        lock.withLock { photoCommitGuard.withLock { recoverLocked() } }
+        lock.withLock { photoCommitGuard.withLock { recoverLocked() } }?.let { throw it }
     }
 
     suspend fun restore(
@@ -68,6 +69,8 @@ class ZipRestoreCoordinator(
         commitData: suspend (ZipImporter.ImportStats, suspend (Set<String>) -> Unit) -> AppViewModel.ZipImportResult
     ) = withContext(Dispatchers.IO) {
         lock.withLock {
+            // A leftover directory that cannot be cleaned yet is retained (and logged) for a later retry;
+            // it must not block every future restore. New restores always use a fresh staging directory.
             photoCommitGuard.withLock { recoverLocked() }
             state.value = RestoreState.Validating
             var staging: File? = null
@@ -188,12 +191,22 @@ class ZipRestoreCoordinator(
         }
     }
 
-    private suspend fun recoverLocked() {
+    /** Cleans every leftover staging directory it can; returns the first failure (others suppressed). */
+    private suspend fun recoverLocked(): Exception? {
+        var failure: Exception? = null
         stagingRoot.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
-            val journal = File(dir, "restore-journal.json")
-            if (journal.exists()) cleanJournal(journal)
-            check(dir.deleteRecursively()) { "Cannot remove restore staging directory" }
+            try {
+                val journal = File(dir, "restore-journal.json")
+                if (journal.exists()) cleanJournal(journal)
+                check(dir.deleteRecursively()) { "Cannot remove restore staging directory" }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("ZipRestoreCoordinator", "Keeping restore staging ${dir.name} for a later retry", error)
+                failure?.addSuppressed(error) ?: run { failure = error }
+            }
         }
+        return failure
     }
 
     private fun writeJournal(journal: File, newPhotos: List<String>, retiredPhotos: Set<String>) {

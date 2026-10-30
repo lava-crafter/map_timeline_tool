@@ -87,6 +87,12 @@ interface PointDao {
     @Query("SELECT tagId FROM point_tags WHERE pointId = :pointId")
     suspend fun getTagIdsForPoint(pointId: Long): List<Long>
 
+    @Query("SELECT id FROM tags WHERE id IN (:tagIds)")
+    suspend fun getExistingTagIds(tagIds: List<Long>): List<Long>
+
+    @Query("DELETE FROM point_tags WHERE pointId NOT IN (SELECT id FROM points) OR tagId NOT IN (SELECT id FROM tags)")
+    suspend fun deleteOrphanPointTags(): Int
+
     @Query("SELECT * FROM point_tags ORDER BY pointId, tagId")
     suspend fun getAllPointTagRelations(): List<PointTagCrossRef>
 

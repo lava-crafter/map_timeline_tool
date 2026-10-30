@@ -301,6 +301,8 @@ class AppViewModel(
 
     suspend fun getAllPoints(): List<PointEntity> = repo.getAll().map { it.toEntity() }
 
+    suspend fun getPointById(pointId: Long): PointEntity? = repo.getById(pointId)?.toEntity()
+
     suspend fun getAllTags(): List<TagEntity> = repo.getAllTags().map { it.toEntity() }
 
     companion object {

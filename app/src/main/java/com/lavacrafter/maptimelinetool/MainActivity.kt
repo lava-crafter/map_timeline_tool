@@ -581,15 +581,19 @@ class MainActivity : AppCompatActivity() {
                 ) { isSuccess ->
                     val capturedPath = editingCaptureCandidatePhotoPath
                     val capturedPointId = editingCapturePointId
+                    // Clear the saveable pending markers synchronously: if the validation coroutine below is
+                    // cancelled by recreation, a restored non-null pendingEditPhotoUri would lock the dialog.
+                    editingCaptureCandidatePhotoPath = null
+                    editingCapturePointId = null
+                    pendingEditPhotoUri = null
                     scope.launch {
                         val validPoint = if (isSuccess && capturedPath != null && capturedPointId != null &&
                             editingPointId == capturedPointId) {
                             withContext(Dispatchers.IO) {
-                                runCatching { viewModel.getAllPoints().firstOrNull { it.id == capturedPointId } }.getOrNull()
+                                runCatching { viewModel.getPointById(capturedPointId) }.getOrNull()
                             }
                         } else null
-                        if (validPoint != null && editingPointId == capturedPointId &&
-                            editingCaptureCandidatePhotoPath == capturedPath) {
+                        if (validPoint != null && editingPointId == capturedPointId) {
                             val previousUnsavedPath = editingPointPhotoPath
                             editingPointPhotoPath = capturedPath
                             if (previousUnsavedPath != validPoint.photoPath && previousUnsavedPath != capturedPath) {
@@ -598,9 +602,6 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             deletePhotoOnIo(capturedPath)
                         }
-                        editingCaptureCandidatePhotoPath = null
-                        editingCapturePointId = null
-                        pendingEditPhotoUri = null
                     }
                 }
                 fun photoOptions() = PhotoPersistOptions(settingsState.photoLosslessEnabled,
@@ -1004,16 +1005,17 @@ class MainActivity : AppCompatActivity() {
                 val shareBackupZip: () -> Unit = {
                     scope.launch {
                         try {
+                            var missingPhotoCount = 0
                             val (shareUri, totalPointCount) = withContext(Dispatchers.IO) {
                                 val backup = FullBackupAssembler(context.appGraph().pointRepositoryGateway).assemble()
                                 val portableSettings = SettingsStore.exportBackupJson(context)
                                 val backupZip = createSharedBackupFile(java.io.File(context.filesDir, "shared_backups")) { output ->
-                                    backup.writeZip(
+                                    missingPhotoCount = backup.writeZip(
                                         outputStream = output,
                                         resolvePhotoFile = { photoPath -> resolvePointPhotoFile(context, photoPath) },
                                         settingsJson = portableSettings,
                                         appVersion = packageManager.getPackageInfo(packageName, 0).versionName
-                                    )
+                                    ).missingPhotoCount
                                 }
                                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", backupZip) to backup.points.size
                             }
@@ -1028,7 +1030,11 @@ class MainActivity : AppCompatActivity() {
                                     context.getString(R.string.action_share_backup_zip)
                                 )
                             )
-                            Toast.makeText(context, context.getString(R.string.toast_export_success, totalPointCount), Toast.LENGTH_SHORT).show()
+                            if (missingPhotoCount > 0) {
+                                Toast.makeText(context, context.getString(R.string.toast_backup_missing_photos, missingPhotoCount), Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, context.getString(R.string.toast_export_success, totalPointCount), Toast.LENGTH_SHORT).show()
+                            }
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (error: Exception) {
@@ -1484,11 +1490,22 @@ class MainActivity : AppCompatActivity() {
 
                 LaunchedEffect(editingPoint?.id) {
                     editingPoint?.takeIf { it.id != initializedEditingPointId }?.let { point ->
-                        initializedEditingPointId = point.id
+                        // Load before marking initialized: a cancelled or failed load must not leave an
+                        // "initialized" draft with no tags/photo that Save would then commit.
+                        val tagIds = try {
+                            viewModel.getTagIdsForPoint(point.id).toSet()
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.e("MainActivity", "Loading point tags failed", error)
+                            resetEditingPointState()
+                            return@LaunchedEffect
+                        }
                         editingDraftTitle = point.title
                         editingDraftNote = point.note
-                        editingPointTagIds = viewModel.getTagIdsForPoint(point.id).toSet()
+                        editingPointTagIds = tagIds
                         editingPointPhotoPath = point.photoPath
+                        initializedEditingPointId = point.id
                     }
                 }
 
@@ -1535,13 +1552,13 @@ class MainActivity : AppCompatActivity() {
                         onDraftTitleChange = { editingDraftTitle = it },
                         onDraftNoteChange = { editingDraftNote = it },
                         onSave = { title, note, photoPath ->
-                            if (!editWriteInProgress && pendingEditPhotoUri == null) {
+                            if (!editWriteInProgress && pendingEditPhotoUri == null && initializedEditingPointId == point.id) {
                                 pointWrites.submit(PointWriteRequest.Edit(point.id, title, note, editingPointTagIds,
                                     photoPath, photoOptions()))
                             }
                         },
                         onDelete = {
-                            if (!editWriteInProgress && pendingEditPhotoUri == null) {
+                            if (!editWriteInProgress && pendingEditPhotoUri == null && initializedEditingPointId == point.id) {
                                 pointWrites.submit(PointWriteRequest.Delete(point.id, editingPointPhotoPath))
                             }
                         },
@@ -1587,6 +1604,7 @@ class MainActivity : AppCompatActivity() {
                                 scope.launch {
                                     try {
                                         viewModel.deleteTag(tag.id)
+                                        settingsViewModel.onTagDeleted(tag.id)
                                         if (selectedTag?.id == tag.id) selectedTag = null
                                         editingTag = null
                                     } catch (cancelled: CancellationException) {

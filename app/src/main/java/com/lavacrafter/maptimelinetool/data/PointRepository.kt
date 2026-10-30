@@ -63,6 +63,10 @@ class PointRepository(
     override suspend fun getTagIdsForPoint(pointId: Long) = dao.getTagIdsForPoint(pointId)
     override suspend fun getAllPointTagRelations(): List<PointTagRelation> =
         dao.getAllPointTagRelations().map { PointTagRelation(it.pointId, it.tagId) }
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> =
+        // Chunk to stay below SQLite's bound-variable limit on older devices.
+        tagIds.chunked(500).flatMapTo(HashSet()) { dao.getExistingTagIds(it) }
+    override suspend fun deleteOrphanPointTags(): Int = dao.deleteOrphanPointTags()
     fun observeTagWithPoints(tagId: Long) = dao.observeTagWithPoints(tagId)
     override fun observePointsForTag(tagId: Long) = dao.observePointsForTag(tagId).map { points -> points.map { it.toDomain() } }
 }

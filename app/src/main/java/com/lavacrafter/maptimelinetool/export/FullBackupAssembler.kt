@@ -19,7 +19,6 @@ package com.lavacrafter.maptimelinetool.export
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import java.io.File
-import java.io.IOException
 import java.io.OutputStream
 
 /** Read a consistent database snapshot, including tags that are not attached to any point. */
@@ -53,12 +52,15 @@ data class FullBackupPayload(
         appVersion: String?
     ): ZipExporter.ExportStats {
         require(settingsJson.isNotBlank()) { "Full backup requires portable settings" }
-        return ZipExporter.export(
+        // A missing photo must not make every future full backup impossible: export the point without
+        // its photo reference and report how many were skipped.
+        val missingPhotoPaths = mutableSetOf<String>()
+        val stats = ZipExporter.export(
             points = points,
             outputStream = outputStream,
             resolvePhotoFile = { path ->
                 resolvePhotoFile(path)?.takeIf { it.isFile && it.canRead() }
-                    ?: throw IOException("Backup photo is missing or unreadable: $path")
+                    ?: run { missingPhotoPaths += path; null }
             },
             options = ZipExporter.ExportOptions(
                 includePoints = true,
@@ -71,5 +73,6 @@ data class FullBackupPayload(
             settingsJsonProvider = { settingsJson },
             appVersion = appVersion
         )
+        return stats.copy(missingPhotoCount = missingPhotoPaths.size)
     }
 }

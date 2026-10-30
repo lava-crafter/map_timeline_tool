@@ -46,5 +46,16 @@ interface PointRepositoryGateway {
     suspend fun deletePointTag(pointId: Long, tagId: Long)
     suspend fun getTagIdsForPoint(pointId: Long): List<Long>
     suspend fun getAllPointTagRelations(): List<PointTagRelation>
+    /** point_tags has no foreign keys, so writers must only link tags that still exist. */
+    suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> =
+        if (tagIds.isEmpty()) emptySet() else tagIds intersect getAllTags().mapTo(HashSet()) { it.id }
+    /** Removes relations left behind by older builds or races; returns the number removed. */
+    suspend fun deleteOrphanPointTags(): Int = inTransaction {
+        val pointIds = getAll().mapTo(HashSet()) { it.id }
+        val tagIds = getAllTags().mapTo(HashSet()) { it.id }
+        val orphans = getAllPointTagRelations().filter { it.pointId !in pointIds || it.tagId !in tagIds }
+        orphans.forEach { deletePointTag(it.pointId, it.tagId) }
+        orphans.size
+    }
     fun observePointsForTag(tagId: Long): Flow<List<Point>>
 }

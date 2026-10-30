@@ -374,6 +374,23 @@ class ZipRestoreCoordinatorTest {
         }
     }
 
+    @Test fun unrecoverableLeftoverStagingDoesNotBlockNewRestore() = runBlocking {
+        smallFixture { context, database, repository, archive ->
+            val staging = File(context.filesDir, "point_photo_imports/import_crashed").apply { mkdirs() }
+            val journal = File(staging, "restore-journal.json").apply { writeText(
+                """{"version":2,"newPhotos":[],"retiredPhotos":["../backup.zip"]}""") }
+            val state = MutableStateFlow<RestoreState>(RestoreState.Idle)
+            ZipRestoreCoordinator(context, repository).restore(
+                Uri.fromFile(archive), state, viewModel(repository)::importZipData)
+            assertTrue(state.value is RestoreState.Success)
+            assertEquals(1, database.pointDao().getAll().size)
+            assertTrue(journal.exists())
+            val error = runCatching { ZipRestoreCoordinator(context, repository).recover() }.exceptionOrNull()
+            assertTrue(error is IllegalArgumentException)
+            staging.deleteRecursively()
+        }
+    }
+
     @Test fun photosOnlyAndUnreferencedArchivesCannotTouchExistingData() = runBlocking {
         fixture { context, database, repository, archive ->
             val dir = File(context.filesDir, "point_photos").apply { mkdirs() }

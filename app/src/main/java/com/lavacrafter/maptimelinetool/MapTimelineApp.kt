@@ -61,6 +61,12 @@ class MapTimelineApp : Application() {
             } catch (error: Exception) {
                 Log.e("MapTimelineApp", "Restore journal recovery failed; next restore will retry", error)
             }
+            try {
+                val removed = graph.pointRepositoryGateway.deleteOrphanPointTags()
+                if (removed > 0) Log.i("MapTimelineApp", "Removed $removed orphan point-tag relations")
+            } catch (error: Exception) {
+                Log.e("MapTimelineApp", "Orphan point-tag cleanup failed", error)
+            }
         }
         val config = Configuration.getInstance()
         config.userAgentValue = packageName

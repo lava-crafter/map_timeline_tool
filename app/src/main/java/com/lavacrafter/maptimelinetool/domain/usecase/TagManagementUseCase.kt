@@ -46,7 +46,12 @@ class TagManagementUseCase(
 
     suspend fun setTagForPoint(pointId: Long, tagId: Long, enabled: Boolean) {
         if (enabled) {
-            repository.insertPointTag(pointId, tagId)
+            repository.inTransaction {
+                // The point or tag may have been deleted while this request was queued.
+                if (repository.getById(pointId) != null && repository.filterExistingTagIds(setOf(tagId)).isNotEmpty()) {
+                    repository.insertPointTag(pointId, tagId)
+                }
+            }
         } else {
             repository.deletePointTag(pointId, tagId)
         }

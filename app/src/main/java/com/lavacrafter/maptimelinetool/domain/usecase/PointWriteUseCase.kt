@@ -65,7 +65,7 @@ class PointWriteUseCase(
             withContext(NonCancellable) {
                 repository.inTransaction {
                     val insertedId = repository.insert(point)
-                    tagIds.forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
+                    repository.filterExistingTagIds(tagIds).forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
                     insertedId
                 }.also(onCoreSaved)
             }
@@ -93,15 +93,18 @@ class PointWriteUseCase(
             .ifBlank { point.title }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
         photoCommitGuard.withLock {
-            photoCommitGuard.requirePhoto(photoPath)
             withContext(NonCancellable) {
                 val retiredPhoto = repository.inTransaction {
                     val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                    // Only a newly referenced photo must exist; an unchanged (possibly missing) photo
+                    // must not block editing title, note or tags.
+                    if (photoPath != current.photoPath) photoCommitGuard.requirePhoto(photoPath)
                     repository.update(current.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
                     if (tagIds != null) {
+                        val validTagIds = repository.filterExistingTagIds(tagIds)
                         val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
-                        (oldTagIds - tagIds).forEach { repository.deletePointTag(point.id, it) }
-                        (tagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+                        (oldTagIds - validTagIds).forEach { repository.deletePointTag(point.id, it) }
+                        (validTagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
                     }
                     current.photoPath?.takeIf { it != photoPath }
                 }

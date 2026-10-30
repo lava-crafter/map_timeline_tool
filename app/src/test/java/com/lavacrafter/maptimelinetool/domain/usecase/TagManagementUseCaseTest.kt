@@ -72,6 +72,20 @@ class TagManagementUseCaseTest {
     }
 
     @Test
+    fun `setTagForPoint does not link a deleted point or tag`() = runBlocking {
+        val fake = FakePointRepositoryGateway().apply {
+            missingPointIds = setOf(11L)
+            missingTagIds = setOf(21L)
+        }
+        val useCase = TagManagementUseCase(fake)
+
+        useCase.setTagForPoint(pointId = 11, tagId = 20, enabled = true)
+        useCase.setTagForPoint(pointId = 10, tagId = 21, enabled = true)
+
+        assertTrue(fake.insertedPointTags.isEmpty())
+    }
+
+    @Test
     fun `tag rename and deletion failures reach caller without reporting completion`() = runBlocking {
         val fake = FakePointRepositoryGateway()
         var cleanedSettings = false
@@ -93,6 +107,12 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     val insertedPointTags = mutableListOf<Pair<Long, Long>>()
     val deletedPointTags = mutableListOf<Pair<Long, Long>>()
     var tagFailure: Exception? = null
+    var missingPointIds: Set<Long> = emptySet()
+    var missingTagIds: Set<Long> = emptySet()
+
+    override suspend fun getById(pointId: Long): Point? =
+        if (pointId in missingPointIds) null else Point(id = pointId, timestamp = 1L, latitude = 0.0, longitude = 0.0, title = "p", note = "")
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> = tagIds - missingTagIds
 
     override fun observeAll(): Flow<List<Point>> = flowOf(emptyList())
     override suspend fun insert(point: Point): Long = 1L

@@ -210,6 +210,17 @@ class SettingsViewModel(
         _uiState.update { it.copy(recentTagIds = settingsUseCase.addRecentTagId(tagId)) }
     }
 
+    /** Prefs are cleaned by the tag use case; drop the ID from memory too so it is not written back. */
+    fun onTagDeleted(tagId: Long) {
+        _uiState.update {
+            it.copy(
+                pinnedTagIds = it.pinnedTagIds - tagId,
+                recentTagIds = it.recentTagIds.filterNot { id -> id == tagId },
+                defaultTagIds = it.defaultTagIds - tagId
+            )
+        }
+    }
+
     fun toggleDefaultTag(tagId: Long) {
         val next = if (_uiState.value.defaultTagIds.contains(tagId)) {
             _uiState.value.defaultTagIds - tagId

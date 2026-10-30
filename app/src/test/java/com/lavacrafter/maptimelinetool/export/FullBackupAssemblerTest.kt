@@ -26,7 +26,6 @@ import com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.IOException
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -111,12 +110,19 @@ class FullBackupAssemblerTest {
     }
 
     @Test
-    fun `missing photo and orphan relation fail instead of silently losing full backup data`() = runBlocking {
-        val missingPhoto = BackupRepository(listOf(point(1).copy(photoPath = "missing.jpg")), emptyList(), emptyList())
+    fun `missing photo is skipped and reported while orphan relation still fails`() = runBlocking {
+        val missingPhoto = BackupRepository(
+            listOf(point(1).copy(photoPath = "missing.jpg"), point(2).copy(photoPath = "missing.jpg"), point(3)),
+            emptyList(), emptyList()
+        )
         val payload = FullBackupAssembler(missingPhoto).assemble()
-        assertTrue(runCatching {
-            payload.writeZip(ByteArrayOutputStream(), { null }, "{}", "test")
-        }.exceptionOrNull() is IOException)
+        val output = ByteArrayOutputStream()
+        val stats = payload.writeZip(output, { null }, "{}", "test")
+        assertEquals(1, stats.missingPhotoCount)
+        assertEquals(0, stats.photoCount)
+        val imported = ZipImporter.importZip(ByteArrayInputStream(output.toByteArray())) { _, _ -> null }
+        assertEquals(3, imported.points.size)
+        assertTrue(imported.points.all { it.photoPath == null })
 
         val orphan = BackupRepository(listOf(point(1)), emptyList(), listOf(PointTagRelation(1, 99)))
         assertTrue(runCatching { FullBackupAssembler(orphan).assemble() }.exceptionOrNull() is IllegalStateException)
