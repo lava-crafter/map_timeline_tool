@@ -311,3 +311,31 @@ ANDROID_SERIAL=<device> ./gradlew :app:connectedDebugAndroidTest
 - 照片数量稳定，重建不重复写入，权限与测量状态可解释。
 - 发布候选实际包含已验证的修复 SHA。
 - 冻结的离线下载底层模型、专业级测量校准，以及未经基准证明必要的地图大规模架构优化，明确列为延期项。
+
+---
+
+## 执行状态（2026-10-30）
+
+提交：A `f5e8aa6`、B `758d613`、C `f74d5ed`、D `d4b1154`、E `00db4b4`、F（部分）`1640482`，G 见本节同一提交。
+
+**本地验证**：`./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:compileDebugAndroidTestKotlin` 通过。
+- JVM 200/200，0 failures / errors / skipped。
+- lint 0 active errors，9 个 warning：原有 7 个，另 2 个为联网版本检查（`AndroidGradlePluginVersion`、`GradleDependency`），与本轮改动无关；baseline 未改，未新增 suppression。
+- **connected 测试未运行**（`adb devices` 无设备）。新增/修改的设备测试（`ZipRestoreCoordinatorTest.unrecoverableLeftoverStagingDoesNotBlockNewRestore`、`SettingsStoreBackupJsonTest.legacyDeviceKeysMoveOutOfPortablePreferences` 等）只编译通过，需接设备后执行完整 `:app:connectedDebugAndroidTest`。
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| A1–A6 | 已修复 | A1 另含启动时孤立关系清理；A6 新增本地化提示 |
+| B1–B12 | 已修复 | B2 含缓存精度与 provider 标记；B8 以 `FileTasks` 单飞任务实现，"全部点"导出改为写入时从 DB 解析 |
+| C1–C9 | 已修复 | C2 未转发 `MapView.onPause/onResume`（当前 overlays 无需）；C4 依据 osmdroid 6.1.20 字节码核对 trim 语义 |
+| C10 | 未做 | 性能基线需设备与数据集 |
+| D1–D5 | 已修复 | D3 用"每次 resume 重新同步通知"代替 `deleteIntent`；`ACTION_QUICK_ADD` 仅在全新启动时处理 |
+| D6 | 未做 | Google Play 后台定位政策需人工核查 |
+| E1–E9 | 已修复 | E9 中 `getPointPhotoDir` 的 `mkdirs` 未改；`commitPointPhotoImport` 仍被设备测试使用，保留 |
+| E10 | 部分 | KML/KMZ 已流式写出；GeoJSON 仍为内存 JSON 树（需手写 JSON 流式序列化，延期） |
+| F1–F2 | 已修复 | 方位角改为旋转矩阵 + 倾斜补偿，缺任一传感器不显示；箭头补显示旋转。历史数据未记录屏幕旋转，按自然方向解释 |
+| F3–F4 | 未做 | 有界采样窗口、采样 metadata 及 Room 8→9 migration 需设备验证迁移与采样，延期 |
+| G1 | 已修复 | 删除 `scheduleAutoAdd/autoAdded/cancelAutoAdd`；`LAST_KNOWN_STALE` 分支因 `when` 穷举保留 |
+| G2 | 未做 | 迁移 `SettingsStore` 需连带移动多个 UI 类型，收益低，延期 |
+| G3 | 已完成 | `.github/workflows/ci.yml`：debug 单测 / lint / assembleDebug / androidTest 编译，无 release 密钥 |
+| G4 | 未做 | 需设备：>2 GiB 归档、提交边界中断注入、进程死亡后自动保存去重 |

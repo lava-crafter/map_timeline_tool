@@ -49,13 +49,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 class AppViewModel(
@@ -79,9 +76,6 @@ class AppViewModel(
     val fileTasks = FileTasks(viewModelScope) { kind, error ->
         android.util.Log.e("AppViewModel", "File task $kind failed", error)
     }
-    private var autoAddJob: kotlinx.coroutines.Job? = null
-    private val _autoAdded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val autoAdded = _autoAdded
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Idle)
     val restoreState = _restoreState.asStateFlow()
     private var restoreJob: kotlinx.coroutines.Job? = null
@@ -290,25 +284,6 @@ class AppViewModel(
     suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? = locationProvider.getFreshLocation(timeoutMs)
 
     suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? = locationProvider.getBestEffortLocation(timeoutMs)
-
-    fun scheduleAutoAdd(createdAt: Long, timeoutSeconds: Int) {
-        autoAddJob?.cancel()
-        autoAddJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(timeoutSeconds * 1000L)
-            val timestamp = createdAt
-            val location = getBestEffortLocation(5_000L)
-            if (location != null) {
-                val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
-                pointWriteUseCase.addPointWithTags(title, "", location, timestamp, emptySet())
-                _autoAdded.tryEmit(Unit)
-            }
-        }
-    }
-
-    fun cancelAutoAdd() {
-        autoAddJob?.cancel()
-        autoAddJob = null
-    }
 
     suspend fun getAllPoints(): List<PointEntity> = repo.getAll().map { it.toEntity() }
 

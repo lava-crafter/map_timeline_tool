@@ -877,7 +877,6 @@ class MainActivity : AppCompatActivity() {
                 BackHandler(editingTag != null) { if (!tagWriteInProgress) editingTagId = null }
                 BackHandler(showDialog && pendingManualSaveConfirmation == null && !showTagPickerForAdd && !showTagPickerForEdit) {
                     if (!addSaveInProgress && pendingAddPhotoUri == null) {
-                        viewModel.cancelAutoAdd()
                         resetPendingAddDialogState(clearPendingPhoto = true)
                     }
                 }
