@@ -23,6 +23,7 @@
     <string name="toast_export_success">%1$d points exportés</string>
     <string name="toast_backup_missing_photos">Sauvegarde créée ; %1$d photos manquantes ont été ignorées</string>
     <string name="toast_no_app_available">Aucune application disponible pour cette action</string>
+    <string name="notification_result_channel_name">Résultats de l’ajout rapide</string>
     <string name="action_clear_cache">Vider le cache de la carte</string>
     <string name="action_back">Retour</string>
     <string name="action_center">Centrer</string>
@@ -56,7 +57,6 @@
     <string name="export_chooser_title">Exporter CSV</string>
     <string name="toast_export_failed">Échec de l’export</string>
     <string name="toast_cache_cleared">Cache de la carte vidé</string>
-    <string name="toast_cache_skip_downloaded">Les zones téléchargées seront conservées. Supprimez-les avant de vider le cache.</string>
     <string name="toast_point_added">Point ajouté</string>
     <string name="toast_point_save_failed">Impossible d’enregistrer le point. Vos modifications sont toujours là ; veuillez réessayer.</string>
     <string name="toast_point_update_failed">Impossible de mettre à jour le point. Veuillez réessayer.</string>

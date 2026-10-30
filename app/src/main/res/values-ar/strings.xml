@@ -23,6 +23,7 @@
     <string name="toast_export_success">تم تصدير %1$d نقطة</string>
     <string name="toast_backup_missing_photos">تم إنشاء النسخة الاحتياطية؛ تم تخطي %1$d صورة مفقودة</string>
     <string name="toast_no_app_available">لا يتوفر تطبيق لتنفيذ هذا الإجراء</string>
+    <string name="notification_result_channel_name">نتائج الإضافة السريعة</string>
     <string name="action_clear_cache">مسح ذاكرة التخزين المؤقت للخريطة</string>
     <string name="action_back">رجوع</string>
     <string name="action_center">توسيط</string>
@@ -56,7 +57,6 @@
     <string name="export_chooser_title">تصدير CSV</string>
     <string name="toast_export_failed">فشل التصدير</string>
     <string name="toast_cache_cleared">تم مسح ذاكرة التخزين المؤقت للخريطة</string>
-    <string name="toast_cache_skip_downloaded">سيتم الاحتفاظ بالمناطق المحمّلة. احذفها قبل المسح.</string>
     <string name="toast_point_added">تمت إضافة النقطة</string>
     <string name="toast_point_save_failed">تعذر حفظ النقطة. لا تزال تعديلاتك موجودة؛ يرجى المحاولة مرة أخرى.</string>
     <string name="toast_point_update_failed">تعذر تحديث النقطة. يرجى المحاولة مرة أخرى.</string>

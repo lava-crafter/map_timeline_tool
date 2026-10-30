@@ -50,6 +50,7 @@ private const val QUICK_ADD_NOTIFICATION_ID = 1001
 private const val QUICK_ADD_RESULT_NOTIFICATION_ID = 2002
 private const val QUICK_ADD_NOTIFICATION_CHANNEL_ID = "quick_add_channel"
 private const val QUICK_ADD_RESULT_CHANNEL_ID = "quick_add_result_channel_v2"
+private const val LEGACY_QUICK_ADD_RESULT_CHANNEL_ID = "quick_add_result_channel"
 
 internal fun Context.showQuickAddNotification() {
     if (!canPostNotifications()) {
@@ -150,9 +151,13 @@ private fun Context.showQuickAddResultNotification(message: String) {
     }
 
     val channelId = QUICK_ADD_RESULT_CHANNEL_ID
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // Replaced by the v2 channel; otherwise system settings keep listing an orphan "Quick Add" entry.
+        getSystemService(NotificationManager::class.java)?.deleteNotificationChannel(LEGACY_QUICK_ADD_RESULT_CHANNEL_ID)
+    }
     ensureNotificationChannel(
         channelId = channelId,
-        nameResId = R.string.notification_channel_name,
+        nameResId = R.string.notification_result_channel_name,
         descriptionResId = R.string.notification_channel_desc
     )
 

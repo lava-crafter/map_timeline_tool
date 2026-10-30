@@ -36,9 +36,10 @@ class QuickAddPassiveLocationUpdater(
         locationCache.update(location.toQuickAddLocation())
     })
 
-    @Volatile
     private var registered = false
 
+    /** Called from the main thread and from Quick Add's IO work; serialize the check-then-register. */
+    @Synchronized
     fun refreshRegistration(enabled: Boolean) {
         val shouldRegister = shouldRegisterQuickAddPassiveLocationUpdater(
             enabled = enabled,

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower: cloud backup only. Photos are excluded because past the 25 MB quota the whole app
+     backup (database included) is dropped; device-local prefs are never backed up. -->
 <full-backup-content>
     <include domain="database" path="."/>
     <include domain="sharedpref" path="."/>
     <exclude domain="sharedpref" path="location_cache.xml"/>
-    <include domain="file" path="point_photos/"/>
+    <exclude domain="sharedpref" path="map_timeline_device.xml"/>
 </full-backup-content>

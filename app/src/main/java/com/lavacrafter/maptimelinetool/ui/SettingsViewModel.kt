@@ -236,6 +236,10 @@ class SettingsViewModel(
         _uiState.update { it.copy(downloadedAreas = settingsUseCase.addDownloadedArea(area.toDomain()).map { a -> a.toUi() }) }
     }
 
+    fun clearDownloadedAreas() {
+        _uiState.value.downloadedAreas.forEach(::removeDownloadedArea)
+    }
+
     fun removeDownloadedArea(area: DownloadedArea) {
         _uiState.update { it.copy(downloadedAreas = settingsUseCase.removeDownloadedArea(area.toDomain()).map { a -> a.toUi() }) }
     }

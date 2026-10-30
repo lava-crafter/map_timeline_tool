@@ -17,6 +17,8 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.ui
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.core.content.edit
 
 object SettingsStore {
     private const val PREFS = "map_timeline_settings"
@@ -49,6 +51,11 @@ object SettingsStore {
     private const val KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED = "quick_add_notification_permission_requested"
     private const val SETTINGS_SCHEMA_VERSION = 1
     private const val MAX_RECENT_TAGS = 3
+    /**
+     * Device-local state (offline areas whose tiles live in the cache dir, Quick Add enablement that depends on
+     * this device's permissions) lives in its own file, excluded from system backup and transfer.
+     */
+    private const val DEVICE_PREFS = "map_timeline_device"
     private val NON_PORTABLE_BACKUP_KEYS = setOf(
         KEY_DOWNLOADED_AREAS,
         KEY_DOWNLOAD_TILE_SOURCE,
@@ -57,6 +64,33 @@ object SettingsStore {
         KEY_QUICK_ADD_NOTIFICATION_ENABLED,
         KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED
     )
+
+    /** Moves legacy device-local keys out of the portable file; old keys are removed only after the copy is committed. */
+    private fun devicePrefs(context: Context): SharedPreferences {
+        val device = context.getSharedPreferences(DEVICE_PREFS, Context.MODE_PRIVATE)
+        val portable = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Same instance only when a wrapper context maps every name to one file; nothing to migrate then.
+        if (device === portable) return device
+        val legacy = portable.all.filterKeys { it in NON_PORTABLE_BACKUP_KEYS }
+        if (legacy.isNotEmpty()) {
+            val editor = device.edit()
+            legacy.forEach { (key, value) ->
+                if (device.contains(key)) return@forEach
+                when (value) {
+                    is String -> editor.putString(key, value)
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Float -> editor.putFloat(key, value)
+                }
+            }
+            // Synchronous commit: the legacy keys may only be dropped once the copy is on disk.
+            if (editor.commit()) {
+                portable.edit { legacy.keys.forEach { remove(it) } }
+            }
+        }
+        return device
+    }
 
     fun getTimeoutSeconds(context: Context): Int {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -209,38 +243,38 @@ object SettingsStore {
     }
 
     fun getDownloadTileSourceId(context: Context): String {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getString(KEY_DOWNLOAD_TILE_SOURCE, downloadTileSources.first().id)
             ?: downloadTileSources.first().id
     }
 
     fun setDownloadTileSourceId(context: Context, sourceId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putString(KEY_DOWNLOAD_TILE_SOURCE, sourceId)
             .apply()
     }
 
     fun getDownloadMultiThreadEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getBoolean(KEY_DOWNLOAD_MULTI_THREAD, false)
     }
 
     fun setDownloadMultiThreadEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putBoolean(KEY_DOWNLOAD_MULTI_THREAD, enabled)
             .apply()
     }
 
     fun getDownloadThreadCount(context: Context): Int {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getInt(KEY_DOWNLOAD_THREAD_COUNT, 4)
             .coerceIn(2, 32)
     }
 
     fun setDownloadThreadCount(context: Context, count: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putInt(KEY_DOWNLOAD_THREAD_COUNT, count.coerceIn(2, 32))
             .apply()
@@ -352,31 +386,31 @@ object SettingsStore {
     }
 
     fun getQuickAddNotificationEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, false)
     }
 
     fun setQuickAddNotificationEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, enabled)
             .apply()
     }
 
     fun getQuickAddNotificationPermissionRequested(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, false)
     }
 
     fun setQuickAddNotificationPermissionRequested(context: Context, requested: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, requested)
             .apply()
     }
 
     fun getDownloadedAreas(context: Context): List<DownloadedArea> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = devicePrefs(context)
             .getString(KEY_DOWNLOADED_AREAS, null)
             ?: return emptyList()
         return runCatching {
@@ -560,7 +594,7 @@ object SettingsStore {
             obj.put("createdAt", area.createdAt)
             array.put(obj)
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putString(KEY_DOWNLOADED_AREAS, array.toString())
             .apply()

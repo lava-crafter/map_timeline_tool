@@ -139,6 +139,9 @@ class AppGraph(
                     location = location,
                     timestamp = timestamp,
                     tagIds = settingsManagementUseCase.getDefaultTagIds().toSet(),
+                    // Quick Add usually runs from a broadcast with no foreground UI, where Android 9+ delivers
+                    // silent microphone data; sampling would only spend the receiver's limited time budget.
+                    allowNoise = false,
                     onCoreSaved = { onCoreSaved() }
                 )
             }

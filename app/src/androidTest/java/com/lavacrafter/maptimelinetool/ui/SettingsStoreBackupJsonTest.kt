@@ -34,14 +34,30 @@ import org.junit.Test
 class SettingsStoreBackupJsonTest {
     private val preferencesName = "settings_backup_test_${UUID.randomUUID()}"
     private val baseContext: Context = ApplicationProvider.getApplicationContext()
+    private val usedNames = mutableSetOf<String>()
     private val context: Context = object : ContextWrapper(baseContext) {
         override fun getSharedPreferences(name: String, mode: Int) =
-            baseContext.getSharedPreferences(preferencesName, mode)
+            baseContext.getSharedPreferences("${preferencesName}_$name".also { usedNames += it }, mode)
     }
 
     @After
     fun deleteTestPreferences() {
-        baseContext.deleteSharedPreferences(preferencesName)
+        usedNames.forEach { baseContext.deleteSharedPreferences(it) }
+    }
+
+    @Test
+    fun legacyDeviceKeysMoveOutOfPortablePreferences() {
+        val portable = context.getSharedPreferences("map_timeline_settings", Context.MODE_PRIVATE)
+        portable.edit().putBoolean("quick_add_notification_enabled", true).putInt("download_thread_count", 9)
+            .putInt("timeout_seconds", 33).commit()
+
+        assertTrue(SettingsStore.getQuickAddNotificationEnabled(context))
+        assertEquals(9, SettingsStore.getDownloadThreadCount(context))
+        assertFalse(portable.contains("quick_add_notification_enabled"))
+        assertFalse(portable.contains("download_thread_count"))
+        assertEquals(33, SettingsStore.getTimeoutSeconds(context))
+        val device = context.getSharedPreferences("map_timeline_device", Context.MODE_PRIVATE)
+        assertTrue(device.getBoolean("quick_add_notification_enabled", false))
     }
 
     @Test

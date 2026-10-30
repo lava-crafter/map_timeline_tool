@@ -162,7 +162,7 @@ class AppViewModel(
         photoPath: String? = null,
         onCoreSaved: (Long) -> Unit = {}
     ): Long {
-        return pointWriteUseCase.addPointWithTags(title, note, location, timestamp, tagIds, photoPath, onCoreSaved)
+        return pointWriteUseCase.addPointWithTags(title, note, location, timestamp, tagIds, photoPath, onCoreSaved = onCoreSaved)
     }
 
     suspend fun updatePoint(

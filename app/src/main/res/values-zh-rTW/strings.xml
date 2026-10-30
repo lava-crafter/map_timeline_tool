@@ -23,6 +23,7 @@
     <string name="toast_export_success">已匯出 %1$d 個打點</string>
     <string name="toast_backup_missing_photos">已建立備份；略過 %1$d 張遺失的照片</string>
     <string name="toast_no_app_available">沒有可執行此操作的應用程式</string>
+    <string name="notification_result_channel_name">快速新增結果</string>
     <string name="action_clear_cache">清除地圖快取</string>
     <string name="action_back">返回</string>
     <string name="action_center">置中</string>
@@ -56,7 +57,6 @@
     <string name="export_chooser_title">匯出 CSV</string>
     <string name="toast_export_failed">匯出失敗</string>
     <string name="toast_cache_cleared">地圖快取已清除</string>
-    <string name="toast_cache_skip_downloaded">已下載區域會被保留。請先刪除再清除快取。</string>
     <string name="toast_point_added">打點已新增</string>
     <string name="toast_point_save_failed">無法儲存打點。您的編輯內容仍在此處，請重試。</string>
     <string name="toast_point_update_failed">無法更新打點，請重試。</string>

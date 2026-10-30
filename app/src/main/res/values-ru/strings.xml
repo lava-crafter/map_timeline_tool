@@ -23,6 +23,7 @@
     <string name="toast_export_success">Экспортировано точек: %1$d</string>
     <string name="toast_backup_missing_photos">Резервная копия создана; пропущено отсутствующих фото: %1$d</string>
     <string name="toast_no_app_available">Нет приложения для этого действия</string>
+    <string name="notification_result_channel_name">Результаты быстрого добавления</string>
     <string name="action_clear_cache">Очистить кэш карты</string>
     <string name="action_back">Назад</string>
     <string name="action_center">Центрировать</string>
@@ -56,7 +57,6 @@
     <string name="export_chooser_title">Экспорт CSV</string>
     <string name="toast_export_failed">Экспорт не удался</string>
     <string name="toast_cache_cleared">Кэш карты очищен</string>
-    <string name="toast_cache_skip_downloaded">Загруженные области будут сохранены. Удалите их перед очисткой кэша.</string>
     <string name="toast_point_added">Точка добавлена</string>
     <string name="toast_point_save_failed">Не удалось сохранить точку. Ваши изменения по-прежнему здесь; попробуйте ещё раз.</string>
     <string name="toast_point_update_failed">Не удалось обновить точку. Попробуйте ещё раз.</string>

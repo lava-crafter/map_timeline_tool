@@ -23,6 +23,7 @@
     <string name="toast_export_success">%1$d件の地点を書き出しました</string>
     <string name="toast_backup_missing_photos">バックアップを作成しました。見つからない写真 %1$d 枚はスキップされました</string>
     <string name="toast_no_app_available">この操作に対応するアプリがありません</string>
+    <string name="notification_result_channel_name">クイック追加の結果</string>
     <string name="action_clear_cache">地図キャッシュを消去</string>
     <string name="action_back">戻る</string>
     <string name="action_center">中央へ移動</string>
@@ -55,7 +56,6 @@
     <string name="toast_permission_denied">位置情報の権限が拒否されました</string>
     <string name="toast_export_failed">書き出しに失敗しました</string>
     <string name="toast_cache_cleared">地図キャッシュを消去しました</string>
-    <string name="toast_cache_skip_downloaded">ダウンロード済みエリアは保持されます。消去する前に削除してください。</string>
     <string name="toast_point_added">地点を追加しました</string>
     <string name="toast_point_save_failed">地点を保存できませんでした。編集内容は残っています。もう一度お試しください。</string>
     <string name="toast_point_update_failed">地点を更新できませんでした。もう一度お試しください。</string>

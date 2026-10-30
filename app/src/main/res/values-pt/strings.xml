@@ -23,6 +23,7 @@
     <string name="toast_export_success">%1$d pontos exportados</string>
     <string name="toast_backup_missing_photos">Backup criado; %1$d fotos ausentes foram ignoradas</string>
     <string name="toast_no_app_available">Nenhum app disponível para esta ação</string>
+    <string name="notification_result_channel_name">Resultados da Adição rápida</string>
     <string name="action_clear_cache">Limpar cache do mapa</string>
     <string name="action_back">Voltar</string>
     <string name="action_center">Centralizar</string>
@@ -56,7 +57,6 @@
     <string name="export_chooser_title">Exportar CSV</string>
     <string name="toast_export_failed">Falha na exportação</string>
     <string name="toast_cache_cleared">Cache do mapa limpo</string>
-    <string name="toast_cache_skip_downloaded">As áreas baixadas serão preservadas. Remova-as antes de limpar o cache.</string>
     <string name="toast_point_added">Ponto adicionado</string>
     <string name="toast_point_save_failed">Não foi possível salvar o ponto. Suas edições continuam aqui; tente novamente.</string>
     <string name="toast_point_update_failed">Não foi possível atualizar o ponto. Tente novamente.</string>

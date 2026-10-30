@@ -23,6 +23,7 @@
     <string name="toast_export_success">%1$d개의 지점을 내보냈습니다</string>
     <string name="toast_backup_missing_photos">백업을 만들었습니다. 찾을 수 없는 사진 %1$d장은 건너뛰었습니다</string>
     <string name="toast_no_app_available">이 작업을 처리할 앱이 없습니다</string>
+    <string name="notification_result_channel_name">빠른 추가 결과</string>
     <string name="action_clear_cache">지도 캐시 지우기</string>
     <string name="action_back">뒤로</string>
     <string name="action_center">가운데로</string>
@@ -56,7 +57,6 @@
     <string name="export_chooser_title">CSV 내보내기</string>
     <string name="toast_export_failed">내보내기에 실패했습니다</string>
     <string name="toast_cache_cleared">지도 캐시가 지워졌습니다</string>
-    <string name="toast_cache_skip_downloaded">다운로드된 영역은 유지됩니다. 캐시를 지우기 전에 삭제하세요.</string>
     <string name="toast_point_added">지점이 추가되었습니다</string>
     <string name="toast_point_save_failed">지점을 저장하지 못했습니다. 수정한 내용은 그대로 남아 있으니 다시 시도해 주세요.</string>
     <string name="toast_point_update_failed">지점을 업데이트하지 못했습니다. 다시 시도해 주세요.</string>

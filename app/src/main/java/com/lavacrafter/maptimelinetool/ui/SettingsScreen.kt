@@ -56,6 +56,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.NetworkStatus
 import com.lavacrafter.maptimelinetool.data.TagEntity
@@ -537,13 +539,20 @@ private fun NotificationSettings(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-    val preciseLocationGranted =
+    // Permissions are usually granted in system settings; re-read them whenever the screen resumes.
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val notificationPermissionGranted = remember(lifecycleState) {
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    }
+    val preciseLocationGranted = remember(lifecycleState) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
     val backgroundLocationRequired = requiresBackgroundLocationForQuickAdd(Build.VERSION.SDK_INT)
-    val backgroundLocationGranted = !backgroundLocationRequired ||
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val backgroundLocationGranted = remember(lifecycleState) {
+        !backgroundLocationRequired ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
 
     SettingsSubpageScaffold(
         title = stringResource(R.string.settings_notifications_title),

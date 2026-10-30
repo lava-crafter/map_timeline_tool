@@ -69,6 +69,9 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lavacrafter.maptimelinetool.createPendingPointPhotoFile
 import com.lavacrafter.maptimelinetool.deletePointPhotoFile
 import com.lavacrafter.maptimelinetool.resolvePointPhotoFile
@@ -558,8 +561,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                LaunchedEffect(settingsState.quickAddNotificationEnabled) {
-                    context.syncQuickAddNotification(settingsState.quickAddNotificationEnabled)
+                // Re-sync on every resume too: Android 14+ lets users swipe the ongoing notification away, and
+                // background-location / notification permissions are usually granted in system settings.
+                val lifecycleOwner = LocalLifecycleOwner.current
+                LaunchedEffect(settingsState.quickAddNotificationEnabled, lifecycleOwner) {
+                    lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                        context.syncQuickAddNotification(settingsState.quickAddNotificationEnabled)
+                    }
                 }
 
                 LaunchedEffect(settingsState.cachePolicy, settingsState.satelliteCachePolicy, settingsState.mapTileSourceId, networkStatus) {
@@ -782,11 +790,8 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                LaunchedEffect(Unit) {
-                    if (!hasLocationPermission() && viewModel.quickEntryRequest.value == null) {
-                        runWithLocationPermission(LocationPermissionRequest(LocationAction.BROWSE))
-                    }
-                }
+                // No location prompt on launch: browsing works without permission, and Add / center / Quick Add
+                // request it when the user asks for them (a launch prompt re-fired on every recreation after denial).
 
                 LaunchedEffect(quickEntryRequest, pendingLocationRequest) {
                     val request = quickEntryRequest
@@ -1279,9 +1284,8 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     },
                                     onClearCache = {
-                                        if (settingsState.downloadedAreas.isNotEmpty()) {
-                                            Toast.makeText(context, context.getString(R.string.toast_cache_skip_downloaded), Toast.LENGTH_SHORT).show()
-                                        } else if (!cacheClearInProgress) {
+                                        // Area metadata is not proof that tiles exist; clearing the cache clears both.
+                                        if (!cacheClearInProgress) {
                                             cacheClearInProgress = true
                                             scope.launch {
                                                 val cleared = try {
@@ -1289,6 +1293,7 @@ class MainActivity : AppCompatActivity() {
                                                 } finally {
                                                     cacheClearInProgress = false
                                                 }
+                                                if (cleared) settingsViewModel.clearDownloadedAreas()
                                                 val messageRes = if (cleared) R.string.toast_cache_cleared else R.string.toast_cache_clear_failed
                                                 Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
                                             }
@@ -1651,7 +1656,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        handleQuickAddIntent(intent)
+        // A recreated Activity (process death, history launch) gets its original Intent again; only a fresh
+        // launch may start a Quick Add, so one tap cannot record twice.
+        val launchedFromHistory = intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+        if (savedInstanceState == null && !launchedFromHistory) handleQuickAddIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -166,7 +166,8 @@ fun MapScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    if (currentIsActive) {
+                    // Resuming after a permission dialog re-checks, so a grant takes effect without restarting.
+                    if (currentIsActive && context.hasForegroundLocationPermission()) {
                         locationProvider.startLocationProvider(headingOverlay)
                         orientationProvider.startOrientationProvider(headingOverlay)
                     }
@@ -189,7 +190,8 @@ fun MapScreen(
     }
 
     LaunchedEffect(isActive, lifecycleOwner) {
-        if (isActive && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+        if (isActive && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            context.hasForegroundLocationPermission()) {
             locationProvider.startLocationProvider(headingOverlay)
             orientationProvider.startOrientationProvider(headingOverlay)
         } else if (!isActive) {
@@ -607,3 +609,9 @@ private fun findNearestPoint(map: MapView, points: List<PointEntity>, target: Ge
     }
     return nearest
 }
+
+private fun android.content.Context.hasForegroundLocationPermission(): Boolean =
+    androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED ||
+        androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED

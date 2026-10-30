@@ -46,6 +46,7 @@ class PointWriteUseCase(
         timestamp: Long,
         tagIds: Set<Long>,
         photoPath: String? = null,
+        allowNoise: Boolean = true,
         onCoreSaved: (Long) -> Unit = {}
     ): Long {
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
@@ -71,7 +72,7 @@ class PointWriteUseCase(
             }
         }
         try {
-            if (shouldCollectNoise()) {
+            if (allowNoise && shouldCollectNoise()) {
                 withContext(Dispatchers.IO) {
                     collectNoiseDb()?.let { repository.updateNoiseDb(id, it) }
                 }

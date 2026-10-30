@@ -272,6 +272,19 @@ class PointWriteUseCaseTest {
     }
 
     @Test
+    fun `quick add style writes skip optional noise sampling`() = runBlocking {
+        val repo = FakePointRepository()
+        var sampled = false
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, shouldCollectNoise = { true },
+            collectNoiseDb = { sampled = true; -10f })
+
+        writer.addPointWithTags("Quick", "", GeoPoint(1.0, 2.0), 2L, emptySet(), allowNoise = false)
+
+        assertFalse(sampled)
+        assertTrue(repo.updatedNoiseDb.isEmpty())
+    }
+
+    @Test
     fun `cleanup and new references use one guard and stale candidates cannot resurrect deleted photos`() = runBlocking {
         withTimeout(5_000L) {
             val old = point().copy(id = 10L, photoPath = "old.jpg")

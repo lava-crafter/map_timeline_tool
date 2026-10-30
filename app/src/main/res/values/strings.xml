@@ -68,7 +68,6 @@
     <string name="toast_export_failed">Export failed</string>
     <string name="toast_cache_cleared">Map cache cleared</string>
     <string name="toast_cache_clear_failed">Failed to clear map cache. Please try again after reopening the app.</string>
-    <string name="toast_cache_skip_downloaded">Downloaded areas preserved. Remove them before clearing cache.</string>
     <string name="toast_point_added">Point added</string>
     <string name="toast_point_added_approximate">Point added with approximate location</string>
     <string name="toast_point_added_last_known">Point added using recent last known location</string>
@@ -282,6 +281,7 @@
     <string name="settings_language_restart_now">Restart now</string>
     <string name="settings_language_restart_later">Later</string>
     <string name="notification_channel_name">Quick Add</string>
+    <string name="notification_result_channel_name">Quick Add results</string>
     <string name="notification_channel_desc">Strict quick add point from notification</string>
     <string name="notification_title">Quick add</string>
     <string name="notification_text">Tap to save a point using a recent accurate location or one fresh precise fix</string>
