@@ -163,11 +163,14 @@ class DataIntegrityVerificationTest {
 
     @Test
     fun failedTagInsertDoesNotLeavePointOrPartialTags() = runBlocking {
+        // Tags must exist: writes drop unknown tag IDs before inserting relations.
+        val firstTag = database.pointDao().insertTag(TagEntity(name = "First"))
+        val failingTag = database.pointDao().insertTag(TagEntity(name = "Second"))
         val failingRepository = object : PointRepositoryGateway by repository {
             override suspend fun <T> inTransaction(block: suspend () -> T): T = repository.inTransaction(block)
 
             override suspend fun insertPointTag(pointId: Long, tagId: Long) {
-                if (tagId == 2L) throw IllegalStateException("Injected tag failure")
+                if (tagId == failingTag) throw IllegalStateException("Injected tag failure")
                 repository.insertPointTag(pointId, tagId)
             }
         }
@@ -178,12 +181,13 @@ class DataIntegrityVerificationTest {
                 note = "",
                 location = GeoPoint(10.0, 20.0),
                 timestamp = 1_000L,
-                tagIds = linkedSetOf(1L, 2L)
+                tagIds = linkedSetOf(firstTag, failingTag)
             )
         }.exceptionOrNull()
 
         assertTrue(failure is IllegalStateException)
         assertTrue(database.pointDao().getAll().isEmpty())
+        assertTrue(database.pointDao().getAllPointTagRelations().isEmpty())
     }
 
     @Test

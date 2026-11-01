@@ -824,7 +824,8 @@ class MainActivity : AppCompatActivity() {
                         is PointWriteState.Success -> {
                             if (result.request is PointWriteRequest.Add) {
                                 vibrateOnce(context)
-                                Toast.makeText(context, saveToastRes(requireNotNull(result.quality), result.request.autoSave), Toast.LENGTH_SHORT).show()
+                                val toastRes = result.quality?.let { saveToastRes(it, result.request.autoSave) } ?: R.string.toast_point_added
+                                Toast.makeText(context, toastRes, Toast.LENGTH_SHORT).show()
                                 resetPendingAddDialogState()
                             } else resetEditingPointState()
                             pointWrites.acknowledge(result.id)

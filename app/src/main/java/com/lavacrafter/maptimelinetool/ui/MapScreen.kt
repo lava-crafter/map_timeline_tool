@@ -78,6 +78,7 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.infowindow.InfoWindow
+import org.osmdroid.views.overlay.infowindow.MarkerInfoWindow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -219,6 +220,21 @@ fun MapScreen(
     }
 
     val markerCache = remember { HashMap<Long, Pair<MarkerSignature, Marker>>() }
+    val currentOnEditPoint by rememberUpdatedState(onEditPoint)
+    // One bubble per map, not per marker: InfoWindow inflates its view and registers with the map in its
+    // constructor, so a window per marker kept a view tree per point and exhausted the heap near 10k points.
+    val infoWindowHolder = remember { arrayOfNulls<MarkerInfoWindow>(1) }
+
+    fun pointInfoWindow(map: MapView): MarkerInfoWindow =
+        infoWindowHolder[0]?.takeIf { it.mapView === map }
+            ?: object : MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
+                override fun onOpen(item: Any?) {
+                    super.onOpen(item)
+                    val point = (item as? Marker)?.relatedObject as? PointEntity
+                    mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
+                    mView.setOnClickListener { point?.let(currentOnEditPoint) }
+                }
+            }.also { infoWindowHolder[0] = it }
 
     fun buildPointMarker(map: MapView, p: PointEntity, order: Int?): Marker {
         val color = if (order != null) spectrumColor(order) else DEFAULT_MARKER_COLOR
@@ -242,15 +258,9 @@ fun MapScreen(
                 timeDescription
             }
             icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
-            infoWindow = object : org.osmdroid.views.overlay.infowindow.MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
-                override fun onOpen(item: Any?) {
-                    super.onOpen(item)
-                    mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
-                    mView.setOnClickListener {
-                        onEditPoint(p)
-                    }
-                }
-            }
+            // Markers are rebuilt whenever their point's content changes, so this is the latest point.
+            relatedObject = p
+            infoWindow = pointInfoWindow(map)
             setOnMarkerClickListener { clicked, mapView ->
                 InfoWindow.closeAllInfoWindowsOn(mapView)
                 clicked.showInfoWindow()
@@ -299,6 +309,7 @@ fun MapScreen(
             onRelease = { map ->
                 map.onPause()
                 markerCache.clear()
+                infoWindowHolder[0] = null
                 map.onDetach()
                 policyNetworkCheck = null
                 policyFilesystemCache = null
@@ -590,7 +601,8 @@ private fun spectrumColor(order: Int): Int {
     return SPECTRUM_COLORS[index]
 }
 
-private fun findNearestPoint(map: MapView, points: List<PointEntity>, target: GeoPoint, maxDp: Float): PointEntity? {
+// internal for the performance baseline test.
+internal fun findNearestPoint(map: MapView, points: List<PointEntity>, target: GeoPoint, maxDp: Float): PointEntity? {
     val projection = map.projection ?: return null
     val targetPx = projection.toPixels(target, Point())
     val density = map.context.resources.displayMetrics.density

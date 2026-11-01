@@ -57,6 +57,9 @@ interface PointDao {
     @Query("SELECT * FROM points WHERE timestamp = :timestamp AND latitude = :latitude AND longitude = :longitude LIMIT 1")
     suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): PointEntity?
 
+    @Query("SELECT * FROM points WHERE timestamp = :timestamp LIMIT 1")
+    suspend fun findByTimestamp(timestamp: Long): PointEntity?
+
     @Query("SELECT * FROM points WHERE id > :afterId ORDER BY id ASC LIMIT :limit")
     suspend fun getPageAfterId(afterId: Long, limit: Int): List<PointEntity>
 

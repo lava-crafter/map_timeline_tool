@@ -93,7 +93,9 @@ class SettingsStoreBackupJsonTest {
         assertEquals(false, SettingsStore.getFollowSystemTheme(context))
         assertEquals(1.4f, SettingsStore.getMarkerScale(context), 0.001f)
         assertEquals("osm", SettingsStore.getMapTileSourceId(context))
-        assertTrue(SettingsStore.getDownloadedAreas(context).isEmpty())
+        // Device-local state is neither exported nor touched by clearing/importing portable preferences.
+        assertEquals(1, SettingsStore.getDownloadedAreas(context).size)
+        assertTrue(SettingsStore.getQuickAddNotificationEnabled(context))
     }
 
     @Test

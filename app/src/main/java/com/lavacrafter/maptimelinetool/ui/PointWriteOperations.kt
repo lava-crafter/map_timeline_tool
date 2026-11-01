@@ -32,6 +32,7 @@ sealed interface PointWriteState {
     data object Idle : PointWriteState
     data class Running(val id: String, val request: PointWriteRequest, val coreCommitted: Boolean = false) : PointWriteState
     data class ConfirmLocation(val id: String, val request: PointWriteRequest.Add, val decision: LocationSaveDecision) : PointWriteState
+    /** For an Add, a null [quality] means the draft had already been saved before recreation. */
     data class Success(val id: String, val request: PointWriteRequest, val quality: LocationSaveQuality?, val pointId: Long) : PointWriteState
     data class Failure(val id: String, val request: PointWriteRequest, val error: Throwable,
         val locationUnavailable: Boolean = false) : PointWriteState
@@ -119,6 +120,13 @@ class PointWriteOperations(
         try {
             when (request) {
                 is PointWriteRequest.Add -> {
+                    // A dialog restored after process death can resubmit a draft whose row already
+                    // committed; its event time identifies that row, so report it instead of duplicating.
+                    repository.findByTimestamp(request.eventTimeMs)?.let { existing ->
+                        withContext(NonCancellable) { photos.deleteUnlessReferenced(request.photoPath) }
+                        mutableState.value = PointWriteState.Success(id, request, quality = null, pointId = existing.id)
+                        return
+                    }
                     val flow = if (request.autoSave) LocationSaveFlow.AUTO_SAVE else LocationSaveFlow.MANUAL_ADD
                     val decision = if (confirmed == null) resolveLocation(flow) else LocationSavePolicy().evaluate(
                         preciseLocation = null, fallbackLocation = confirmed.location, flow = flow, nowMs = nowMs())

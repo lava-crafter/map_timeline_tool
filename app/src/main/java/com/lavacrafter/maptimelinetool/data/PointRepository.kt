@@ -45,6 +45,7 @@ class PointRepository(
     override suspend fun isPhotoReferenced(photoPath: String) = dao.isPhotoReferenced(photoPath)
     override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double) =
         dao.findByImportKey(timestamp, latitude, longitude)?.toDomain()
+    override suspend fun findByTimestamp(timestamp: Long) = dao.findByTimestamp(timestamp)?.toDomain()
     override suspend fun getPageAfterId(afterId: Long, limit: Int) =
         dao.getPageAfterId(afterId, limit.coerceIn(1, 10_000)).map { it.toDomain() }
 
