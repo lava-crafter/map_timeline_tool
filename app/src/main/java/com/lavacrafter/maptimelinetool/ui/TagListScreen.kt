@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -46,18 +47,23 @@ import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.text.normalizeTagNameForEditing
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TagListScreen(
     tags: List<TagEntity>,
     pinnedTagIds: Set<Long>,
-    onAddTag: (String) -> Unit,
+    onAddTag: suspend (String) -> Long,
     onOpenTag: (TagEntity) -> Unit,
     onEditTag: (TagEntity) -> Unit,
     onTogglePin: (TagEntity, Boolean) -> Unit
 ) {
     var newTag by remember { mutableStateOf("") }
+    var addingTag by remember { mutableStateOf(false) }
+    var addFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -68,22 +74,34 @@ fun TagListScreen(
         Row(modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
                 value = newTag,
-                onValueChange = { newTag = normalizeTagNameForEditing(it) },
+                onValueChange = { newTag = normalizeTagNameForEditing(it); addFailed = false },
                 label = { Text(stringResource(R.string.label_new_tag)) },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
+                readOnly = addingTag
             )
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
                 val name = newTag.trim()
-                if (name.isNotEmpty()) {
-                    onAddTag(name)
-                    newTag = ""
+                if (name.isNotEmpty() && !addingTag) {
+                    addingTag = true
+                    scope.launch {
+                        try {
+                            if (onAddTag(name) > 0L) newTag = "" else addFailed = true
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            addFailed = true
+                        } finally {
+                            addingTag = false
+                        }
+                    }
                 }
-            }) {
+            }, enabled = !addingTag) {
                 Text(stringResource(R.string.action_add))
             }
         }
+        if (addFailed) Text(stringResource(R.string.toast_tag_save_failed))
 
         Spacer(modifier = Modifier.height(12.dp))
         HorizontalDivider()

@@ -25,8 +25,15 @@ import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PointWriteUseCaseTest {
@@ -43,11 +50,10 @@ class PointWriteUseCaseTest {
             },
             deletePhoto = {},
             shouldCollectNoise = { true },
-            collectNoiseDb = { -20f },
-            asyncScope = this
+            collectNoiseDb = { -20f }
         )
 
-        useCase.addPointWithTags(
+        val id = useCase.addPointWithTags(
             title = "title",
             note = "note",
             location = GeoPoint(12.3, 45.6, accuracyMeters = 7.5f, fixTimeMs = 1200L, provider = "gps"),
@@ -57,6 +63,7 @@ class PointWriteUseCaseTest {
         )
 
         val inserted = fakeRepository.inserted.single()
+        assertEquals(10L, id)
         assertEquals(12.3, inserted.latitude, 0.0)
         assertEquals(45.6, inserted.longitude, 0.0)
         assertEquals(7.5f, inserted.locationAccuracyMeters)
@@ -76,8 +83,7 @@ class PointWriteUseCaseTest {
             sensorSnapshotPort = object : SensorSnapshotPort {
                 override suspend fun readSnapshot(): PointSensorSnapshot = PointSensorSnapshot()
             },
-            deletePhoto = {},
-            asyncScope = this
+            deletePhoto = {}
         )
 
         val timestamp = 1710000000000L
@@ -93,25 +99,386 @@ class PointWriteUseCaseTest {
         assertEquals(formatPointTimestamp(timestamp), inserted.title)
         assertEquals("Line1\nLine2 Line3", inserted.note)
     }
+
+    @Test
+    fun `insert failure cannot return a successful id`() = runBlocking {
+        val repo = FakePointRepository().apply { insertFailure = IllegalStateException("insert failed") }
+        var coreSaved = false
+        val failure = runCatching {
+            writer(repo).addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, emptySet(), onCoreSaved = { coreSaved = true })
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertFalse(coreSaved)
+        assertTrue(repo.inserted.isEmpty())
+    }
+
+    @Test
+    fun `tag failure rolls back point and previously attached tags`() = runBlocking {
+        val repo = FakePointRepository().apply { tagFailureId = 3L }
+        var coreSaved = false
+        val failure = runCatching {
+            writer(repo).addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, linkedSetOf(2L, 3L), onCoreSaved = { coreSaved = true })
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertFalse(coreSaved)
+        assertTrue(repo.inserted.isEmpty())
+        assertTrue(repo.insertedTags.isEmpty())
+    }
+
+    @Test
+    fun `update failure leaves original row and tags unchanged`() = runBlocking {
+        val old = point().copy(id = 10, photoPath = "old.jpg")
+        val repo = FakePointRepository().apply {
+            inserted += old
+            insertedTags += 10L to 2L
+            tagFailureId = 3L
+        }
+        var coreSaved = false
+        val deletedPhotos = mutableListOf<String?>()
+        val failure = runCatching {
+            writer(repo, deletePhoto = { deletedPhotos += it }).updatePoint(
+                old, "Changed", "New note", "new.jpg", setOf(3L), onCoreSaved = { coreSaved = true }
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertFalse(coreSaved)
+        assertEquals(listOf(old), repo.inserted)
+        assertEquals(listOf(10L to 2L), repo.insertedTags)
+        assertTrue(deletedPhotos.isEmpty())
+    }
+
+    @Test
+    fun `delete failure keeps point and referenced photo`() = runBlocking {
+        val old = point().copy(id = 10, photoPath = "old.jpg")
+        val repo = FakePointRepository().apply {
+            inserted += old
+            deleteFailure = IllegalStateException("delete failed")
+        }
+        val deletedPhotos = mutableListOf<String?>()
+        val failure = runCatching { writer(repo, deletePhoto = { deletedPhotos += it }).deletePoint(old) }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertEquals(listOf(old), repo.inserted)
+        assertTrue(deletedPhotos.isEmpty())
+    }
+
+    @Test
+    fun `photo cleanup failure cannot turn a successful delete into a failed write`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "old.jpg")
+        val repo = FakePointRepository().apply { inserted += old }
+        val errors = mutableListOf<Exception>()
+        val writer = PointWriteUseCase(
+            repo, snapshotPort(), deletePhoto = { throw IllegalStateException("file cleanup failed") },
+            onOptionalFailure = errors::add
+        )
+
+        writer.deletePoint(old)
+
+        assertTrue(repo.inserted.isEmpty())
+        assertEquals(listOf("file cleanup failed"), errors.map { it.message })
+    }
+
+    @Test
+    fun `noise collection and update failures cannot invalidate a committed point`() = runBlocking {
+        val errors = mutableListOf<Exception>()
+        val repo = FakePointRepository().apply { noiseFailure = IllegalStateException("update noise failed") }
+        val collectionFailure = PointWriteUseCase(
+            repo, snapshotPort(), {}, shouldCollectNoise = { true },
+            collectNoiseDb = { throw IllegalStateException("capture failed") }, onOptionalFailure = errors::add
+        )
+        assertEquals(10L, collectionFailure.addPointWithTags("A", "", GeoPoint(1.0, 2.0), 1L, emptySet()))
+        val updateFailure = PointWriteUseCase(
+            repo, snapshotPort(), {}, shouldCollectNoise = { true },
+            collectNoiseDb = { -20f }, onOptionalFailure = errors::add
+        )
+        assertEquals(10L, updateFailure.addPointWithTags("B", "", GeoPoint(1.0, 2.0), 2L, emptySet()))
+        assertEquals(2, repo.inserted.size)
+        assertEquals(listOf("capture failed", "update noise failed"), errors.map { it.message })
+    }
+
+    @Test
+    fun `cancellation propagates and rolls back unfinished transaction`() = runBlocking {
+        val repo = FakePointRepository().apply { tagFailureId = 3L; tagFailure = CancellationException("cancelled") }
+        val failure = runCatching {
+            writer(repo).addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, linkedSetOf(2L, 3L))
+        }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
+        assertTrue(repo.inserted.isEmpty())
+        assertTrue(repo.insertedTags.isEmpty())
+    }
+
+    @Test
+    fun `cancellation of optional noise propagates without removing committed point`() = runBlocking {
+        val repo = FakePointRepository()
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, shouldCollectNoise = { true },
+            collectNoiseDb = { throw CancellationException("cancelled") })
+        var committed = false
+        val failure = runCatching {
+            writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, emptySet(), onCoreSaved = { committed = true })
+        }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
+        assertTrue(committed)
+        assertEquals(1, repo.inserted.size)
+    }
+
+    @Test
+    fun `missing photos cannot be inserted updated or imported`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "existing.jpg")
+        val repo = FakePointRepository().apply { inserted += old }
+        val guard = PhotoCommitGuard { it == "existing.jpg" }
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, photoCommitGuard = guard)
+        var committed = false
+        val failures = listOf(
+            runCatching { writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 2L,
+                emptySet(), "missing.jpg", onCoreSaved = { committed = true }) }.exceptionOrNull(),
+            runCatching { writer.updatePoint(old, "Changed", "", "missing.jpg",
+                onCoreSaved = { committed = true }) }.exceptionOrNull(),
+            runCatching { writer.importPoints(listOf(point().copy(timestamp = 3L, photoPath = "missing.jpg"))) }.exceptionOrNull()
+        )
+        assertTrue(failures.all { it is IllegalArgumentException })
+        assertFalse(committed)
+        assertEquals(listOf(old), repo.inserted)
+    }
+
+    @Test
+    fun `import skips points that already exist without overwriting them`() = runBlocking {
+        val existing = point().copy(id = 10L, photoPath = "existing.jpg", pressureHpa = 1_002f)
+        val repo = FakePointRepository().apply { inserted += existing }
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, photoCommitGuard = PhotoCommitGuard { true })
+
+        val result = writer.importPoints(
+            listOf(
+                point().copy(title = "Re-imported"),
+                point().copy(timestamp = 5L, title = "New"),
+                point().copy(timestamp = 5L, title = "New twin")
+            )
+        )
+
+        assertEquals(PointWriteUseCase.ImportResult(imported = 2, duplicates = 1), result)
+        assertEquals(existing, repo.inserted.first())
+        assertEquals(listOf("New", "New twin"), repo.inserted.drop(1).map { it.title })
+    }
+
+    @Test
+    fun `editing a point whose unchanged photo is missing still saves`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "gone.jpg")
+        val repo = FakePointRepository().apply { inserted += old }
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, photoCommitGuard = PhotoCommitGuard { false })
+
+        writer.updatePoint(old, "Renamed", "", "gone.jpg")
+
+        assertEquals("Renamed", repo.inserted.single().title)
+        assertEquals("gone.jpg", repo.inserted.single().photoPath)
+    }
+
+    @Test
+    fun `tags deleted before commit are not linked and stale links are dropped on edit`() = runBlocking {
+        val repo = FakePointRepository().apply { missingTagIds = setOf(3L) }
+        val writer = writer(repo) {}
+
+        val id = writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 2L, setOf(2L, 3L))
+        assertEquals(listOf(id to 2L), repo.insertedTags)
+
+        repo.inserted[0] = repo.inserted[0].copy(id = id)
+        repo.insertedTags += id to 3L
+        writer.updatePoint(repo.inserted.single(), "Edited", "", null, setOf(2L, 3L))
+        assertEquals(listOf(id to 2L), repo.insertedTags)
+    }
+
+    @Test
+    fun `quick add style writes skip optional noise sampling`() = runBlocking {
+        val repo = FakePointRepository()
+        var sampled = false
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, shouldCollectNoise = { true },
+            collectNoiseDb = { sampled = true; -10f })
+
+        writer.addPointWithTags("Quick", "", GeoPoint(1.0, 2.0), 2L, emptySet(), allowNoise = false)
+
+        assertFalse(sampled)
+        assertTrue(repo.updatedNoiseDb.isEmpty())
+    }
+
+    @Test
+    fun `a failing sensor read degrades to an empty snapshot instead of blocking the save`() = runBlocking {
+        val repo = FakePointRepository()
+        val failures = mutableListOf<Exception>()
+        val writer = PointWriteUseCase(repo, object : SensorSnapshotPort {
+            override suspend fun readSnapshot(): PointSensorSnapshot = throw IllegalStateException("sensor service died")
+        }, {}, onOptionalFailure = { failures += it })
+
+        writer.addPointWithTags("Saved", "", GeoPoint(1.0, 2.0), 2L, emptySet())
+
+        assertEquals(null, repo.inserted.single().pressureHpa)
+        assertEquals(1, failures.size)
+    }
+
+    @Test
+    fun `cleanup and new references use one guard and stale candidates cannot resurrect deleted photos`() = runBlocking {
+        withTimeout(5_000L) {
+            val old = point().copy(id = 10L, photoPath = "old.jpg")
+            val repo = FakePointRepository().apply { inserted += old }
+            var fileExists = true
+            val guard = PhotoCommitGuard { fileExists }
+            val cleanupEntered = CompletableDeferred<Unit>()
+            val finishCleanup = CompletableDeferred<Unit>()
+            val writer = PointWriteUseCase(repo, snapshotPort(), deletePhoto = {
+                cleanupEntered.complete(Unit)
+                finishCleanup.await()
+                fileExists = false
+            }, photoCommitGuard = guard)
+            val deletion = async { writer.deletePoint(old) }
+            cleanupEntered.await()
+            val staleSave = async(start = CoroutineStart.UNDISPATCHED) {
+                runCatching { writer.addPointWithTags("Stale", "", GeoPoint(1.0, 2.0), 2L,
+                    emptySet(), "old.jpg") }.exceptionOrNull()
+            }
+            assertFalse(staleSave.isCompleted)
+            finishCleanup.complete(Unit)
+            deletion.await()
+            assertTrue(staleSave.await() is IllegalArgumentException)
+            assertTrue(repo.inserted.isEmpty())
+        }
+    }
+
+    @Test
+    fun `shared photos survive edit and delete cleanup`() = runBlocking {
+        val old = point().copy(id = 10L, photoPath = "shared.jpg")
+        val other = point().copy(id = 11L, photoPath = "shared.jpg")
+        val repo = FakePointRepository().apply { inserted += listOf(old, other) }
+        val deleted = mutableListOf<String?>()
+        val writer = writer(repo) { deleted += it }
+        writer.updatePoint(old, "Edited", "", "new.jpg")
+        assertTrue(deleted.isEmpty())
+        writer.deletePoint(other)
+        assertEquals(listOf("shared.jpg"), deleted)
+        assertEquals("new.jpg", repo.inserted.single().photoPath)
+    }
+
+    @Test
+    fun `edit and delete clean current database photos rather than stale drafts`() = runBlocking {
+        val stale = point().copy(id = 10L, photoPath = "before_restore.jpg")
+        val current = stale.copy(photoPath = "restored.jpg", pressureHpa = 1001f)
+        val repo = FakePointRepository().apply { inserted += current }
+        val deleted = mutableListOf<String?>()
+        val writer = writer(repo) { deleted += it }
+        writer.updatePoint(stale, "Edited", "", "edited.jpg")
+        assertEquals(listOf("restored.jpg"), deleted)
+        assertEquals(1001f, repo.inserted.single().pressureHpa)
+        writer.deletePoint(stale)
+        assertEquals(listOf("restored.jpg", "edited.jpg"), deleted)
+        assertTrue(repo.inserted.isEmpty())
+    }
+
+    @Test
+    fun `optional noise never holds the photo commit guard`() = runBlocking {
+        withTimeout(5_000L) {
+            val guard = PhotoCommitGuard()
+            val noiseStarted = CompletableDeferred<Unit>()
+            val finishNoise = CompletableDeferred<Unit>()
+            val writer = PointWriteUseCase(FakePointRepository(), snapshotPort(), {},
+                shouldCollectNoise = { true }, collectNoiseDb = {
+                    noiseStarted.complete(Unit)
+                    finishNoise.await()
+                    null
+                }, photoCommitGuard = guard)
+            val save = async { writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, emptySet()) }
+            noiseStarted.await()
+            guard.withLock { assertFalse(save.isCompleted) }
+            finishNoise.complete(Unit)
+            save.await()
+            Unit
+        }
+    }
+
+    @Test
+    fun `sampling happens before acquiring the photo commit guard`() = runBlocking {
+        withTimeout(5_000L) {
+            val guard = PhotoCommitGuard()
+            val sampled = CompletableDeferred<Unit>()
+            val writer = PointWriteUseCase(FakePointRepository(), object : SensorSnapshotPort {
+                override suspend fun readSnapshot(): PointSensorSnapshot {
+                    sampled.complete(Unit)
+                    return PointSensorSnapshot()
+                }
+            }, {}, photoCommitGuard = guard)
+            lateinit var save: kotlinx.coroutines.Deferred<Long>
+            guard.withLock {
+                save = async(start = CoroutineStart.UNDISPATCHED) {
+                    writer.addPointWithTags("New", "", GeoPoint(1.0, 2.0), 1L, emptySet())
+                }
+                sampled.await()
+                assertFalse(save.isCompleted)
+            }
+            assertEquals(10L, save.await())
+        }
+    }
+
+    private fun snapshotPort() = object : SensorSnapshotPort {
+        override suspend fun readSnapshot(): PointSensorSnapshot = PointSensorSnapshot()
+    }
+
+    private fun writer(repo: FakePointRepository, deletePhoto: suspend (String?) -> Unit = {}) =
+        PointWriteUseCase(repo, snapshotPort(), deletePhoto)
+
+    private fun point() = Point(timestamp = 1L, latitude = 1.0, longitude = 2.0, title = "Old", note = "")
 }
 
 private class FakePointRepository : PointRepositoryGateway {
     val inserted = mutableListOf<Point>()
     val insertedTags = mutableListOf<Pair<Long, Long>>()
     val updatedNoiseDb = mutableListOf<Pair<Long, Float?>>()
+    var insertFailure: Exception? = null
+    var tagFailureId: Long? = null
+    var tagFailure: Exception = IllegalStateException("tag insert failed")
+    var updateFailure: Exception? = null
+    var deleteFailure: Exception? = null
+    var noiseFailure: Exception? = null
+    var missingTagIds: Set<Long> = emptySet()
+
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> = tagIds - missingTagIds
+
+    override suspend fun <T> inTransaction(block: suspend () -> T): T {
+        val previousPoints = inserted.toList()
+        val previousTags = insertedTags.toList()
+        return try {
+            block()
+        } catch (error: Throwable) {
+            inserted.clear()
+            inserted.addAll(previousPoints)
+            insertedTags.clear()
+            insertedTags.addAll(previousTags)
+            throw error
+        }
+    }
 
     override fun observeAll(): Flow<List<Point>> = flowOf(emptyList())
     override suspend fun insert(point: Point): Long {
+        insertFailure?.let { throw it }
         inserted += point
         return 10L
     }
-    override suspend fun update(point: Point) = Unit
+    override suspend fun update(point: Point) {
+        updateFailure?.let { throw it }
+        val oldIndex = inserted.indexOfFirst { it.id == point.id }
+        if (oldIndex >= 0) inserted[oldIndex] = point
+    }
     override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) {
+        noiseFailure?.let { throw it }
         updatedNoiseDb += pointId to noiseDb
     }
-    override suspend fun delete(point: Point) = Unit
-    override suspend fun getAll(): List<Point> = emptyList()
-    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point? = null
+    override suspend fun delete(point: Point) {
+        deleteFailure?.let { throw it }
+        inserted.removeAll { it.id == point.id }
+    }
+    override suspend fun getAll(): List<Point> = inserted.toList()
+    override suspend fun isPhotoReferenced(photoPath: String): Boolean = inserted.any { it.photoPath == photoPath }
+    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point? =
+        inserted.firstOrNull { it.timestamp == timestamp && it.latitude == latitude && it.longitude == longitude }
     override suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point> = emptyList()
     override fun observeTags(): Flow<List<Tag>> = flowOf(emptyList())
     override suspend fun getAllTags(): List<Tag> = emptyList()
@@ -119,9 +486,14 @@ private class FakePointRepository : PointRepositoryGateway {
     override suspend fun updateTag(tag: Tag) = Unit
     override suspend fun deleteTag(tagId: Long) = Unit
     override suspend fun insertPointTag(pointId: Long, tagId: Long) {
+        if (tagId == tagFailureId) throw tagFailure
         insertedTags += pointId to tagId
     }
-    override suspend fun deletePointTag(pointId: Long, tagId: Long) = Unit
-    override suspend fun getTagIdsForPoint(pointId: Long): List<Long> = emptyList()
+    override suspend fun deletePointTag(pointId: Long, tagId: Long) {
+        insertedTags.remove(pointId to tagId)
+    }
+    override suspend fun getTagIdsForPoint(pointId: Long): List<Long> = insertedTags.filter { it.first == pointId }.map { it.second }
+    override suspend fun getAllPointTagRelations(): List<com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation> =
+        insertedTags.map { com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation(it.first, it.second) }
     override fun observePointsForTag(tagId: Long): Flow<List<Point>> = flowOf(emptyList())
 }

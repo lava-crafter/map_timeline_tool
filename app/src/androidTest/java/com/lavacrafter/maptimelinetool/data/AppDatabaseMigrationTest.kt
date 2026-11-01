@@ -32,7 +32,47 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AppDatabaseMigrationTest {
     @Test
-    fun migrate3To7_preservesCoreDataAndTagLinks() {
+    fun migrate2To8_preservesPointsAndCreatesTagTables() {
+        runMigrationTest(startVersion = 2, dbName = "migration-test-v2.db") { db ->
+            // The public v0.1-alpha.1 database contained only this points table.
+            createPointsTableV3(db)
+            db.insertOrThrow(
+                "points",
+                null,
+                ContentValues().apply {
+                    put("id", 41L)
+                    put("timestamp", 1700000000000L)
+                    put("latitude", -12.345)
+                    put("longitude", 67.89)
+                    put("title", "Legacy V2")
+                    put("note", "keep this point")
+                }
+            )
+        }
+
+        migrateAndAssert("migration-test-v2.db") { point, db ->
+            assertEquals(41L, point.id)
+            assertEquals(1700000000000L, point.timestamp)
+            assertEquals(-12.345, point.latitude, 0.0)
+            assertEquals(67.89, point.longitude, 0.0)
+            assertEquals("Legacy V2", point.title)
+            assertEquals("keep this point", point.note)
+            assertNull(point.pressureHpa)
+            assertNull(point.photoPath)
+            assertNull(point.noiseDb)
+            assertNull(point.locationAccuracyMeters)
+            assertNull(point.locationFixTimeMs)
+            assertNull(point.locationProvider)
+            assertTrue(db.pointDao().getAllTags().isEmpty())
+            assertTrue(db.pointDao().getTagIdsForPoint(point.id).isEmpty())
+            val tagId = db.pointDao().insertTag(TagEntity(name = "New tag"))
+            db.pointDao().insertPointTag(PointTagCrossRef(pointId = point.id, tagId = tagId))
+            assertTagLink(db, point.id, tagId, "New tag")
+        }
+    }
+
+    @Test
+    fun migrate3To8_preservesCoreDataAndTagLinks() {
         runMigrationTest(startVersion = 3, dbName = "migration-test-v3.db") { db ->
             createLegacyTagsSchema(db)
             createPointsTableV3(db)
@@ -69,7 +109,7 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
-    fun migrate4To7_preservesSensorColumns() {
+    fun migrate4To8_preservesSensorColumns() {
         runMigrationTest(startVersion = 4, dbName = "migration-test-v4.db") { db ->
             createLegacyTagsSchema(db)
             createPointsTableV4(db)
@@ -121,7 +161,7 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
-    fun migrate5To7_preservesPhotoPath() {
+    fun migrate5To8_preservesPhotoPath() {
         runMigrationTest(startVersion = 5, dbName = "migration-test-v5.db") { db ->
             createLegacyTagsSchema(db)
             createPointsTableV5(db)
@@ -154,9 +194,22 @@ class AppDatabaseMigrationTest {
     }
 
     @Test
-    fun migrate6To7_preservesNoiseAndAddsLocationColumns() {
-        runMigrationTest(startVersion = 6, dbName = "migration-test-v6.db") { db ->
+    fun migrateEarly6To8_preservesNoiseAndAddsLocationColumnsAndTagIndex() {
+        assertV6Migration(hasTagIdIndex = false)
+    }
+
+    @Test
+    fun migrateLate6To8_preservesExistingTagIndex() {
+        assertV6Migration(hasTagIdIndex = true)
+    }
+
+    private fun assertV6Migration(hasTagIdIndex: Boolean) {
+        val dbName = if (hasTagIdIndex) "migration-test-v6-late.db" else "migration-test-v6-early.db"
+        runMigrationTest(startVersion = 6, dbName = dbName) { db ->
             createLegacyTagsSchema(db)
+            if (hasTagIdIndex) {
+                db.execSQL("CREATE INDEX index_point_tags_tagId ON point_tags(tagId)")
+            }
             createPointsTableV6(db)
             insertTagData(db)
             insertPointTagLink(db)
@@ -177,7 +230,7 @@ class AppDatabaseMigrationTest {
             )
         }
 
-        migrateAndAssert("migration-test-v6.db") { point, db ->
+        migrateAndAssert(dbName) { point, db ->
             assertEquals("Legacy V6", point.title)
             assertEquals("point_photo_v6.jpg", point.photoPath)
             assertEquals(52.3f, point.noiseDb ?: 0f, 0.001f)
@@ -196,10 +249,14 @@ class AppDatabaseMigrationTest {
     fun migrate7To8_addsImportKeyIndexWithoutChangingPoints() {
         runMigrationTest(startVersion = 7, dbName = "migration-test-v7.db") { db ->
             createLegacyTagsSchema(db)
+            // The public v0.1.8 (v7) schema already included this index.
+            db.execSQL("CREATE INDEX index_point_tags_tagId ON point_tags(tagId)")
             createPointsTableV6(db)
             db.execSQL("ALTER TABLE points ADD COLUMN locationAccuracyMeters REAL")
             db.execSQL("ALTER TABLE points ADD COLUMN locationFixTimeMs INTEGER")
             db.execSQL("ALTER TABLE points ADD COLUMN locationProvider TEXT")
+            insertTagData(db)
+            insertPointTagLink(db)
             db.insertOrThrow(
                 "points",
                 null,
@@ -215,6 +272,7 @@ class AppDatabaseMigrationTest {
 
         migrateAndAssert("migration-test-v7.db") { point, db ->
             assertEquals("Legacy V7", point.title)
+            assertTagLink(db, point.id, 10L, "Work")
             db.openHelper.readableDatabase.query("PRAGMA index_list(points)").use { cursor ->
                 val nameIndex = cursor.getColumnIndex("name")
                 assertTrue(generateSequence { if (cursor.moveToNext()) cursor.getString(nameIndex) else null }
@@ -254,6 +312,7 @@ class AppDatabaseMigrationTest {
             .build()
         try {
             val point = db.pointDao().getAll().single()
+            assertHasTagIdIndex(db)
             assertions(point, db)
         } finally {
             db.close()
@@ -266,7 +325,6 @@ class AppDatabaseMigrationTest {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS point_tags (pointId INTEGER NOT NULL, tagId INTEGER NOT NULL, PRIMARY KEY(pointId, tagId))"
         )
-        db.execSQL("CREATE INDEX IF NOT EXISTS index_point_tags_tagId ON point_tags(tagId)")
     }
 
     private fun createPointsTableV3(db: SQLiteDatabase) {
@@ -327,6 +385,14 @@ class AppDatabaseMigrationTest {
     private fun assertHasColumn(db: AppDatabase, columnName: String) {
         db.openHelper.readableDatabase.query("SELECT * FROM points LIMIT 1").use { cursor ->
             assertTrue(cursor.getColumnIndex(columnName) >= 0)
+        }
+    }
+
+    private fun assertHasTagIdIndex(db: AppDatabase) {
+        db.openHelper.readableDatabase.query("PRAGMA index_list(point_tags)").use { cursor ->
+            val nameIndex = cursor.getColumnIndexOrThrow("name")
+            assertTrue(generateSequence { if (cursor.moveToNext()) cursor.getString(nameIndex) else null }
+                .contains("index_point_tags_tagId"))
         }
     }
 }

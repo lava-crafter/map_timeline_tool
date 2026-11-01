@@ -46,4 +46,14 @@ class TextInputSanitizerTest {
         assertEquals(MAX_POINT_NOTE_LENGTH, sanitizePointNote("y".repeat(MAX_POINT_NOTE_LENGTH + 20)).length)
         assertEquals(MAX_TAG_NAME_LENGTH, sanitizeTagName("z".repeat(MAX_TAG_NAME_LENGTH + 20)).length)
     }
+
+    @Test
+    fun `limits never split an emoji and lone surrogates or noncharacters are dropped`() {
+        val emoji = "\uD83D\uDE00"
+        val atLimit = "x".repeat(MAX_POINT_TITLE_LENGTH - 1) + emoji
+        val title = sanitizePointTitle(atLimit)
+        assertEquals("x".repeat(MAX_POINT_TITLE_LENGTH - 1), title)
+        assertEquals("x".repeat(MAX_TAG_NAME_LENGTH - 1), normalizeTagNameForEditing("x".repeat(MAX_TAG_NAME_LENGTH - 1) + emoji))
+        assertEquals("a${emoji}b", sanitizePointNote("a\uD83D$emoji\uDE00\uFFFEb\uFFFF"))
+    }
 }

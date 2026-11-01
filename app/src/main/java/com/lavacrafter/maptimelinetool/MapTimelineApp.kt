@@ -20,6 +20,7 @@ import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
 import android.os.SystemClock
+import android.util.Log
 import com.lavacrafter.maptimelinetool.data.AppDatabase
 import com.lavacrafter.maptimelinetool.data.PointRepository
 import com.lavacrafter.maptimelinetool.data.SettingsRepository
@@ -29,16 +30,22 @@ import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveResolver
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
+import com.lavacrafter.maptimelinetool.domain.usecase.PhotoCommitGuard
 import com.lavacrafter.maptimelinetool.domain.usecase.SettingsManagementUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
 import com.lavacrafter.maptimelinetool.notification.isQuickAddNotificationAvailable
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddLocationCache
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddPassiveLocationUpdater
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResolver
-import java.io.File
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
+import com.lavacrafter.maptimelinetool.ui.SettingsStore
+import com.lavacrafter.maptimelinetool.ui.applyMapCachePolicy
+import com.lavacrafter.maptimelinetool.export.ZipRestoreCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.io.File
 import org.osmdroid.config.Configuration
 
 class MapTimelineApp : Application() {
@@ -50,11 +57,30 @@ class MapTimelineApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                graph.zipRestoreCoordinator.recover()
+            } catch (error: Exception) {
+                Log.e("MapTimelineApp", "Restore journal recovery failed; next restore will retry", error)
+            }
+            try {
+                val removed = graph.pointRepositoryGateway.deleteOrphanPointTags()
+                if (removed > 0) Log.i("MapTimelineApp", "Removed $removed orphan point-tag relations")
+                // Early builds inserted raw tag names; give blank ones a visible name instead of hiding them.
+                graph.pointRepositoryGateway.getAllTags()
+                    .filter { sanitizeTagName(it.name).isBlank() }
+                    .forEach { graph.pointRepositoryGateway.updateTag(it.copy(name = "tag_${it.id}")) }
+            } catch (error: Exception) {
+                Log.e("MapTimelineApp", "Startup data repair failed", error)
+            }
+        }
         val config = Configuration.getInstance()
         config.userAgentValue = packageName
         val basePath = File(cacheDir, "osmdroid")
         config.osmdroidBasePath = basePath
         config.osmdroidTileCache = File(basePath, "tiles")
+        // The tile DB trims itself once, when it is first opened; apply the cap before any MapView exists.
+        applyMapCachePolicy(this, graph.settingsManagementUseCase.getMapTileSourceId())
         val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
         graph.quickAddPassiveLocationUpdater.refreshRegistration(
             isQuickAddNotificationAvailable(quickAddEnabled)
@@ -65,9 +91,16 @@ class MapTimelineApp : Application() {
 class AppGraph(
     private val app: Application
 ) {
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     private val database: AppDatabase by lazy { AppDatabase.get(app) }
+
+    val photoCommitGuard = PhotoCommitGuard { path ->
+        val file = resolvePointPhotoFile(app, path)
+        path == path.trim() && file != null && file.name == path && file.isFile
+    }
+
+    val zipRestoreCoordinator: ZipRestoreCoordinator by lazy {
+        ZipRestoreCoordinator(app, pointRepositoryGateway, photoCommitGuard = photoCommitGuard)
+    }
 
     val pointRepositoryGateway: PointRepositoryGateway by lazy {
         PointRepository(database, database.pointDao())
@@ -104,13 +137,17 @@ class AppGraph(
             locationProvider = locationProvider,
             locationCache = quickAddLocationCache,
             elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
-            addPoint = { title, location, timestamp ->
+            addPoint = { title, location, timestamp, onCoreSaved ->
                 pointWriteUseCase.addPointWithTags(
                     title = title,
                     note = "",
                     location = location,
                     timestamp = timestamp,
-                    tagIds = settingsManagementUseCase.getDefaultTagIds().toSet()
+                    tagIds = settingsManagementUseCase.getDefaultTagIds().toSet(),
+                    // Quick Add usually runs from a broadcast with no foreground UI, where Android 9+ delivers
+                    // silent microphone data; sampling would only spend the receiver's limited time budget.
+                    allowNoise = false,
+                    onCoreSaved = { onCoreSaved() }
                 )
             }
         )
@@ -153,7 +190,7 @@ class AppGraph(
     }
 
     val tagManagementUseCase: TagManagementUseCase by lazy {
-        TagManagementUseCase(pointRepositoryGateway)
+        TagManagementUseCase(pointRepositoryGateway, onTagDeleted = { SettingsStore.removeTagId(app, it) })
     }
 
     val pointWriteUseCase: PointWriteUseCase by lazy {
@@ -163,7 +200,7 @@ class AppGraph(
             deletePhoto = { photoPath -> deletePointPhotoFile(app, photoPath) },
             shouldCollectNoise = { settingsManagementUseCase.getNoiseEnabled() },
             collectNoiseDb = { com.lavacrafter.maptimelinetool.sensor.captureNoiseDb(app) },
-            asyncScope = appScope
+            photoCommitGuard = photoCommitGuard
         )
     }
 }

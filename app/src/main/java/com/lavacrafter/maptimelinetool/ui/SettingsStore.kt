@@ -17,6 +17,8 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.ui
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.core.content.edit
 
 object SettingsStore {
     private const val PREFS = "map_timeline_settings"
@@ -28,6 +30,7 @@ object SettingsStore {
     private const val KEY_ZOOM_BEHAVIOR = "zoom_behavior"
     private const val KEY_LANGUAGE_PREFERENCE = "language_preference"
     private const val KEY_FOLLOW_SYSTEM_THEME = "follow_system_theme"
+    private const val KEY_DARK_THEME = "dark_theme"
     private const val KEY_DEFAULT_TAGS = "default_tags"
     private const val KEY_MARKER_SCALE = "marker_scale"
     private const val KEY_MAP_TILE_SOURCE = "map_tile_source"
@@ -48,6 +51,46 @@ object SettingsStore {
     private const val KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED = "quick_add_notification_permission_requested"
     private const val SETTINGS_SCHEMA_VERSION = 1
     private const val MAX_RECENT_TAGS = 3
+    /**
+     * Device-local state (offline areas whose tiles live in the cache dir, Quick Add enablement that depends on
+     * this device's permissions) lives in its own file, excluded from system backup and transfer.
+     */
+    private const val DEVICE_PREFS = "map_timeline_device"
+    private val NON_PORTABLE_BACKUP_KEYS = setOf(
+        KEY_DOWNLOADED_AREAS,
+        KEY_DOWNLOAD_TILE_SOURCE,
+        KEY_DOWNLOAD_MULTI_THREAD,
+        KEY_DOWNLOAD_THREAD_COUNT,
+        KEY_QUICK_ADD_NOTIFICATION_ENABLED,
+        KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED
+    )
+
+    /** Moves legacy device-local keys out of the portable file; old keys are removed only after the copy is committed. */
+    private fun devicePrefs(context: Context): SharedPreferences {
+        val device = context.getSharedPreferences(DEVICE_PREFS, Context.MODE_PRIVATE)
+        val portable = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Same instance only when a wrapper context maps every name to one file; nothing to migrate then.
+        if (device === portable) return device
+        val legacy = portable.all.filterKeys { it in NON_PORTABLE_BACKUP_KEYS }
+        if (legacy.isNotEmpty()) {
+            val editor = device.edit()
+            legacy.forEach { (key, value) ->
+                if (device.contains(key)) return@forEach
+                when (value) {
+                    is String -> editor.putString(key, value)
+                    is Boolean -> editor.putBoolean(key, value)
+                    is Int -> editor.putInt(key, value)
+                    is Long -> editor.putLong(key, value)
+                    is Float -> editor.putFloat(key, value)
+                }
+            }
+            // Synchronous commit: the legacy keys may only be dropped once the copy is on disk.
+            if (editor.commit()) {
+                portable.edit { legacy.keys.forEach { remove(it) } }
+            }
+        }
+        return device
+    }
 
     fun getTimeoutSeconds(context: Context): Int {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -148,12 +191,29 @@ object SettingsStore {
             .apply()
     }
 
+    fun getDarkTheme(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_DARK_THEME, false)
+
+    fun setDarkTheme(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_DARK_THEME, enabled)
+            .apply()
+    }
+
     fun getDefaultTagIds(context: Context): List<Long> {
         return parseLongList(context, KEY_DEFAULT_TAGS)
     }
 
     fun setDefaultTagIds(context: Context, tagIds: List<Long>) {
         saveLongList(context, KEY_DEFAULT_TAGS, tagIds)
+    }
+
+    fun removeTagId(context: Context, tagId: Long) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_PINNED_TAGS, getPinnedTagIds(context).filterNot { it == tagId }.joinToString(","))
+            .putString(KEY_RECENT_TAGS, getRecentTagIds(context).filterNot { it == tagId }.joinToString(","))
+            .putString(KEY_DEFAULT_TAGS, getDefaultTagIds(context).filterNot { it == tagId }.joinToString(","))
+            .commit()
     }
 
     fun getMarkerScale(context: Context): Float {
@@ -183,38 +243,38 @@ object SettingsStore {
     }
 
     fun getDownloadTileSourceId(context: Context): String {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getString(KEY_DOWNLOAD_TILE_SOURCE, downloadTileSources.first().id)
             ?: downloadTileSources.first().id
     }
 
     fun setDownloadTileSourceId(context: Context, sourceId: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putString(KEY_DOWNLOAD_TILE_SOURCE, sourceId)
             .apply()
     }
 
     fun getDownloadMultiThreadEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getBoolean(KEY_DOWNLOAD_MULTI_THREAD, false)
     }
 
     fun setDownloadMultiThreadEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putBoolean(KEY_DOWNLOAD_MULTI_THREAD, enabled)
             .apply()
     }
 
     fun getDownloadThreadCount(context: Context): Int {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getInt(KEY_DOWNLOAD_THREAD_COUNT, 4)
             .coerceIn(2, 32)
     }
 
     fun setDownloadThreadCount(context: Context, count: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putInt(KEY_DOWNLOAD_THREAD_COUNT, count.coerceIn(2, 32))
             .apply()
@@ -326,31 +386,31 @@ object SettingsStore {
     }
 
     fun getQuickAddNotificationEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, false)
     }
 
     fun setQuickAddNotificationEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, enabled)
             .apply()
     }
 
     fun getQuickAddNotificationPermissionRequested(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return devicePrefs(context)
             .getBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, false)
     }
 
     fun setQuickAddNotificationPermissionRequested(context: Context, requested: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putBoolean(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED, requested)
             .apply()
     }
 
     fun getDownloadedAreas(context: Context): List<DownloadedArea> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = devicePrefs(context)
             .getString(KEY_DOWNLOADED_AREAS, null)
             ?: return emptyList()
         return runCatching {
@@ -404,12 +464,10 @@ object SettingsStore {
         root.put(KEY_ZOOM_BEHAVIOR, getZoomButtonBehavior(context).value)
         root.put(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)
         root.put(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context))
+        root.put(KEY_DARK_THEME, getDarkTheme(context))
         root.put(KEY_DEFAULT_TAGS, org.json.JSONArray(getDefaultTagIds(context)))
         root.put(KEY_MARKER_SCALE, getMarkerScale(context).toDouble())
         root.put(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context))
-        root.put(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context))
-        root.put(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context))
-        root.put(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context))
         root.put(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context))
         root.put(KEY_PHOTO_COMPRESS_FORMAT, getPhotoCompressFormat(context).value)
         root.put(KEY_PHOTO_COMPRESS_QUALITY, getPhotoCompressQuality(context))
@@ -419,20 +477,6 @@ object SettingsStore {
         root.put(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context))
         root.put(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context))
         root.put(KEY_NOISE_ENABLED, getNoiseEnabled(context))
-        root.put(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context))
-        val downloadedAreas = org.json.JSONArray()
-        getDownloadedAreas(context).forEach { area ->
-            val areaObj = org.json.JSONObject()
-            areaObj.put("north", area.north)
-            areaObj.put("south", area.south)
-            areaObj.put("east", area.east)
-            areaObj.put("west", area.west)
-            areaObj.put("minZoom", area.minZoom)
-            areaObj.put("maxZoom", area.maxZoom)
-            areaObj.put("createdAt", area.createdAt)
-            downloadedAreas.put(areaObj)
-        }
-        root.put(KEY_DOWNLOADED_AREAS, downloadedAreas)
         return root.toString()
     }
 
@@ -464,16 +508,10 @@ object SettingsStore {
                 editor.putInt(KEY_LANGUAGE_PREFERENCE, LanguagePreference.fromValue(root.optInt(KEY_LANGUAGE_PREFERENCE, getLanguagePreference(context).value)).value)
             }
             if (root.has(KEY_FOLLOW_SYSTEM_THEME)) editor.putBoolean(KEY_FOLLOW_SYSTEM_THEME, root.optBoolean(KEY_FOLLOW_SYSTEM_THEME, getFollowSystemTheme(context)))
+            if (root.has(KEY_DARK_THEME)) editor.putBoolean(KEY_DARK_THEME, root.optBoolean(KEY_DARK_THEME, getDarkTheme(context)))
             if (root.has(KEY_DEFAULT_TAGS)) editor.putString(KEY_DEFAULT_TAGS, parseLongArray(root.optJSONArray(KEY_DEFAULT_TAGS)).joinToString(","))
             if (root.has(KEY_MARKER_SCALE)) editor.putFloat(KEY_MARKER_SCALE, root.optDouble(KEY_MARKER_SCALE, getMarkerScale(context).toDouble()).toFloat().coerceIn(0.3f, 1.75f))
             if (root.has(KEY_MAP_TILE_SOURCE)) editor.putString(KEY_MAP_TILE_SOURCE, root.optString(KEY_MAP_TILE_SOURCE, getMapTileSourceId(context)))
-            if (root.has(KEY_DOWNLOAD_TILE_SOURCE)) editor.putString(KEY_DOWNLOAD_TILE_SOURCE, root.optString(KEY_DOWNLOAD_TILE_SOURCE, getDownloadTileSourceId(context)))
-            if (root.has(KEY_DOWNLOAD_MULTI_THREAD)) {
-                editor.putBoolean(KEY_DOWNLOAD_MULTI_THREAD, root.optBoolean(KEY_DOWNLOAD_MULTI_THREAD, getDownloadMultiThreadEnabled(context)))
-            }
-            if (root.has(KEY_DOWNLOAD_THREAD_COUNT)) {
-                editor.putInt(KEY_DOWNLOAD_THREAD_COUNT, root.optInt(KEY_DOWNLOAD_THREAD_COUNT, getDownloadThreadCount(context)).coerceIn(2, 32))
-            }
             if (root.has(KEY_PHOTO_LOSSLESS_ENABLED)) {
                 editor.putBoolean(KEY_PHOTO_LOSSLESS_ENABLED, root.optBoolean(KEY_PHOTO_LOSSLESS_ENABLED, getPhotoLosslessEnabled(context)))
             }
@@ -487,43 +525,39 @@ object SettingsStore {
             if (root.has(KEY_GYROSCOPE_ENABLED)) editor.putBoolean(KEY_GYROSCOPE_ENABLED, root.optBoolean(KEY_GYROSCOPE_ENABLED, getGyroscopeEnabled(context)))
             if (root.has(KEY_MAGNETOMETER_ENABLED)) editor.putBoolean(KEY_MAGNETOMETER_ENABLED, root.optBoolean(KEY_MAGNETOMETER_ENABLED, getMagnetometerEnabled(context)))
             if (root.has(KEY_NOISE_ENABLED)) editor.putBoolean(KEY_NOISE_ENABLED, root.optBoolean(KEY_NOISE_ENABLED, getNoiseEnabled(context)))
-            if (root.has(KEY_QUICK_ADD_NOTIFICATION_ENABLED)) {
-                editor.putBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, root.optBoolean(KEY_QUICK_ADD_NOTIFICATION_ENABLED, getQuickAddNotificationEnabled(context)))
-            }
-            if (root.has(KEY_DOWNLOADED_AREAS)) {
-                val areasArray = root.optJSONArray(KEY_DOWNLOADED_AREAS) ?: org.json.JSONArray()
-                val areas = buildList {
-                    for (i in 0 until areasArray.length()) {
-                        val obj = areasArray.optJSONObject(i) ?: continue
-                        add(
-                            DownloadedArea(
-                                north = obj.optDouble("north"),
-                                south = obj.optDouble("south"),
-                                east = obj.optDouble("east"),
-                                west = obj.optDouble("west"),
-                                minZoom = obj.optInt("minZoom", 0),
-                                maxZoom = obj.optInt("maxZoom", 0),
-                                createdAt = obj.optLong("createdAt", System.currentTimeMillis())
-                            )
-                        )
-                    }
-                }
-                val array = org.json.JSONArray()
-                dedupeAreas(areas).forEach { area ->
-                    array.put(org.json.JSONObject().apply {
-                        put("north", area.north)
-                        put("south", area.south)
-                        put("east", area.east)
-                        put("west", area.west)
-                        put("minZoom", area.minZoom)
-                        put("maxZoom", area.maxZoom)
-                        put("createdAt", area.createdAt)
-                    })
-                }
-                editor.putString(KEY_DOWNLOADED_AREAS, array.toString())
-            }
             editor.commit()
         }.getOrDefault(false)
+    }
+
+    /** Check portable settings before any restored data or photo becomes visible. */
+    fun validateBackupJson(json: String) {
+        val root = org.json.JSONObject(json)
+        require(!root.has("schema_version") || root.opt("schema_version") is Number &&
+            root.getInt("schema_version") == SETTINGS_SCHEMA_VERSION) { "Unsupported settings schema" }
+        val integerKeys = setOf(KEY_TIMEOUT, KEY_CACHE_POLICY, KEY_SATELLITE_CACHE_POLICY,
+            KEY_ZOOM_BEHAVIOR, KEY_LANGUAGE_PREFERENCE, KEY_PHOTO_COMPRESS_FORMAT, KEY_PHOTO_COMPRESS_QUALITY)
+        val booleanKeys = setOf(KEY_FOLLOW_SYSTEM_THEME, KEY_DARK_THEME, KEY_PHOTO_LOSSLESS_ENABLED,
+            KEY_PRESSURE_ENABLED, KEY_AMBIENT_LIGHT_ENABLED, KEY_ACCELEROMETER_ENABLED,
+            KEY_GYROSCOPE_ENABLED, KEY_MAGNETOMETER_ENABLED, KEY_NOISE_ENABLED)
+        for (key in integerKeys) {
+            if (root.has(key)) require(root.opt(key) is Number &&
+                (root.opt(key) as Number).toDouble().let { it.isFinite() && it % 1.0 == 0.0 }) { "Invalid setting: $key" }
+        }
+        for (key in booleanKeys) {
+            if (root.has(key)) require(root.opt(key) is Boolean) { "Invalid setting: $key" }
+        }
+        if (root.has(KEY_MARKER_SCALE)) require((root.opt(KEY_MARKER_SCALE) as? Number)?.toDouble()?.isFinite() == true) {
+            "Invalid marker scale"
+        }
+        if (root.has(KEY_MAP_TILE_SOURCE)) require(root.opt(KEY_MAP_TILE_SOURCE) is String) { "Invalid map source" }
+        for (key in setOf(KEY_PINNED_TAGS, KEY_RECENT_TAGS, KEY_DEFAULT_TAGS)) {
+            if (!root.has(key)) continue
+            val ids = root.optJSONArray(key) ?: throw IllegalArgumentException("Invalid setting: $key")
+            require(ids.length() <= 50_000) { "Too many tag IDs in settings" }
+            for (index in 0 until ids.length()) {
+                require(ids.opt(index) is Number && ids.getLong(index) >= 0) { "Invalid tag ID in settings" }
+            }
+        }
     }
 
     internal fun sanitizeBackupJsonForImport(
@@ -533,7 +567,7 @@ object SettingsStore {
     ): String? {
         return runCatching {
             val root = org.json.JSONObject(json)
-            root.remove(KEY_QUICK_ADD_NOTIFICATION_PERMISSION_REQUESTED)
+            NON_PORTABLE_BACKUP_KEYS.forEach { root.remove(it) }
             if (restoreTagSettings) {
                 remapTagIdsForImport(root, KEY_PINNED_TAGS, legacyTagIdToActualId)
                 remapTagIdsForImport(root, KEY_RECENT_TAGS, legacyTagIdToActualId)
@@ -560,52 +594,15 @@ object SettingsStore {
             obj.put("createdAt", area.createdAt)
             array.put(obj)
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        devicePrefs(context)
             .edit()
             .putString(KEY_DOWNLOADED_AREAS, array.toString())
             .apply()
     }
 
     private fun dedupeAreas(areas: List<DownloadedArea>): List<DownloadedArea> {
-        if (areas.isEmpty()) return emptyList()
-        val sorted = areas.sortedBy { it.createdAt }
-        val merged = mutableListOf<DownloadedArea>()
-        for (area in sorted) {
-            val existingIndex = merged.indexOfFirst { candidate ->
-                zoomOverlaps(candidate, area) && bboxOverlaps(candidate, area)
-            }
-            if (existingIndex >= 0) {
-                val candidate = merged[existingIndex]
-                merged[existingIndex] = mergeAreas(candidate, area)
-            } else {
-                merged.add(area)
-            }
-        }
-        return merged
-    }
-
-    private fun zoomOverlaps(a: DownloadedArea, b: DownloadedArea): Boolean {
-        return a.minZoom <= b.maxZoom && b.minZoom <= a.maxZoom
-    }
-
-    private fun bboxOverlaps(a: DownloadedArea, b: DownloadedArea): Boolean {
-        val north = minOf(a.north, b.north)
-        val south = maxOf(a.south, b.south)
-        val west = maxOf(a.west, b.west)
-        val east = minOf(a.east, b.east)
-        return north >= south && east >= west
-    }
-
-    private fun mergeAreas(a: DownloadedArea, b: DownloadedArea): DownloadedArea {
-        return DownloadedArea(
-            north = maxOf(a.north, b.north),
-            south = minOf(a.south, b.south),
-            east = maxOf(a.east, b.east),
-            west = minOf(a.west, b.west),
-            minZoom = minOf(a.minZoom, b.minZoom),
-            maxZoom = maxOf(a.maxZoom, b.maxZoom),
-            createdAt = minOf(a.createdAt, b.createdAt)
-        )
+        // Bounding overlapping downloads would advertise tiles (or zoom levels) never cached.
+        return areas.sortedBy { it.createdAt }.distinctBy { it.boundsKey() }
     }
 
     private fun parseLongArray(array: org.json.JSONArray?): List<Long> {

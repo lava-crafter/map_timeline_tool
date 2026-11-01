@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 8.1 and lower: covers both cloud backup and device-to-device transfer, and these versions ignore
+     requireFlags, so photos cannot be limited to device transfer. They are left out everywhere because past the
+     25 MB cloud quota the whole app backup (database included) is dropped; Android 9-11 use xml-v28. Device-local
+     prefs are never backed up. -->
 <full-backup-content>
     <include domain="database" path="."/>
     <include domain="sharedpref" path="."/>
-    <include domain="file" path="point_photos/"/>
+    <exclude domain="sharedpref" path="location_cache.xml"/>
+    <exclude domain="sharedpref" path="map_timeline_device.xml"/>
 </full-backup-content>

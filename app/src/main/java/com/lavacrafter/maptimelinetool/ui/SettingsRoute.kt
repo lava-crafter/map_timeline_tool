@@ -16,6 +16,8 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool.ui
 
+import androidx.compose.runtime.saveable.Saver
+
 sealed interface SettingsRoute {
     object Main : SettingsRoute
     object BackupRestore : SettingsRoute
@@ -28,3 +30,15 @@ sealed interface SettingsRoute {
     object Download : SettingsRoute
     object DefaultTags : SettingsRoute
 }
+
+private val settingsRoutes = listOf(
+    SettingsRoute.Main, SettingsRoute.BackupRestore, SettingsRoute.Language, SettingsRoute.Notification,
+    SettingsRoute.Sensors, SettingsRoute.MapOperations, SettingsRoute.PhotoCompression, SettingsRoute.Cache,
+    SettingsRoute.Download, SettingsRoute.DefaultTags
+)
+
+/** Keeps the open settings page across Activity recreation. */
+val SettingsRouteSaver: Saver<SettingsRoute, Int> = Saver(
+    save = { route -> settingsRoutes.indexOf(route) },
+    restore = { index -> settingsRoutes.getOrNull(index) ?: SettingsRoute.Main }
+)

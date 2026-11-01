@@ -21,5 +21,7 @@ data class GeoPoint(
     val longitude: Double,
     val accuracyMeters: Float? = null,
     val fixTimeMs: Long? = null,
-    val provider: String? = null
+    val provider: String? = null,
+    /** Runtime-only metadata; Point/Room intentionally do not persist this flag. */
+    val isMock: Boolean = false
 )

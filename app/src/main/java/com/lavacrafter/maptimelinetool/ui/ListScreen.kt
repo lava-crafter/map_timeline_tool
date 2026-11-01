@@ -28,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -38,7 +39,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.R
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -50,16 +50,16 @@ fun ListScreen(
     onLongPress: (PointEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val todayOrderById = remember(points) { buildTodayOrder(points) }
+    val today by rememberCurrentLocalDay()
+    val todayOrderById = remember(points, today) { buildTodayOrder(points, today) }
     val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
-    val calendar = remember { Calendar.getInstance() }
     LazyColumn(modifier = modifier.fillMaxSize().padding(8.dp)) {
         items(points) { p ->
             val latLonText = stringResource(R.string.label_lat_lon, p.latitude, p.longitude)
             val noteText = p.note
             val orderText = todayOrderById[p.id]?.toString()
             val localTimeText = timeFormat.format(Date(p.timestamp))
-            val isToday = isSameDay(calendar, p.timestamp)
+            val isToday = today.contains(p.timestamp)
             ListItem(
                 modifier = Modifier
                     .background(if (isToday) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface)
@@ -101,11 +101,3 @@ fun ListScreen(
         }
     }
 }
-
-private fun isSameDay(calendar: Calendar, timestamp: Long): Boolean {
-    val now = Calendar.getInstance()
-    calendar.timeInMillis = timestamp
-    return calendar.get(Calendar.YEAR) == now.get(Calendar.YEAR)
-        && calendar.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
-}
-

@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.port.LocationProvider
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -57,6 +58,22 @@ class LocationSaveResolverTest {
     }
 
     @Test
+    fun resolve_rejectsFuturePreciseFixAndUsesRecentFallbackWithConfirmation() = runBlocking {
+        val fallback = GeoPoint(1.0, 2.0, accuracyMeters = 120f, fixTimeMs = 900_000L)
+        val provider = FakeLocationProvider(
+            preciseLocation = GeoPoint(3.0, 4.0, accuracyMeters = 5f, fixTimeMs = 1_100_000L),
+            bestEffortLocation = fallback
+        )
+
+        val decision = LocationSaveResolver(provider).resolve(LocationSaveFlow.MANUAL_ADD, 5_000L, nowMs = 1_000_000L)
+
+        assertEquals(1, provider.bestEffortCalls)
+        assertEquals(LocationSaveQuality.LAST_KNOWN_RECENT, decision.quality)
+        assertEquals(true, decision.requiresManualConfirmation)
+        assertEquals(fallback, decision.location)
+    }
+
+    @Test
     fun resolve_returnsUnavailableWhenNoLocationCanBeResolved() = runBlocking {
         val provider = FakeLocationProvider()
 
@@ -64,6 +81,23 @@ class LocationSaveResolverTest {
 
         assertEquals(LocationSaveQuality.UNAVAILABLE, decision.quality)
         assertNull(decision.location)
+    }
+
+    @Test
+    fun resolve_evaluatesNewFixAgainstTimeAfterRequest() = runBlocking {
+        val provider = object : LocationProvider {
+            override fun getLastKnownLocation(): GeoPoint? = null
+            override suspend fun getPreciseLocation(timeoutMs: Long): GeoPoint {
+                delay(2_100L)
+                return GeoPoint(1.0, 2.0, accuracyMeters = 5f, fixTimeMs = System.currentTimeMillis())
+            }
+            override suspend fun getFreshLocation(timeoutMs: Long): GeoPoint? = null
+            override suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? = null
+        }
+
+        val decision = LocationSaveResolver(provider).resolve(LocationSaveFlow.AUTO_SAVE, 5_000L)
+
+        assertEquals(LocationSaveQuality.PRECISE_FRESH, decision.quality)
     }
 
     private class FakeLocationProvider(

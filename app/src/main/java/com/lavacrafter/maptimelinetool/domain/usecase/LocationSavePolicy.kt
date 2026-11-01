@@ -50,23 +50,30 @@ class LocationSavePolicy(
         flow: LocationSaveFlow,
         nowMs: Long = System.currentTimeMillis()
     ): LocationSaveDecision {
+        val precise = preciseLocation?.takeIf {
+            LocationFixValidity.ageMs(it.latitude, it.longitude, it.fixTimeMs, nowMs)?.let { age -> age <= freshAgeMs } == true &&
+                it.accuracyMeters?.let { accuracy -> accuracy.isFinite() && accuracy in 0f..100f } == true
+        }
         val quality = when {
-            preciseLocation != null -> LocationSaveQuality.PRECISE_FRESH
+            precise != null -> LocationSaveQuality.PRECISE_FRESH
             fallbackLocation == null -> LocationSaveQuality.UNAVAILABLE
             else -> classifyFallback(fallbackLocation, nowMs)
         }
-        val location = preciseLocation ?: fallbackLocation
+        val location = precise ?: fallbackLocation
+        val canSave = quality == LocationSaveQuality.PRECISE_FRESH ||
+            (flow == LocationSaveFlow.MANUAL_ADD &&
+                (quality == LocationSaveQuality.FRESH_BUT_LOW_ACCURACY || quality == LocationSaveQuality.LAST_KNOWN_RECENT))
         return LocationSaveDecision(
             quality = quality,
-            location = location.takeIf { quality != LocationSaveQuality.UNAVAILABLE },
-            canSave = quality != LocationSaveQuality.UNAVAILABLE,
+            location = location.takeIf { canSave },
+            canSave = canSave,
             requiresManualConfirmation = requiresManualConfirmation(quality, flow)
         )
     }
 
     private fun classifyFallback(location: GeoPoint, nowMs: Long): LocationSaveQuality {
-        val fixTimeMs = location.fixTimeMs ?: return LocationSaveQuality.LAST_KNOWN_STALE
-        val ageMs = (nowMs - fixTimeMs).coerceAtLeast(0L)
+        val ageMs = LocationFixValidity.ageMs(location.latitude, location.longitude, location.fixTimeMs, nowMs)
+            ?: return LocationSaveQuality.UNAVAILABLE
         return when {
             ageMs <= freshAgeMs -> LocationSaveQuality.FRESH_BUT_LOW_ACCURACY
             ageMs <= recentLastKnownAgeMs -> LocationSaveQuality.LAST_KNOWN_RECENT
@@ -83,6 +90,6 @@ class LocationSavePolicy(
             return false
         }
         return quality == LocationSaveQuality.FRESH_BUT_LOW_ACCURACY ||
-            quality == LocationSaveQuality.LAST_KNOWN_STALE
+            quality == LocationSaveQuality.LAST_KNOWN_RECENT
     }
 }

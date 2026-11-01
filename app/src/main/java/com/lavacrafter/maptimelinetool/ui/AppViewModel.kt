@@ -20,6 +20,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lavacrafter.maptimelinetool.data.toDomain
@@ -27,6 +29,7 @@ import com.lavacrafter.maptimelinetool.data.toEntity
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.AppGraph
+import com.lavacrafter.maptimelinetool.notification.performQuickAdd
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.model.Tag
@@ -35,18 +38,22 @@ import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.domain.usecase.TagManagementUseCase
 import com.lavacrafter.maptimelinetool.export.ZipImporter
+import com.lavacrafter.maptimelinetool.export.ZipRestoreCoordinator
+import com.lavacrafter.maptimelinetool.export.RestoreState
+import android.net.Uri
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
 import com.lavacrafter.maptimelinetool.text.sanitizePointNote
 import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 class AppViewModel(
@@ -54,7 +61,10 @@ class AppViewModel(
     private val repo: PointRepositoryGateway,
     private val pointWriteUseCase: PointWriteUseCase,
     private val tagManagementUseCase: TagManagementUseCase,
-    private val locationProvider: LocationProvider
+    private val locationProvider: LocationProvider,
+    private val savedStateHandle: SavedStateHandle? = null,
+    operationPhotos: PointOperationPhotos? = null,
+    resolveSaveLocation: (suspend (com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveFlow) -> com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision)? = null
 ) : AndroidViewModel(app) {
     data class ZipImportResult(
         val legacyTagIdToActualId: Map<Long, Long>
@@ -64,111 +74,171 @@ class AppViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tags = tagManagementUseCase.observeTags().map { list -> list.map { it.toEntity() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    private var autoAddJob: kotlinx.coroutines.Job? = null
-    private val _autoAdded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val autoAdded = _autoAdded
+    val fileTasks = FileTasks(viewModelScope) { kind, error ->
+        android.util.Log.e("AppViewModel", "File task $kind failed", error)
+    }
+    private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Idle)
+    val restoreState = _restoreState.asStateFlow()
+    private var restoreJob: kotlinx.coroutines.Job? = null
 
-    fun addPointWithTags(
-        title: String,
-        note: String,
-        location: GeoPoint?,
-        timestamp: Long,
-        tagIds: Set<Long>,
-        photoPath: String? = null
-    ) {
-        if (location == null) return
-        val normalizedTimestamp = normalizeTimestamp(timestamp, location)
-        viewModelScope.launch {
-            pointWriteUseCase.addPointWithTags(title, note, location, normalizedTimestamp, tagIds, photoPath)
+    val pointWrites: PointWriteOperations? = operationPhotos?.let { photos ->
+        PointWriteOperations(viewModelScope, repo, pointWriteUseCase, requireNotNull(resolveSaveLocation), photos,
+            saveConfirmation = { savedStateHandle?.set("point_confirmation", it?.toBundle()) },
+            initialConfirmation = confirmationFromBundle(savedStateHandle?.get("point_confirmation")))
+    }
+    private val _centerResult = MutableStateFlow<CenterLocationResult?>(null)
+    val centerResult = _centerResult.asStateFlow()
+    private var centerJob: kotlinx.coroutines.Job? = null
+    fun requestCenterLocation(id: String) {
+        centerJob?.cancel()
+        centerJob = viewModelScope.launch {
+            val location = try { getBestEffortLocation(5_000L) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            _centerResult.value = CenterLocationResult(id, location)
+        }
+    }
+    fun consumeCenterLocation(id: String) {
+        if (_centerResult.value?.id == id) _centerResult.value = null
+    }
+    private var quickEntryJob: kotlinx.coroutines.Job? = null
+    private val _quickEntryRequest = MutableStateFlow(actionFromBundle(savedStateHandle?.get("quick_entry")))
+    val quickEntryRequest = _quickEntryRequest.asStateFlow()
+    fun queueQuickAddEntry() {
+        if (_quickEntryRequest.value != null || quickEntryJob?.isActive == true) return
+        val request = LocationPermissionRequest(LocationAction.QUICK_ADD_ENTRY)
+        savedStateHandle?.set("quick_entry", request.toActionBundle())
+        _quickEntryRequest.value = request
+    }
+    fun consumeQuickAddEntry(id: String) {
+        if (_quickEntryRequest.value?.id == id) {
+            savedStateHandle?.set<android.os.Bundle?>("quick_entry", null)
+            _quickEntryRequest.value = null
+        }
+    }
+    fun performQuickAdd(eventTimeMs: Long) {
+        if (quickEntryJob?.isActive == true) return
+        quickEntryJob = viewModelScope.launch {
+            getApplication<Application>().performQuickAdd(clickTimeMs = eventTimeMs)
         }
     }
 
-    fun updatePoint(point: PointEntity, title: String, note: String, photoPath: String?) {
-        viewModelScope.launch {
-            pointWriteUseCase.updatePoint(point.toDomain(), title, note, photoPath)
+    /** Called once the UI has shown a terminal restore result, so recreation does not replay it. */
+    fun acknowledgeRestoreResult() {
+        val current = _restoreState.value
+        if (current.isTerminal()) {
+            _restoreState.compareAndSet(current, RestoreState.Idle)
         }
     }
 
-    fun deletePoint(point: PointEntity) {
-        viewModelScope.launch {
-            pointWriteUseCase.deletePoint(point.toDomain())
-        }
-    }
-
-    fun addTag(name: String, onResult: (Long) -> Unit = {}) {
-        viewModelScope.launch {
-            val id = tagManagementUseCase.addTag(name)
-            if (id > 0L) {
-                onResult(id)
+    fun restoreZip(uri: Uri, coordinator: ZipRestoreCoordinator) {
+        if (restoreJob?.isActive == true) return
+        restoreJob = viewModelScope.launch {
+            try {
+                coordinator.restore(uri, _restoreState) { stats, movePhotos -> importZipData(stats, movePhotos) }
+            } catch (cancelled: CancellationException) {
+                // A cancel that lands during the non-cancellable commit still lets it finish and publish its
+                // result; keep that result so the UI reloads settings instead of reporting a cancelled restore.
+                _restoreState.update { current -> if (current.isTerminal()) current else RestoreState.Idle }
+            } catch (error: Exception) {
+                _restoreState.value = RestoreState.Failure(error.message ?: "Restore failed")
             }
         }
     }
 
-    fun renameTag(tag: TagEntity, name: String) {
-        viewModelScope.launch {
-            tagManagementUseCase.renameTag(tag.toDomain(), name)
-        }
+    private fun RestoreState.isTerminal(): Boolean =
+        this is RestoreState.Success || this is RestoreState.SuccessWithWarning || this is RestoreState.Failure
+
+    fun cancelRestore() {
+        restoreJob?.cancel()
     }
 
-    fun deleteTag(tagId: Long) {
-        viewModelScope.launch {
-            tagManagementUseCase.deleteTag(tagId)
-        }
+    suspend fun addPointWithTags(
+        title: String,
+        note: String,
+        location: GeoPoint,
+        timestamp: Long,
+        tagIds: Set<Long>,
+        photoPath: String? = null,
+        onCoreSaved: (Long) -> Unit = {}
+    ): Long {
+        return pointWriteUseCase.addPointWithTags(title, note, location, timestamp, tagIds, photoPath, onCoreSaved = onCoreSaved)
     }
 
-    fun importPoints(pointsList: List<Point>) {
-        viewModelScope.launch {
-            pointWriteUseCase.importPoints(pointsList)
-        }
-    }
+    suspend fun updatePoint(
+        point: PointEntity, title: String, note: String, photoPath: String?, tagIds: Set<Long>,
+        onCoreSaved: () -> Unit = {}
+    ) = pointWriteUseCase.updatePoint(point.toDomain(), title, note, photoPath, tagIds, onCoreSaved)
 
-    suspend fun importZipData(importStats: ZipImporter.ImportStats): ZipImportResult {
+    suspend fun deletePoint(point: PointEntity) = pointWriteUseCase.deletePoint(point.toDomain())
+
+    suspend fun addTag(name: String): Long = tagManagementUseCase.addTag(name)
+
+    suspend fun renameTag(tag: TagEntity, name: String) = tagManagementUseCase.renameTag(tag.toDomain(), name)
+
+    suspend fun deleteTag(tagId: Long) = tagManagementUseCase.deleteTag(tagId)
+
+    suspend fun importPoints(pointsList: List<Point>): PointWriteUseCase.ImportResult = pointWriteUseCase.importPoints(pointsList)
+
+    suspend fun importZipData(
+        importStats: ZipImporter.ImportStats,
+        beforeTransactionEnd: suspend (Set<String>) -> Unit = {}
+    ): ZipImportResult {
         return repo.inTransaction {
             val pointIdByIndex = if (importStats.manifest.sections.tags) mutableMapOf<Int, Long>() else null
+            val existingPointsByKey = repo.getAll().groupBy { Triple(it.timestamp, it.latitude, it.longitude) }
+            val matchedPointIds = mutableSetOf<Long>()
+            val retiredPhotoPaths = mutableSetOf<String>()
             importStats.points.forEachIndexed { index, point ->
                 val normalizedPoint = point.copy(
                     title = sanitizePointTitle(point.title).ifBlank { formatPointTimestamp(point.timestamp) },
                     note = sanitizePointNote(point.note)
                 )
-                val existing = repo.findByImportKey(
-                    timestamp = normalizedPoint.timestamp,
-                    latitude = normalizedPoint.latitude,
-                    longitude = normalizedPoint.longitude
-                )
+                val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
+                val candidates = existingPointsByKey[key].orEmpty().filterNot { it.id in matchedPointIds }
+                val existing = candidates.firstOrNull {
+                    it.title == normalizedPoint.title && it.note == normalizedPoint.note
+                } ?: candidates.firstOrNull()
                 val actualId = if (existing != null) {
                     val merged = mergeImportedPoint(existing, normalizedPoint, importStats.manifest)
+                    existing.photoPath?.takeIf { it != merged.photoPath }?.let(retiredPhotoPaths::add)
                     repo.update(merged)
                     existing.id
                 } else {
                     val newId = repo.insert(normalizedPoint.copy(id = 0))
                     newId
                 }
+                matchedPointIds += actualId
                 pointIdByIndex?.set(index, actualId)
             }
 
             val legacyTagIdToActualId = mutableMapOf<Long, Long>()
             if (importStats.manifest.sections.tags) {
-                val existingTags = repo.getAllTags()
-                val existingTagByName = existingTags.associateBy { sanitizeTagName(it.name).lowercase(Locale.US) }.toMutableMap()
+                val existingTagsByName = repo.getAllTags().groupBy { sanitizeTagName(it.name).lowercase(Locale.US) }
+                val matchedTagIds = mutableSetOf<Long>()
                 importStats.tags.forEach { importedTag ->
                     val normalizedName = sanitizeTagName(importedTag.name)
                     if (normalizedName.isBlank()) return@forEach
                     val normalizedKey = normalizedName.lowercase(Locale.US)
-                    val actualId = existingTagByName[normalizedKey]?.id ?: repo.insertTag(Tag(name = normalizedName))
-                    existingTagByName.putIfAbsent(normalizedKey, Tag(id = actualId, name = normalizedName))
+                    val actualId = existingTagsByName[normalizedKey].orEmpty()
+                        .firstOrNull { it.id !in matchedTagIds }?.id
+                        ?: repo.insertTag(Tag(name = normalizedName))
+                    matchedTagIds += actualId
                     legacyTagIdToActualId[importedTag.legacyId] = actualId
                 }
 
                 val insertedPairs = mutableSetOf<Pair<Long, Long>>()
                 importStats.pointTags.forEach { importedPointTag ->
-                    val pointId = pointIdByIndex?.get(importedPointTag.pointIndex) ?: return@forEach
-                    val tagId = legacyTagIdToActualId[importedPointTag.legacyTagId] ?: return@forEach
+                    val pointId = requireNotNull(pointIdByIndex?.get(importedPointTag.pointIndex)) { "Invalid point-tag point index" }
+                    val tagId = requireNotNull(legacyTagIdToActualId[importedPointTag.legacyTagId]) { "Invalid point-tag tag ID" }
                     val key = pointId to tagId
                     if (insertedPairs.add(key)) {
                         repo.insertPointTag(pointId, tagId)
                     }
                 }
             }
+            // The coordinator persists these candidates before moving files/committing Room.
+            beforeTransactionEnd(retiredPhotoPaths)
             ZipImportResult(legacyTagIdToActualId = legacyTagIdToActualId)
         }
     }
@@ -221,35 +291,11 @@ class AppViewModel(
 
     suspend fun getBestEffortLocation(timeoutMs: Long): GeoPoint? = locationProvider.getBestEffortLocation(timeoutMs)
 
-    fun scheduleAutoAdd(createdAt: Long, timeoutSeconds: Int) {
-        autoAddJob?.cancel()
-        autoAddJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(timeoutSeconds * 1000L)
-            val timestamp = createdAt
-            val location = getBestEffortLocation(5_000L)
-            if (location != null) {
-                val normalizedTimestamp = normalizeTimestamp(timestamp, location)
-                val title = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(normalizedTimestamp))
-                pointWriteUseCase.addPointWithTags(title, "", location, normalizedTimestamp, emptySet())
-                _autoAdded.tryEmit(Unit)
-            }
-        }
-    }
-
-    private fun normalizeTimestamp(eventTimeMs: Long, location: GeoPoint): Long {
-        val fixTime = location.fixTimeMs ?: return eventTimeMs
-        if (fixTime <= 0L) {
-            return eventTimeMs
-        }
-        return maxOf(eventTimeMs, fixTime)
-    }
-
-    fun cancelAutoAdd() {
-        autoAddJob?.cancel()
-        autoAddJob = null
-    }
-
     suspend fun getAllPoints(): List<PointEntity> = repo.getAll().map { it.toEntity() }
+
+    suspend fun getPointById(pointId: Long): PointEntity? = repo.getById(pointId)?.toEntity()
+
+    suspend fun getAllTags(): List<TagEntity> = repo.getAllTags().map { it.toEntity() }
 
     companion object {
         fun factory(app: Application, graph: AppGraph): ViewModelProvider.Factory = viewModelFactory {
@@ -259,7 +305,10 @@ class AppViewModel(
                     repo = graph.pointRepositoryGateway,
                     pointWriteUseCase = graph.pointWriteUseCase,
                     tagManagementUseCase = graph.tagManagementUseCase,
-                    locationProvider = graph.locationProvider
+                    locationProvider = graph.locationProvider,
+                    savedStateHandle = createSavedStateHandle(),
+                    operationPhotos = com.lavacrafter.maptimelinetool.AndroidPointOperationPhotos(app, graph.pointRepositoryGateway, graph.photoCommitGuard),
+                    resolveSaveLocation = { flow -> graph.locationSaveResolver.resolve(flow, 5_000L) }
                 )
             }
         }

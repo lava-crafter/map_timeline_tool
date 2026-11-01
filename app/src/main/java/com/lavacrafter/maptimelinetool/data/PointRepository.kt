@@ -17,6 +17,7 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.data
 
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.Flow
@@ -31,23 +32,42 @@ class PointRepository(
         dao.observeAll().map { points -> points.map { it.toDomain() } }
 
     override suspend fun insert(point: com.lavacrafter.maptimelinetool.domain.model.Point): Long = dao.insert(point.toEntity())
-    override suspend fun update(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.update(point.toEntity())
+    override suspend fun update(point: com.lavacrafter.maptimelinetool.domain.model.Point) {
+        check(dao.update(point.toEntity()) == 1) { "Point no longer exists" }
+    }
     override suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?) = dao.updateNoiseDb(pointId, noiseDb)
-    override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = dao.delete(point.toEntity())
+    override suspend fun delete(point: com.lavacrafter.maptimelinetool.domain.model.Point) = inTransaction {
+        dao.deleteTagsForPoint(point.id)
+        check(dao.delete(point.toEntity()) == 1) { "Point no longer exists" }
+    }
     override suspend fun getAll() = dao.getAll().map { it.toDomain() }
+    override suspend fun getById(pointId: Long) = dao.getById(pointId)?.toDomain()
+    override suspend fun isPhotoReferenced(photoPath: String) = dao.isPhotoReferenced(photoPath)
     override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double) =
         dao.findByImportKey(timestamp, latitude, longitude)?.toDomain()
+    override suspend fun findByTimestamp(timestamp: Long) = dao.findByTimestamp(timestamp)?.toDomain()
     override suspend fun getPageAfterId(afterId: Long, limit: Int) =
         dao.getPageAfterId(afterId, limit.coerceIn(1, 10_000)).map { it.toDomain() }
 
     override fun observeTags() = dao.observeTags().map { tags -> tags.map { it.toDomain() } }
     override suspend fun getAllTags() = dao.getAllTags().map { it.toDomain() }
     override suspend fun insertTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.insertTag(tag.toEntity())
-    override suspend fun updateTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) = dao.updateTag(tag.toEntity())
-    override suspend fun deleteTag(tagId: Long) = dao.deleteTag(tagId)
+    override suspend fun updateTag(tag: com.lavacrafter.maptimelinetool.domain.model.Tag) {
+        check(dao.updateTag(tag.toEntity()) == 1) { "Tag no longer exists" }
+    }
+    override suspend fun deleteTag(tagId: Long) = inTransaction {
+        dao.deletePointsForTag(tagId)
+        check(dao.deleteTag(tagId) == 1) { "Tag no longer exists" }
+    }
     override suspend fun insertPointTag(pointId: Long, tagId: Long) = dao.insertPointTag(PointTagCrossRef(pointId, tagId))
     override suspend fun deletePointTag(pointId: Long, tagId: Long) = dao.deletePointTag(pointId, tagId)
     override suspend fun getTagIdsForPoint(pointId: Long) = dao.getTagIdsForPoint(pointId)
+    override suspend fun getAllPointTagRelations(): List<PointTagRelation> =
+        dao.getAllPointTagRelations().map { PointTagRelation(it.pointId, it.tagId) }
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> =
+        // Chunk to stay below SQLite's bound-variable limit on older devices.
+        tagIds.chunked(500).flatMapTo(HashSet()) { dao.getExistingTagIds(it) }
+    override suspend fun deleteOrphanPointTags(): Int = dao.deleteOrphanPointTags()
     fun observeTagWithPoints(tagId: Long) = dao.observeTagWithPoints(tagId)
     override fun observePointsForTag(tagId: Long) = dao.observePointsForTag(tagId).map { points -> points.map { it.toDomain() } }
 }

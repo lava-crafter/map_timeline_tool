@@ -16,32 +16,35 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool
 
-import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.domain.model.Point
-import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveDecision
+import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation
 import com.lavacrafter.maptimelinetool.export.ZipExporter
-import com.lavacrafter.maptimelinetool.ui.AppViewModel
-import kotlinx.coroutines.flow.first
+import com.lavacrafter.maptimelinetool.ui.ExportKind
+import java.io.File
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 
 internal suspend fun buildPointTagNameMap(
-    viewModel: AppViewModel,
+    repository: PointRepositoryGateway,
     points: List<Point>
-): Map<Long, List<String>> {
-    val tags = viewModel.tags.first()
+): Map<Long, List<String>> = repository.inTransaction {
+    val tags = repository.getAllTags()
     val tagNamesById = tags.associate { it.id to it.name }
-    val result = mutableMapOf<Long, List<String>>()
-    points.forEach { point ->
-        val tagNames = viewModel.getTagIdsForPoint(point.id)
-            .mapNotNull { tagId -> tagNamesById[tagId] }
-            .filter { it.isNotBlank() }
-        if (tagNames.isNotEmpty()) {
-            result[point.id] = tagNames
-        }
-    }
-    return result
+    selectedPointTagIds(points, repository.getAllPointTagRelations())
+        .mapValues { (_, tagIds) -> tagIds.mapNotNull { tagNamesById[it]?.takeIf(String::isNotBlank) } }
+        .filterValues { it.isNotEmpty() }
+}
+
+private fun selectedPointTagIds(
+    points: List<Point>,
+    relations: List<PointTagRelation>
+): Map<Long, List<Long>> {
+    val selectedIds = points.mapTo(HashSet(points.size)) { it.id }
+    return relations.filter { it.pointId in selectedIds }.groupBy({ it.pointId }, { it.tagId })
 }
 
 internal enum class ExportFileKind {
@@ -61,14 +64,23 @@ internal data class PendingExportPayload(
     val pointTagIdsByPointId: Map<Long, List<Long>> = emptyMap()
 )
 
-internal data class PendingManualSaveConfirmation(
-    val title: String,
-    val note: String,
-    val createdAt: Long,
-    val selectedTags: Set<Long>,
-    val photoPath: String?,
-    val decision: LocationSaveDecision
-)
+/** A selected-point ZIP never carries device settings; Full Backup has its own writer. */
+internal fun PendingExportPayload.writeOrdinaryZip(
+    outputStream: OutputStream,
+    resolvePhotoFile: (String) -> File?,
+    appVersion: String?
+): ZipExporter.ExportStats {
+    check(zip && kind == ExportFileKind.ZIP)
+    return ZipExporter.export(
+        points = points,
+        outputStream = outputStream,
+        resolvePhotoFile = resolvePhotoFile,
+        options = zipOptions,
+        tags = zipTags,
+        pointTagIdsByPointId = pointTagIdsByPointId,
+        appVersion = appVersion
+    )
+}
 
 internal fun buildStandardExportPayload(
     points: List<Point>,
@@ -81,24 +93,17 @@ internal suspend fun buildZipExportPayload(
     includeTags: Boolean,
     includeSensors: Boolean,
     includePhotos: Boolean,
-    viewModel: AppViewModel,
-    tags: List<TagEntity>
+    repository: PointRepositoryGateway
 ): PendingExportPayload {
-    val pointTagMap = mutableMapOf<Long, List<Long>>()
-    val zipTags = mutableListOf<ZipExporter.TagRecord>()
-
-    if (includeTags) {
-        points.forEach { point ->
-            val tagIds = viewModel.getTagIdsForPoint(point.id)
-            if (tagIds.isNotEmpty()) {
-                pointTagMap[point.id] = tagIds
-            }
+    val (pointTagMap, zipTags) = if (includeTags) {
+        repository.inTransaction {
+            val tags = repository.getAllTags()
+            val pointTagMap = selectedPointTagIds(points, repository.getAllPointTagRelations())
+            val usedTagIds = pointTagMap.values.flatten().toSet()
+            pointTagMap to tags.filter { it.id in usedTagIds }.map { ZipExporter.TagRecord(it.id, it.name) }
         }
-
-        val usedTagIds = pointTagMap.values.flatten().toSet()
-        tags
-            .filter { usedTagIds.contains(it.id) }
-            .forEach { zipTags.add(ZipExporter.TagRecord(it.id, it.name)) }
+    } else {
+        emptyMap<Long, List<Long>>() to emptyList<ZipExporter.TagRecord>()
     }
 
     return PendingExportPayload(
@@ -119,4 +124,42 @@ internal suspend fun buildZipExportPayload(
 internal fun buildExportBaseName(date: Date = Date()): String {
     val format = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
     return "map_timeline_${format.format(date)}"
+}
+
+/**
+ * Resolves the export rows when the file is written. Points deleted after selection are skipped rather than
+ * failing the whole export; "all points" reads the database, not a UI snapshot.
+ */
+/** Resolves a saved export selection against the database when the file is written, in timeline order. */
+internal suspend fun resolveExportSelectionIds(repository: PointRepositoryGateway, kind: ExportKind): List<Long> =
+    when (kind) {
+        ExportKind.All -> repository.getAll().map { it.id }
+        is ExportKind.ByTag -> repository.observePointsForTag(kind.tagId).first().map { it.id }
+        is ExportKind.ByTime -> repository.getAll().filter { it.timestamp in kind.fromMs..kind.toMs }.map { it.id }
+        is ExportKind.Manual -> {
+            val selected = kind.ids.toHashSet()
+            repository.getAll().filter { it.id in selected }.map { it.id }
+        }
+    }
+
+internal suspend fun buildExportPayload(
+    repository: PointRepositoryGateway,
+    kind: ExportFileKind,
+    pointIds: List<Long>,
+    allPoints: Boolean,
+    zipOptions: ZipExporter.ExportOptions
+): PendingExportPayload {
+    val current = repository.getAll()
+    val points = if (allPoints) {
+        current
+    } else {
+        val byId = current.associateBy { it.id }
+        pointIds.mapNotNull { byId[it] }
+    }
+    return if (kind == ExportFileKind.ZIP) {
+        buildZipExportPayload(points, zipOptions.includePoints, zipOptions.includeTags, zipOptions.includeSensors,
+            zipOptions.includePhotos, repository)
+    } else {
+        buildStandardExportPayload(points, kind)
+    }
 }

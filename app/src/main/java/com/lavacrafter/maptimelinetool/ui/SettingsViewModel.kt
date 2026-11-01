@@ -53,6 +53,7 @@ class SettingsViewModel(
 
     private fun buildSettingsUiState(validMapTileSourceId: String): SettingsUiState {
         return SettingsUiState(
+            isDarkTheme = settingsUseCase.getDarkTheme(),
             followSystemTheme = settingsUseCase.getFollowSystemTheme(),
             languagePreference = settingsUseCase.getLanguagePreference().toUi(),
             timeoutSeconds = settingsUseCase.getTimeoutSeconds(),
@@ -83,6 +84,7 @@ class SettingsViewModel(
     }
 
     fun setDarkTheme(enabled: Boolean) {
+        settingsUseCase.setDarkTheme(enabled)
         _uiState.update { it.copy(isDarkTheme = enabled) }
     }
 
@@ -99,7 +101,8 @@ class SettingsViewModel(
 
     fun setTimeoutSeconds(seconds: Int) {
         settingsUseCase.setTimeoutSeconds(seconds)
-        _uiState.update { it.copy(timeoutSeconds = seconds) }
+        // The store clamps the value; mirror what was persisted so the countdown never starts at 0.
+        _uiState.update { it.copy(timeoutSeconds = settingsUseCase.getTimeoutSeconds()) }
     }
 
     fun setCachePolicy(policy: MapCachePolicy) {
@@ -208,6 +211,17 @@ class SettingsViewModel(
         _uiState.update { it.copy(recentTagIds = settingsUseCase.addRecentTagId(tagId)) }
     }
 
+    /** Prefs are cleaned by the tag use case; drop the ID from memory too so it is not written back. */
+    fun onTagDeleted(tagId: Long) {
+        _uiState.update {
+            it.copy(
+                pinnedTagIds = it.pinnedTagIds - tagId,
+                recentTagIds = it.recentTagIds.filterNot { id -> id == tagId },
+                defaultTagIds = it.defaultTagIds - tagId
+            )
+        }
+    }
+
     fun toggleDefaultTag(tagId: Long) {
         val next = if (_uiState.value.defaultTagIds.contains(tagId)) {
             _uiState.value.defaultTagIds - tagId
@@ -220,6 +234,10 @@ class SettingsViewModel(
 
     fun addDownloadedArea(area: DownloadedArea) {
         _uiState.update { it.copy(downloadedAreas = settingsUseCase.addDownloadedArea(area.toDomain()).map { a -> a.toUi() }) }
+    }
+
+    fun clearDownloadedAreas() {
+        _uiState.value.downloadedAreas.forEach(::removeDownloadedArea)
     }
 
     fun removeDownloadedArea(area: DownloadedArea) {

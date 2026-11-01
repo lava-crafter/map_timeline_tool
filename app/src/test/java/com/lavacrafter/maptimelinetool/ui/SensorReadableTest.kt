@@ -37,10 +37,27 @@ class SensorReadableTest {
     }
 
     @Test
-    fun `magnetometer heading is normalized to 0 to 360`() {
-        assertEquals(0f, magnetometerToAzimuthDegrees(1f, 0f), 0.001f)
-        assertEquals(90f, magnetometerToAzimuthDegrees(0f, 1f), 0.001f)
-        assertEquals(270f, magnetometerToAzimuthDegrees(0f, -1f), 0.001f)
+    fun `heading is clockwise from north for flat and upright devices`() {
+        // Flat, face up, top edge north: gravity +Z, field points north (+Y) and down (-Z).
+        assertEquals(0f, deviceAzimuthDegrees(0f, 0f, 9.8f, 0f, 20f, -40f)!!, 0.01f)
+        // Flat, top edge east: magnetic north is the device's -X.
+        assertEquals(90f, deviceAzimuthDegrees(0f, 0f, 9.8f, -20f, 0f, -40f)!!, 0.01f)
+        // Flat, top edge west.
+        assertEquals(270f, deviceAzimuthDegrees(0f, 0f, 9.8f, 20f, 0f, -40f)!!, 0.01f)
+        // Upright portrait, back camera north: gravity +Y, north is -Z, down is -Y.
+        assertEquals(0f, deviceAzimuthDegrees(0f, 9.8f, 0f, 0f, -40f, -20f)!!, 0.01f)
+        // Upright, back camera east: north is the device's -X.
+        assertEquals(90f, deviceAzimuthDegrees(0f, 9.8f, 0f, -20f, -40f, 0f)!!, 0.01f)
+        // Tilted 30 degrees towards the user while the top still faces north keeps the heading.
+        val g = 9.8f
+        val tiltedHeading = deviceAzimuthDegrees(0f, g * 0.5f, g * 0.866f, 0f, 20f * 0.866f + 40f * 0.5f, -40f * 0.866f + 20f * 0.5f)!!
+        assertEquals(0f, if (tiltedHeading > 180f) tiltedHeading - 360f else tiltedHeading, 0.5f)
+    }
+
+    @Test
+    fun `degenerate vectors give no heading`() {
+        assertNull(deviceAzimuthDegrees(0f, 0f, 0f, 0f, 20f, -40f))
+        assertNull(deviceAzimuthDegrees(0f, 0f, 9.8f, 0f, 0f, -40f))
     }
 
     @Test
@@ -50,21 +67,26 @@ class SensorReadableTest {
     }
 
     @Test
-    fun `look direction falls back to zero pitch when accelerometer missing`() {
-        val point = PointEntity(
+    fun `look direction needs both accelerometer and magnetometer`() {
+        val magnetometerOnly = PointEntity(
             timestamp = 1L,
             latitude = 39.9,
             longitude = 116.3,
             title = "p",
             note = "n",
             magnetometerX = 0f,
-            magnetometerY = 1f
+            magnetometerY = 1f,
+            magnetometerZ = 0f
         )
+        assertNull(magnetometerOnly.toLookDirection())
 
-        val direction = point.toLookDirection()
-
+        val flatFacingEast = magnetometerOnly.copy(
+            accelerometerX = 0f, accelerometerY = 0f, accelerometerZ = 9.8f,
+            magnetometerX = -20f, magnetometerY = 0f, magnetometerZ = -40f
+        )
+        val direction = flatFacingEast.toLookDirection()
         assertNotNull(direction)
-        assertEquals(90f, direction!!.azimuthDegrees, 0.001f)
+        assertEquals(90f, direction!!.azimuthDegrees, 0.01f)
         assertEquals(0f, direction.pitchDegrees, 0.001f)
     }
 

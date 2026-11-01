@@ -16,6 +16,8 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool.ui
 
+import com.lavacrafter.maptimelinetool.NetworkStatus
+
 enum class MapCachePolicy(val value: Int) {
     DISABLED(0),
     WIFI_ONLY(1),
@@ -25,3 +27,21 @@ enum class MapCachePolicy(val value: Int) {
         fun fromValue(value: Int): MapCachePolicy = values().firstOrNull { it.value == value } ?: ALWAYS
     }
 }
+
+data class MapTileAccessPolicy(
+    val allowNetwork: Boolean,
+    val allowCacheWrites: Boolean
+)
+
+/** Cache preferences never turn the normal map into an offline-only map. */
+fun resolveMapTileAccessPolicy(
+    cachePolicy: MapCachePolicy,
+    networkStatus: NetworkStatus
+): MapTileAccessPolicy = MapTileAccessPolicy(
+    allowNetwork = true,
+    allowCacheWrites = when (cachePolicy) {
+        MapCachePolicy.DISABLED -> false
+        MapCachePolicy.WIFI_ONLY -> networkStatus == NetworkStatus.WIFI
+        MapCachePolicy.ALWAYS -> true
+    }
+)

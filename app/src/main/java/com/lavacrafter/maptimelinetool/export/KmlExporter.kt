@@ -17,7 +17,11 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.text.wellFormed
+import java.io.BufferedWriter
 import java.io.OutputStream
+import java.io.OutputStreamWriter
+import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,15 +36,11 @@ object KmlExporter {
         pointTagNamesByPointId: Map<Long, List<String>> = emptyMap(),
         photoRelPathResolver: (Point) -> String? = { point -> point.photoPath }
     ) {
-        outputStream.write(
-            buildKml(
-                points = points,
-                documentName = documentName,
-                includeSensors = includeSensors,
-                pointTagNamesByPointId = pointTagNamesByPointId,
-                photoRelPathResolver = photoRelPathResolver
-            ).toByteArray(Charsets.UTF_8)
-        )
+        // Stream straight to the destination; building the whole document first costs several copies for
+        // large exports. The caller owns (and closes) the stream.
+        val writer = BufferedWriter(OutputStreamWriter(outputStream, Charsets.UTF_8))
+        appendKml(writer, points, documentName, includeSensors, pointTagNamesByPointId, photoRelPathResolver)
+        writer.flush()
     }
 
     fun buildKml(
@@ -49,12 +49,23 @@ object KmlExporter {
         includeSensors: Boolean = true,
         pointTagNamesByPointId: Map<Long, List<String>> = emptyMap(),
         photoRelPathResolver: (Point) -> String? = { point -> point.photoPath }
-    ): String {
+    ): String = buildString {
+        appendKml(this, points, documentName, includeSensors, pointTagNamesByPointId, photoRelPathResolver)
+    }
+
+    private fun appendKml(
+        out: Appendable,
+        points: List<Point>,
+        documentName: String,
+        includeSensors: Boolean,
+        pointTagNamesByPointId: Map<Long, List<String>>,
+        photoRelPathResolver: (Point) -> String?
+    ) {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
 
-        return buildString {
+        with(out) {
             appendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
             appendLine("<kml xmlns=\"http://www.opengis.net/kml/2.2\">")
             appendLine("  <Document>")
@@ -102,7 +113,8 @@ object KmlExporter {
                     appendLine("      <description>${escapeXml(fullDescription)}</description>")
                 }
                 appendLine("      <Point>")
-                appendLine("        <coordinates>${point.longitude},${point.latitude},0</coordinates>")
+                // Plain decimal: Double.toString gives "5.0E-4" near 0, which some KML readers reject.
+                appendLine("        <coordinates>${plainDecimal(point.longitude)},${plainDecimal(point.latitude)},0</coordinates>")
                 appendLine("      </Point>")
                 appendLine("    </Placemark>")
             }
@@ -111,8 +123,11 @@ object KmlExporter {
         }
     }
 
+    private fun plainDecimal(value: Double): String = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+
+    /** Escapes markup and drops characters XML 1.0 forbids, which would make the whole file unreadable. */
     private fun escapeXml(value: String): String {
-        return value
+        return xmlSafe(value)
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
@@ -128,3 +143,7 @@ object KmlExporter {
         return parts.takeIf { it.isNotEmpty() }?.joinToString(" | ")
     }
 }
+
+/** XML 1.0 additionally forbids C0 controls other than tab, newline and carriage return. */
+private fun xmlSafe(value: String): String =
+    wellFormed(value).filter { it == '\t' || it == '\n' || it == '\r' || it >= ' ' }

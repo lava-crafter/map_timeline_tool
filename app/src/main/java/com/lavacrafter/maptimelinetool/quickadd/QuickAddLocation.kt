@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.quickadd
 
 import android.location.Location
 import android.os.Build
+import com.lavacrafter.maptimelinetool.deviceClockFixTimeMs
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 
 data class QuickAddLocation(
@@ -34,7 +35,8 @@ data class QuickAddLocation(
         longitude = longitude,
         accuracyMeters = accuracyMeters,
         fixTimeMs = fixTimeMs,
-        provider = provider
+        provider = provider,
+        isMock = isMock
     )
 }
 
@@ -62,7 +64,8 @@ internal fun GeoPoint.toQuickAddLocation(
         accuracyMeters = accuracy,
         fixTimeMs = fixTime,
         provider = rawProvider,
-        elapsedRealtimeNanos = derivedElapsedRealtimeNanos
+        elapsedRealtimeNanos = derivedElapsedRealtimeNanos,
+        isMock = isMock
     )
 }
 
@@ -71,14 +74,14 @@ internal fun Location.toQuickAddLocation(): QuickAddLocation {
         latitude = latitude,
         longitude = longitude,
         accuracyMeters = accuracy,
-        fixTimeMs = time,
+        fixTimeMs = deviceClockFixTimeMs(),
         provider = provider?.trim().orEmpty(),
         elapsedRealtimeNanos = elapsedRealtimeNanos.takeIf { it > 0L },
         isMock = isMockCompat()
     )
 }
 
-private fun Location.isMockCompat(): Boolean {
+internal fun Location.isMockCompat(): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         isMock
     } else {

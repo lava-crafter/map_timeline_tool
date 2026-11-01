@@ -1,0 +1,77 @@
+/*
+Copyright 2026 Muchen Jiang (lava-crafter)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package com.lavacrafter.maptimelinetool.export
+
+import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
+import java.io.File
+import java.io.OutputStream
+
+/** Read a consistent database snapshot, including tags that are not attached to any point. */
+class FullBackupAssembler(private val repository: PointRepositoryGateway) {
+    suspend fun assemble(): FullBackupPayload = repository.inTransaction {
+        val points = repository.getAll()
+        val tags = repository.getAllTags()
+        val pointIds = points.mapTo(HashSet(points.size)) { it.id }
+        val tagIds = tags.mapTo(HashSet(tags.size)) { it.id }
+        // Orphan relations (left by older builds, cleaned asynchronously at startup) link nothing that exists;
+        // leave them out instead of making every backup fail until that cleanup has run.
+        val relations = repository.getAllPointTagRelations().filter { it.pointId in pointIds && it.tagId in tagIds }
+        FullBackupPayload(
+            points = points,
+            tags = tags.map { ZipExporter.TagRecord(it.id, it.name) },
+            pointTagIdsByPointId = relations.groupBy({ it.pointId }, { it.tagId })
+        )
+    }
+}
+
+data class FullBackupPayload(
+    val points: List<Point>,
+    val tags: List<ZipExporter.TagRecord>,
+    val pointTagIdsByPointId: Map<Long, List<Long>>
+) {
+    fun writeZip(
+        outputStream: OutputStream,
+        resolvePhotoFile: (String) -> File?,
+        settingsJson: String,
+        appVersion: String?
+    ): ZipExporter.ExportStats {
+        require(settingsJson.isNotBlank()) { "Full backup requires portable settings" }
+        // A missing photo must not make every future full backup impossible: export the point without
+        // its photo reference and report how many were skipped.
+        val missingPhotoPaths = mutableSetOf<String>()
+        val stats = ZipExporter.export(
+            points = points,
+            outputStream = outputStream,
+            resolvePhotoFile = { path ->
+                resolvePhotoFile(path)?.takeIf { it.isFile && it.canRead() }
+                    ?: run { missingPhotoPaths += path; null }
+            },
+            options = ZipExporter.ExportOptions(
+                includePoints = true,
+                includeTags = true,
+                includeSensors = true,
+                includePhotos = true
+            ),
+            tags = tags,
+            pointTagIdsByPointId = pointTagIdsByPointId,
+            settingsJsonProvider = { settingsJson },
+            appVersion = appVersion
+        )
+        return stats.copy(missingPhotoCount = missingPhotoPaths.size)
+    }
+}

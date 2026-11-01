@@ -26,9 +26,16 @@ data class BackupSections(
     val settings: Boolean = false
 )
 
+data class BackupCounts(
+    val points: Int? = null,
+    val tags: Int? = null,
+    val photos: Int? = null
+)
+
 data class BackupManifest(
     val version: Int,
-    val sections: BackupSections
+    val sections: BackupSections,
+    val counts: BackupCounts = BackupCounts()
 ) {
     companion object {
         /** Old archives did not declare optional sections, so preserve their historical semantics. */
@@ -37,10 +44,32 @@ data class BackupManifest(
             sections = BackupSections(points = true, tags = true, sensors = true, photos = true, settings = true)
         )
 
-        fun parse(json: String): BackupManifest? = runCatching {
+        fun parse(json: String): BackupManifest = runCatching {
             val root = JSONObject(json)
-            val version = root.optInt("backup_version", 1).coerceAtLeast(1)
+            val declaredVersion = root.opt("backup_version") as? Number
+            require(declaredVersion != null && declaredVersion.toDouble().let { it.isFinite() && it % 1.0 == 0.0 }) {
+                "Invalid backup version"
+            }
+            val version = root.getInt("backup_version")
+            require(version in 1..2) { "Unsupported backup version" }
             val rawSections = root.optJSONObject("sections")
+            require(!root.has("sections") || rawSections != null) { "Invalid backup sections" }
+            if (version >= 2) requireNotNull(rawSections) { "Missing backup sections" }
+            rawSections?.let { sections ->
+                for (name in listOf("points", "tags", "sensors", "photos", "settings")) {
+                    if (sections.has(name)) require(sections.opt(name) is Boolean) { "Invalid backup section: $name" }
+                }
+            }
+            val rawCounts = root.optJSONObject("counts")
+            require(!root.has("counts") || rawCounts != null) { "Invalid backup counts" }
+            fun count(name: String): Int? = rawCounts?.takeIf { it.has(name) }?.let { counts ->
+                require(counts.opt(name) is Number && (counts.opt(name) as Number).toDouble().let { it.isFinite() && it % 1.0 == 0.0 }) {
+                    "Invalid backup count: $name"
+                }
+                counts.getInt(name)
+            }?.also {
+                require(it >= 0) { "Negative backup count: $name" }
+            }
             BackupManifest(
                 version = version,
                 sections = BackupSections(
@@ -49,21 +78,28 @@ data class BackupManifest(
                     sensors = rawSections?.optBoolean("sensors", version < 2) ?: (version < 2),
                     photos = rawSections?.optBoolean("photos", false) ?: false,
                     settings = rawSections?.optBoolean("settings", false) ?: false
-                )
+                ),
+                counts = BackupCounts(points = count("points"), tags = count("tags"), photos = count("photos"))
             )
-        }.getOrNull()
+        }.getOrElse { throw IllegalArgumentException("Invalid backup manifest", it) }
     }
 }
 
 /** Bounded input budgets, not an arbitrary point-count limit. */
 data class ZipImportLimits(
+    val maxEntries: Int = 20_000,
+    val maxPhotos: Int = 10_000,
+    val maxPoints: Int = 100_000,
+    val maxTags: Int = 50_000,
+    val maxRelations: Int = 1_000_000,
     val maxUnrecognizedEntries: Int = 1_024,
     val maxEntryNameLength: Int = 512,
     val maxManifestBytes: Long = 128 * 1024L,
     val maxSettingsBytes: Long = 2 * 1024 * 1024L,
-    val maxDataEntryBytes: Long = 256L * 1024L * 1024L,
+    val maxDataEntryBytes: Long = 512L * 1024L * 1024L,
+    val maxGeoJsonBytes: Long = 32L * 1024L * 1024L,
     val maxPhotoBytes: Long = 128L * 1024L * 1024L,
-    val maxTotalBytes: Long = 2L * 1024L * 1024L * 1024L
+    val maxTotalBytes: Long = 32L * 1024L * 1024L * 1024L
 )
 
 class ZipImportLimitExceededException(message: String) : IllegalArgumentException(message)

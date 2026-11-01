@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.domain.usecase
 
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.domain.model.PointSensorSnapshot
 import com.lavacrafter.maptimelinetool.domain.port.SensorSnapshotPort
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
@@ -25,10 +26,10 @@ import com.lavacrafter.maptimelinetool.text.sanitizeMultilineText
 import com.lavacrafter.maptimelinetool.text.sanitizeSingleLineText
 import com.lavacrafter.maptimelinetool.text.MAX_POINT_NOTE_LENGTH
 import com.lavacrafter.maptimelinetool.text.MAX_POINT_TITLE_LENGTH
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 class PointWriteUseCase(
     private val repository: PointRepositoryGateway,
@@ -36,7 +37,8 @@ class PointWriteUseCase(
     private val deletePhoto: suspend (String?) -> Unit,
     private val shouldCollectNoise: () -> Boolean = { false },
     private val collectNoiseDb: suspend () -> Float? = { null },
-    private val asyncScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val onOptionalFailure: (Exception) -> Unit = { it.printStackTrace() },
+    private val photoCommitGuard: PhotoCommitGuard = PhotoCommitGuard()
 ) {
     suspend fun addPointWithTags(
         title: String,
@@ -44,68 +46,126 @@ class PointWriteUseCase(
         location: GeoPoint,
         timestamp: Long,
         tagIds: Set<Long>,
-        photoPath: String? = null
-    ) {
+        photoPath: String? = null,
+        allowNoise: Boolean = true,
+        onCoreSaved: (Long) -> Unit = {}
+    ): Long {
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { formatPointTimestamp(timestamp) }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
-        val id = repository.insert(
-            buildPoint(
-                title = normalizedTitle,
-                note = normalizedNote,
-                location = location,
-                timestamp = timestamp,
-                photoPath = photoPath
-            )
+        val point = buildPoint(
+            title = normalizedTitle,
+            note = normalizedNote,
+            location = location,
+            timestamp = timestamp,
+            photoPath = photoPath
         )
-        tagIds.forEach { tagId ->
-            repository.insertPointTag(id, tagId)
+        val id = photoCommitGuard.withLock {
+            photoCommitGuard.requirePhoto(photoPath)
+            // Once commit starts, finish its transaction and publish the result even if the owner
+            // is cancelled. Do not mask cancellation while waiting for the guard or sampling.
+            withContext(NonCancellable) {
+                repository.inTransaction {
+                    val insertedId = repository.insert(point)
+                    repository.filterExistingTagIds(tagIds).forEach { tagId -> repository.insertPointTag(insertedId, tagId) }
+                    insertedId
+                }.also(onCoreSaved)
+            }
         }
-        if (shouldCollectNoise()) {
-            asyncScope.launch {
-                val noiseDb = runCatching { collectNoiseDb() }.getOrNull()
-                repository.updateNoiseDb(id, noiseDb)
-            }.join()
+        try {
+            if (allowNoise && shouldCollectNoise()) {
+                withContext(Dispatchers.IO) {
+                    collectNoiseDb()?.let { repository.updateNoiseDb(id, it) }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // Noise is optional; the already-committed point must not be reported as a failed insert.
+            onOptionalFailure(error)
         }
+        return id
     }
 
-    suspend fun updatePoint(point: Point, title: String, note: String, photoPath: String?) {
+    suspend fun updatePoint(
+        point: Point, title: String, note: String, photoPath: String?, tagIds: Set<Long>? = null,
+        onCoreSaved: () -> Unit = {}
+    ) {
         val normalizedTitle = sanitizeSingleLineText(title, MAX_POINT_TITLE_LENGTH)
             .ifBlank { point.title }
         val normalizedNote = sanitizeMultilineText(note, MAX_POINT_NOTE_LENGTH)
-        repository.update(point.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
-        if (point.photoPath != photoPath) {
-            deletePhoto(point.photoPath)
+        photoCommitGuard.withLock {
+            withContext(NonCancellable) {
+                val retiredPhoto = repository.inTransaction {
+                    val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                    // Only a newly referenced photo must exist; an unchanged (possibly missing) photo
+                    // must not block editing title, note or tags.
+                    if (photoPath != current.photoPath) photoCommitGuard.requirePhoto(photoPath)
+                    repository.update(current.copy(title = normalizedTitle, note = normalizedNote, photoPath = photoPath))
+                    if (tagIds != null) {
+                        val validTagIds = repository.filterExistingTagIds(tagIds)
+                        val oldTagIds = repository.getTagIdsForPoint(point.id).toSet()
+                        (oldTagIds - validTagIds).forEach { repository.deletePointTag(point.id, it) }
+                        (validTagIds - oldTagIds).forEach { repository.insertPointTag(point.id, it) }
+                    }
+                    current.photoPath?.takeIf { it != photoPath }
+                }
+                onCoreSaved()
+                cleanupUnreferencedPhoto(retiredPhoto)
+            }
         }
     }
 
-    suspend fun deletePoint(point: Point) {
-        repository.delete(point)
-        deletePhoto(point.photoPath)
+    suspend fun deletePoint(point: Point, onCoreSaved: () -> Unit = {}) {
+        photoCommitGuard.withLock {
+            withContext(NonCancellable) {
+                val retiredPhoto = repository.inTransaction {
+                    val current = checkNotNull(repository.getById(point.id)) { "Point no longer exists" }
+                    repository.delete(current)
+                    current.photoPath
+                }
+                onCoreSaved()
+                cleanupUnreferencedPhoto(retiredPhoto)
+            }
+        }
     }
 
-    suspend fun importPoints(pointsList: List<Point>) {
-        val existingPoints = repository.getAll()
-        val existingMap = existingPoints.associateBy {
-            Triple(it.timestamp, it.latitude, it.longitude)
-        }.toMutableMap()
+    /** [duplicates] counts rows skipped because the same point (time and coordinates) already existed. */
+    data class ImportResult(val imported: Int, val duplicates: Int = 0)
 
-        pointsList.forEach { p ->
-            val normalizedPoint = p.copy(
-                title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
-                    .ifBlank { formatPointTimestamp(p.timestamp) },
-                note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
-            )
-            val key = Triple(normalizedPoint.timestamp, normalizedPoint.latitude, normalizedPoint.longitude)
-            val existing = existingMap[key]
-            if (existing != null) {
-                val merged = normalizedPoint.copy(id = existing.id)
-                repository.update(merged)
-                existingMap[key] = merged
-            } else {
-                val newId = repository.insert(normalizedPoint)
-                existingMap[key] = normalizedPoint.copy(id = newId)
+    suspend fun importPoints(pointsList: List<Point>): ImportResult {
+        val imported = photoCommitGuard.withLock {
+            repository.inTransaction {
+                // Only rows that existed before this import count as duplicates, so importing a file again is
+                // idempotent while rows within one file stay as the file has them. A match is skipped rather than
+                // overwritten: a legacy CSV carries no photo or sensor data and would erase the existing row's.
+                val fresh = pointsList.filter { p -> repository.findByImportKey(p.timestamp, p.latitude, p.longitude) == null }
+                fresh.forEach { p ->
+                    photoCommitGuard.requirePhoto(p.photoPath)
+                    val normalizedPoint = p.copy(
+                        title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
+                            .ifBlank { formatPointTimestamp(p.timestamp) },
+                        note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
+                    )
+                    repository.insert(normalizedPoint.copy(id = 0))
+                }
+                fresh.size
             }
+        }
+        return ImportResult(imported = imported, duplicates = pointsList.size - imported)
+    }
+
+    private suspend fun cleanupUnreferencedPhoto(path: String?) {
+        if (path == null) return
+        try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                if (!repository.isPhotoReferenced(path)) deletePhoto(path)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // The row is already committed. A failed best-effort file cleanup is not a failed write.
+            onOptionalFailure(error)
         }
     }
 
@@ -116,7 +176,15 @@ class PointWriteUseCase(
         timestamp: Long,
         photoPath: String? = null
     ): Point {
-        val sensorSnapshot = sensorSnapshotPort.readSnapshot()
+        // Sensors are optional metadata: a failing sensor must not block saving the point itself.
+        val sensorSnapshot = try {
+            sensorSnapshotPort.readSnapshot()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            onOptionalFailure(error)
+            PointSensorSnapshot()
+        }
         return Point(
             timestamp = timestamp,
             latitude = location.latitude,

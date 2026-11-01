@@ -70,6 +70,35 @@ class TagManagementUseCaseTest {
         assertTrue(fake.insertedPointTags.contains(10L to 20L))
         assertTrue(fake.deletedPointTags.contains(10L to 20L))
     }
+
+    @Test
+    fun `setTagForPoint does not link a deleted point or tag`() = runBlocking {
+        val fake = FakePointRepositoryGateway().apply {
+            missingPointIds = setOf(11L)
+            missingTagIds = setOf(21L)
+        }
+        val useCase = TagManagementUseCase(fake)
+
+        useCase.setTagForPoint(pointId = 11, tagId = 20, enabled = true)
+        useCase.setTagForPoint(pointId = 10, tagId = 21, enabled = true)
+
+        assertTrue(fake.insertedPointTags.isEmpty())
+    }
+
+    @Test
+    fun `tag rename and deletion failures reach caller without reporting completion`() = runBlocking {
+        val fake = FakePointRepositoryGateway()
+        var cleanedSettings = false
+        val useCase = TagManagementUseCase(fake, onTagDeleted = { cleanedSettings = true })
+        fake.tagFailure = IllegalStateException("write failed")
+
+        val renameFailure = runCatching { useCase.renameTag(Tag(id = 3, name = "old"), "new") }.exceptionOrNull()
+        val deleteFailure = runCatching { useCase.deleteTag(3L) }.exceptionOrNull()
+
+        assertTrue(renameFailure is IllegalStateException)
+        assertTrue(deleteFailure is IllegalStateException)
+        assertTrue(!cleanedSettings)
+    }
 }
 
 private class FakePointRepositoryGateway : PointRepositoryGateway {
@@ -77,6 +106,13 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     var lastUpdatedTag: Tag? = null
     val insertedPointTags = mutableListOf<Pair<Long, Long>>()
     val deletedPointTags = mutableListOf<Pair<Long, Long>>()
+    var tagFailure: Exception? = null
+    var missingPointIds: Set<Long> = emptySet()
+    var missingTagIds: Set<Long> = emptySet()
+
+    override suspend fun getById(pointId: Long): Point? =
+        if (pointId in missingPointIds) null else Point(id = pointId, timestamp = 1L, latitude = 0.0, longitude = 0.0, title = "p", note = "")
+    override suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> = tagIds - missingTagIds
 
     override fun observeAll(): Flow<List<Point>> = flowOf(emptyList())
     override suspend fun insert(point: Point): Long = 1L
@@ -95,10 +131,13 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     }
 
     override suspend fun updateTag(tag: Tag) {
+        tagFailure?.let { throw it }
         lastUpdatedTag = tag
     }
 
-    override suspend fun deleteTag(tagId: Long) = Unit
+    override suspend fun deleteTag(tagId: Long) {
+        tagFailure?.let { throw it }
+    }
     override suspend fun insertPointTag(pointId: Long, tagId: Long) {
         insertedPointTags += pointId to tagId
     }
@@ -108,5 +147,6 @@ private class FakePointRepositoryGateway : PointRepositoryGateway {
     }
 
     override suspend fun getTagIdsForPoint(pointId: Long): List<Long> = emptyList()
+    override suspend fun getAllPointTagRelations(): List<com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation> = emptyList()
     override fun observePointsForTag(tagId: Long): Flow<List<Point>> = flowOf(emptyList())
 }

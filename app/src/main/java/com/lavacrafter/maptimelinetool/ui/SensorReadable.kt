@@ -18,6 +18,7 @@ package com.lavacrafter.maptimelinetool.ui
 
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import kotlin.math.atan2
+import kotlin.math.sqrt
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -52,8 +53,10 @@ internal fun PointEntity.toReadableSensorSummary(): ReadableSensorSummary {
     val altitude = pressureHpa?.let(::pressureToAltitudeMeters)
     val lightLevel = ambientLightLux?.let(::toAmbientLightLevel)
     val noise = noiseDb?.let(::toNoiseLevel)
-    val azimuth = if (magnetometerX != null && magnetometerY != null) {
-        magnetometerToAzimuthDegrees(magnetometerX, magnetometerY)
+    // A heading needs both gravity and the magnetic field (tilt compensation); without either it is unknown.
+    val azimuth = if (accelerometerX != null && accelerometerY != null && accelerometerZ != null &&
+        magnetometerX != null && magnetometerY != null && magnetometerZ != null) {
+        deviceAzimuthDegrees(accelerometerX, accelerometerY, accelerometerZ, magnetometerX, magnetometerY, magnetometerZ)
     } else {
         null
     }
@@ -104,9 +107,31 @@ internal fun toNoiseLevel(dbfs: Float): NoiseLevel =
         else -> NoiseLevel.EXTREMELY_NOISY
     }
 
-internal fun magnetometerToAzimuthDegrees(x: Float, y: Float): Float {
-    val deg = Math.toDegrees(atan2(y.toDouble(), x.toDouble())).toFloat()
-    return (deg + 360f) % 360f
+/**
+ * Clockwise heading from magnetic north, in degrees, of where the device points: the top edge when it lies
+ * roughly flat, the back camera when it is held upright. Uses the same rotation-matrix construction as
+ * SensorManager.getRotationMatrix (east = field x gravity, north = gravity x east) in the device's natural
+ * orientation. Returns null when the vectors are degenerate (free fall, or field parallel to gravity).
+ */
+internal fun deviceAzimuthDegrees(ax: Float, ay: Float, az: Float, mx: Float, my: Float, mz: Float): Float? {
+    val gx = ax.toDouble(); val gy = ay.toDouble(); val gz = az.toDouble()
+    val gNorm = sqrt(gx * gx + gy * gy + gz * gz)
+    var hx = my * gz - mz * gy
+    var hy = mz * gx - mx * gz
+    var hz = mx * gy - my * gx
+    val hNorm = sqrt(hx * hx + hy * hy + hz * hz)
+    if (gNorm < 0.1 || hNorm < 0.1 || !hNorm.isFinite()) return null
+    hx /= hNorm; hy /= hNorm; hz /= hNorm
+    val ux = gx / gNorm; val uy = gy / gNorm; val uz = gz / gNorm
+    val nx = uy * hz - uz * hy
+    val ny = uz * hx - ux * hz
+    val nz = ux * hy - uy * hx
+    // Pick whichever pointing axis is closer to horizontal: device top (+Y) or back camera (-Z).
+    val topEast = hy; val topNorth = ny
+    val backEast = -hz; val backNorth = -nz
+    val useTop = topEast * topEast + topNorth * topNorth >= backEast * backEast + backNorth * backNorth
+    val deg = if (useTop) Math.toDegrees(atan2(topEast, topNorth)) else Math.toDegrees(atan2(backEast, backNorth))
+    return ((deg.toFloat() % 360f) + 360f) % 360f
 }
 
 internal fun accelerometerToPitchDegrees(y: Float, z: Float): Float {

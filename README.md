@@ -2,7 +2,7 @@
 
 **Language**: English | [中文](#中文说明)
 
-Map Timeline Tool is an offline-first Android app for manually logging points. Your points, photos, and settings stay in the app sandbox; if you enable Android system backup or device transfer, Android may back up or transfer them through your device's configured system backup destination. You can also manually create a full ZIP backup from **Settings → Backup and Restore**.
+Map Timeline Tool is an offline-first Android app for manually logging points. Your points, photos, and settings stay in the app sandbox; if you enable Android system backup or device transfer, Android may back up or transfer them through your device's configured system backup destination. Android cloud backup does not include point photos (device-to-device transfer does on Android 9 and later); use a full ZIP backup from **Settings → Backup and Restore** to keep photos.
 
 - Repository: https://github.com/muchenjiang/map_timeline_tool
 - Google Play: https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool
@@ -56,6 +56,8 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
   - `RELEASE_STORE_PASSWORD`
   - `RELEASE_KEY_ALIAS`
   - `RELEASE_KEY_PASSWORD`
+- Debug builds and instrumentation tests use `com.lavacrafter.maptimelinetool.debug`, a separate app sandbox, and do not require release signing. Release APKs/bundles require the signing properties above.
+- `app/lint-baseline.xml` records existing lint findings so `lintDebug` can flag new findings. Review and fix findings rather than updating the baseline to silence regressions.
 
 ## Architecture
 - UI state is managed in `AppViewModel`.
@@ -71,7 +73,8 @@ Map Timeline Tool is an offline-first Android app for manually logging points. Y
 The app's Settings and About screens list the open-source components and attribution requirements.
 
 How the list is maintained:
-- Runtime dependency licenses are generated from `releaseRuntimeClasspath` into `app/src/main/res/raw/third_party_licenses` and `app/src/main/res/raw/third_party_license_metadata`.
+- Runtime dependency licenses are generated from `releaseRuntimeClasspath` into `app/build/generated/oss_menu_resources/res/raw/` and included as generated resources.
+- In an existing checkout, remove any old generated `app/src/main/res/raw/third_party_licenses` and `third_party_license_metadata` files once; leaving them beside the new generated resources causes duplicate resource errors.
 - Non-Maven attributions (for map/data providers) are maintained in `app/src/main/oss/manual_notices.csv` and merged into the same in-app OSS list.
 
 Summary:
@@ -87,7 +90,7 @@ AI tools were used to help with parts of the development. Final decisions, revie
 
 # 中文说明
 
-Map Timeline Tool 是一款离线优先的 Android 手动打点应用。点位、照片和设置保存在应用沙箱中；如果你启用了 Android 系统备份或设备迁移，Android 可能通过设备已配置的系统备份目的地备份或迁移这些数据。你也可以在 **设置 → 备份与恢复** 中手动创建完整 ZIP 备份。
+Map Timeline Tool 是一款离线优先的 Android 手动打点应用。点位、照片和设置保存在应用沙箱中；如果你启用了 Android 系统备份或设备迁移，Android 可能通过设备已配置的系统备份目的地备份或迁移这些数据。Android 云备份不包含点位照片（Android 9 及以上的设备间迁移包含）；如需保留照片，请在 **设置 → 备份与恢复** 中创建完整 ZIP 备份。
 
 - 项目仓库：https://github.com/muchenjiang/map_timeline_tool
 - Google Play：https://play.google.com/store/apps/details?id=com.lavacrafter.maptimelinetool

@@ -61,6 +61,7 @@ fun AddPointDialog(
     note: String,
     remainingSeconds: Int,
     isCountdownPaused: Boolean,
+    isSaving: Boolean = false,
     onTitleChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     onUserTyping: () -> Unit,
@@ -85,14 +86,17 @@ fun AddPointDialog(
 
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         confirmButton = {
-            Button(onClick = { onConfirm(if (title.isBlank()) defaultTitle else title, note, createdAt, selectedTagIds) }) {
+            Button(
+                onClick = { onConfirm(if (title.isBlank()) defaultTitle else title, note, createdAt, selectedTagIds) },
+                enabled = !isSaving
+            ) {
                 Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text(stringResource(R.string.action_cancel)) }
         },
         title = {
             Text(
@@ -112,7 +116,8 @@ fun AddPointDialog(
                     label = { Text(stringResource(R.string.dialog_title_label)) },
                     placeholder = { Text(defaultTitle) },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    readOnly = isSaving
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -122,7 +127,8 @@ fun AddPointDialog(
                         onUserTyping()
                     },
                     label = { Text(stringResource(R.string.dialog_note_label)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = isSaving
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -136,20 +142,20 @@ fun AddPointDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (hasPhoto) {
-                        OutlinedButton(onClick = onRetakePhoto) {
+                        OutlinedButton(onClick = onRetakePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_retake_photo))
                         }
-                        OutlinedButton(onClick = onRemovePhoto) {
+                        OutlinedButton(onClick = onRemovePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_remove_photo))
                         }
-                        OutlinedButton(onClick = onViewPhoto) {
+                        OutlinedButton(onClick = onViewPhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_view_photo))
                         }
-                        OutlinedButton(onClick = onSharePhoto) {
+                        OutlinedButton(onClick = onSharePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_share_photo))
                         }
                     } else {
-                        OutlinedButton(onClick = onTakePhoto) {
+                        OutlinedButton(onClick = onTakePhoto, enabled = !isSaving) {
                             Text(stringResource(R.string.action_take_photo))
                         }
                     }

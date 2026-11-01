@@ -52,6 +52,8 @@ class SettingsRepository(context: Context) : SettingsManagementGateway {
 
     override fun getFollowSystemTheme(): Boolean = SettingsStore.getFollowSystemTheme(appContext)
     override fun setFollowSystemTheme(enabled: Boolean) = SettingsStore.setFollowSystemTheme(appContext, enabled)
+    override fun getDarkTheme(): Boolean = SettingsStore.getDarkTheme(appContext)
+    override fun setDarkTheme(enabled: Boolean) = SettingsStore.setDarkTheme(appContext, enabled)
 
     override fun getDefaultTagIds(): List<Long> = SettingsStore.getDefaultTagIds(appContext)
     override fun setDefaultTagIds(tagIds: List<Long>) = SettingsStore.setDefaultTagIds(appContext, tagIds)

@@ -37,6 +37,7 @@ import com.lavacrafter.maptimelinetool.text.normalizeTagNameForEditing
 @Composable
 fun EditTagDialog(
     tag: TagEntity,
+    isSaving: Boolean = false,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
@@ -44,12 +45,12 @@ fun EditTagDialog(
     var name by remember(tag) { mutableStateOf(tag.name) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         confirmButton = {
-            TextButton(onClick = { onRename(sanitizeTagName(name)) }) { Text(stringResource(R.string.action_save)) }
+            TextButton(onClick = { onRename(sanitizeTagName(name)) }, enabled = !isSaving) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text(stringResource(R.string.action_cancel)) }
         },
         title = { Text(stringResource(R.string.dialog_title_edit_tag)) },
         text = {
@@ -59,9 +60,10 @@ fun EditTagDialog(
                     onValueChange = { name = normalizeTagNameForEditing(it) },
                     label = { Text(stringResource(R.string.label_tag_name)) },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    readOnly = isSaving
                 )
-                TextButton(onClick = onDelete) { Text(stringResource(R.string.action_delete)) }
+                TextButton(onClick = onDelete, enabled = !isSaving) { Text(stringResource(R.string.action_delete)) }
             }
         }
     )

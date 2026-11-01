@@ -20,6 +20,8 @@ import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.model.Tag
 import kotlinx.coroutines.flow.Flow
 
+data class PointTagRelation(val pointId: Long, val tagId: Long)
+
 interface PointRepositoryGateway {
     /** Keeps multi-table repository work atomic without exposing Room to callers. */
     suspend fun <T> inTransaction(block: suspend () -> T): T = block()
@@ -30,7 +32,10 @@ interface PointRepositoryGateway {
     suspend fun updateNoiseDb(pointId: Long, noiseDb: Float?)
     suspend fun delete(point: Point)
     suspend fun getAll(): List<Point>
+    suspend fun getById(pointId: Long): Point? = getAll().firstOrNull { it.id == pointId }
+    suspend fun isPhotoReferenced(photoPath: String): Boolean = getAll().any { it.photoPath == photoPath }
     suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point?
+    suspend fun findByTimestamp(timestamp: Long): Point? = getAll().firstOrNull { it.timestamp == timestamp }
     suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point>
 
     fun observeTags(): Flow<List<Tag>>
@@ -41,5 +46,17 @@ interface PointRepositoryGateway {
     suspend fun insertPointTag(pointId: Long, tagId: Long)
     suspend fun deletePointTag(pointId: Long, tagId: Long)
     suspend fun getTagIdsForPoint(pointId: Long): List<Long>
+    suspend fun getAllPointTagRelations(): List<PointTagRelation>
+    /** point_tags has no foreign keys, so writers must only link tags that still exist. */
+    suspend fun filterExistingTagIds(tagIds: Set<Long>): Set<Long> =
+        if (tagIds.isEmpty()) emptySet() else tagIds intersect getAllTags().mapTo(HashSet()) { it.id }
+    /** Removes relations left behind by older builds or races; returns the number removed. */
+    suspend fun deleteOrphanPointTags(): Int = inTransaction {
+        val pointIds = getAll().mapTo(HashSet()) { it.id }
+        val tagIds = getAllTags().mapTo(HashSet()) { it.id }
+        val orphans = getAllPointTagRelations().filter { it.pointId !in pointIds || it.tagId !in tagIds }
+        orphans.forEach { deletePointTag(it.pointId, it.tagId) }
+        orphans.size
+    }
     fun observePointsForTag(tagId: Long): Flow<List<Point>>
 }

@@ -17,7 +17,9 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import java.io.File
+import java.io.IOException
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.security.MessageDigest
@@ -43,7 +45,8 @@ object ZipExporter {
 
     data class ExportStats(
         val pointCount: Int,
-        val photoCount: Int
+        val photoCount: Int,
+        val missingPhotoCount: Int = 0
     )
 
     private data class PointPhotoMeta(
@@ -63,22 +66,17 @@ object ZipExporter {
         settingsJsonProvider: (() -> String?)? = null,
         appVersion: String? = null
     ): ExportStats {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        require(options.includePoints || !options.includePhotos) {
+            "Photos cannot be exported without the points section"
+        }
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         val includeTagsInArchive = options.includePoints && options.includeTags
-        val usedTagIds = if (includeTagsInArchive) {
-            val exportedPointIds = points.asSequence().map { it.id }.toSet()
-            pointTagIdsByPointId
-                .filterKeys { exportedPointIds.contains(it) }
-                .values
-                .flatten()
-                .toSet()
-        } else {
-            emptySet()
-        }
-        val filteredTags = tags.filter { usedTagIds.contains(it.id) }
-        val photoEntries = mutableMapOf<String, File>()
+        val exportedTags = if (includeTagsInArchive) tags else emptyList()
+        val exportedTagIds = exportedTags.mapTo(mutableSetOf()) { it.id }
+        // Case-insensitive like the importer's duplicate check, so IMG.jpg and img.jpg get distinct entry names.
+        val photoEntries: MutableMap<String, File> = java.util.TreeMap(String.CASE_INSENSITIVE_ORDER)
         val pointPhotoMeta = points.map { point ->
             buildPhotoMeta(
                 point = point,
@@ -99,7 +97,7 @@ object ZipExporter {
                 includePhotos = options.includePhotos,
                 includeSettings = settingsJson != null,
                 pointCount = if (options.includePoints) points.size else 0,
-                tagCount = filteredTags.size,
+                tagCount = exportedTags.size,
                 photoCount = photoEntries.size
             )
             zip.putNextEntry(ZipEntry("backup_manifest.json"))
@@ -162,8 +160,10 @@ object ZipExporter {
                 zip.putNextEntry(ZipEntry("tags.csv"))
                 val tagWriter = OutputStreamWriter(zip, Charsets.UTF_8)
                 CsvExporter.writeRow(tagWriter, listOf("tag_id", "name"))
-                filteredTags.forEach { tag ->
-                    CsvExporter.writeRow(tagWriter, listOf(tag.id.toString(), tag.name))
+                exportedTags.forEach { tag ->
+                    // Early builds stored unsanitized names; a blank one would make the backup unrestorable.
+                    val name = sanitizeTagName(tag.name).ifBlank { "tag_${tag.id}" }
+                    CsvExporter.writeRow(tagWriter, listOf(tag.id.toString(), name))
                 }
                 tagWriter.flush()
                 zip.closeEntry()
@@ -173,7 +173,7 @@ object ZipExporter {
                 CsvExporter.writeRow(pointTagWriter, listOf("point_index", "tag_id"))
                 points.forEachIndexed { pointIndex, point ->
                     val tagIds = pointTagIdsByPointId[point.id].orEmpty()
-                    tagIds.filter { usedTagIds.contains(it) }.forEach { tagId ->
+                    tagIds.filter { it in exportedTagIds }.forEach { tagId ->
                         CsvExporter.writeRow(pointTagWriter, listOf(pointIndex.toString(), tagId.toString()))
                     }
                 }
@@ -181,9 +181,25 @@ object ZipExporter {
                 zip.closeEntry()
             }
 
+            val expectedHashByPath = pointPhotoMeta.mapNotNull { meta -> meta.relPath?.let { it to meta.sha256 } }.toMap()
             photoEntries.forEach { (relPath, file) ->
                 zip.putNextEntry(ZipEntry(relPath))
-                file.inputStream().buffered().use { input -> input.copyTo(zip) }
+                // points.csv already recorded this file's hash; fail now rather than write an archive whose
+                // restore is rejected later because the photo changed in between.
+                val digest = MessageDigest.getInstance("SHA-256")
+                file.inputStream().buffered().use { input ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        digest.update(buffer, 0, read)
+                        zip.write(buffer, 0, read)
+                    }
+                }
+                val actual = digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+                if (expectedHashByPath[relPath]?.let { it != actual } == true) {
+                    throw IOException("Photo changed during export: $relPath")
+                }
                 zip.closeEntry()
             }
 

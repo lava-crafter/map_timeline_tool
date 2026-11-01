@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.TagEntity
 import com.lavacrafter.maptimelinetool.text.normalizeTagNameForEditing
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 sealed interface QuickTagSlot
 
@@ -162,11 +165,14 @@ fun TagSelectionDialog(
     tags: List<TagEntity>,
     selectedTagIds: Set<Long>,
     onToggleTag: (Long) -> Unit,
-    onCreateTag: (String, (Long) -> Unit) -> Unit,
+    onCreateTag: suspend (String) -> Long,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     var newTagName by remember { mutableStateOf("") }
+    var creatingTag by remember { mutableStateOf(false) }
+    var createFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -181,23 +187,39 @@ fun TagSelectionDialog(
             Column(modifier = Modifier.height(340.dp)) {
                 OutlinedTextField(
                     value = newTagName,
-                    onValueChange = { newTagName = normalizeTagNameForEditing(it) },
+                    onValueChange = { newTagName = normalizeTagNameForEditing(it); createFailed = false },
                     label = { Text(stringResource(R.string.label_new_tag)) },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    readOnly = creatingTag
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = {
                     val trimmed = newTagName.trim()
-                    if (trimmed.isNotEmpty()) {
-                        onCreateTag(trimmed) { id ->
-                            onToggleTag(id)
+                    if (trimmed.isNotEmpty() && !creatingTag) {
+                        creatingTag = true
+                        scope.launch {
+                            try {
+                                val id = onCreateTag(trimmed)
+                                if (id > 0L) {
+                                    onToggleTag(id)
+                                    newTagName = ""
+                                } else {
+                                    createFailed = true
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                createFailed = true
+                            } finally {
+                                creatingTag = false
+                            }
                         }
-                        newTagName = ""
                     }
-                }) {
+                }, enabled = !creatingTag) {
                     Text(stringResource(R.string.action_add))
                 }
+                if (createFailed) Text(stringResource(R.string.toast_tag_save_failed))
                 Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider()
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {

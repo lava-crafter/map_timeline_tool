@@ -17,6 +17,7 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -28,6 +29,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,8 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -49,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -58,13 +63,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lavacrafter.maptimelinetool.R
 import com.lavacrafter.maptimelinetool.data.PointEntity
 import kotlinx.coroutines.delay
-import org.osmdroid.tileprovider.MapTileProviderBasic
-import org.osmdroid.tileprovider.modules.IFilesystemCache
-import org.osmdroid.tileprovider.modules.INetworkAvailablityCheck
-import org.osmdroid.tileprovider.modules.NetworkAvailabliltyCheck
 import org.osmdroid.tileprovider.modules.SqlTileWriter
 import org.osmdroid.tileprovider.tilesource.ITileSource
-import org.osmdroid.tileprovider.util.SimpleRegisterReceiver
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.compass.InternalCompassOrientationProvider
 import org.osmdroid.util.GeoPoint
@@ -78,7 +78,7 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.infowindow.InfoWindow
-import java.io.InputStream
+import org.osmdroid.views.overlay.infowindow.MarkerInfoWindow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,26 +92,32 @@ fun MapScreen(
     isActive: Boolean,
     zoomBehavior: ZoomButtonBehavior,
     markerScale: Float,
-    downloadedOnly: Boolean,
+    mapAccessPolicy: MapTileAccessPolicy,
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
-    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit
+    onResolveCenterLocation: ((com.lavacrafter.maptimelinetool.domain.model.GeoPoint?) -> Unit) -> Unit,
+    onCenterRequest: (() -> Unit)? = null,
+    centerResult: CenterLocationResult? = null,
+    onCenterResultConsumed: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapView: MapView? by remember { mutableStateOf(null) }
-    val locationProvider = remember {
+    // Destroyed in the lifecycle effect's onDispose, so recreate them together with that effect.
+    val locationProvider = remember(lifecycleOwner) {
         GpsMyLocationProvider(context).apply {
             clearLocationSources()
             addLocationSource(LocationManager.GPS_PROVIDER)
             addLocationSource(LocationManager.NETWORK_PROVIDER)
         }
     }
-    val orientationProvider = remember { InternalCompassOrientationProvider(context) }
+    val orientationProvider = remember(lifecycleOwner) { InternalCompassOrientationProvider(context) }
     val headingOverlay = remember { HeadingLocationOverlay(context) }
     headingOverlay.invalidateMap = { mapView?.postInvalidateOnAnimation() }
-    val todayOrderById = remember(points) { buildTodayOrder(points) }
+    val today by rememberCurrentLocalDay()
+    val todayOrderById = remember(points, today) { buildTodayOrder(points, today) }
     var interactionToken by remember { mutableStateOf(0) }
     var showZoomTransient by remember { mutableStateOf(false) }
     val onMapInteraction = rememberUpdatedState {
@@ -132,18 +138,37 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(selectedPointId, mapView, points) {
+    // Re-center only when the selection or the selected point's position changes; noise/note edits or other
+    // points arriving must not pull the user's viewport back.
+    val selectedTarget = selectedPointId?.let { id -> points.find { it.id == id } }
+        ?.let { GeoPoint(it.latitude, it.longitude) }
+    LaunchedEffect(selectedPointId, selectedTarget?.latitude, selectedTarget?.longitude, mapView) {
         val map = mapView ?: return@LaunchedEffect
-        val target = selectedPointId?.let { id -> points.find { it.id == id } } ?: return@LaunchedEffect
+        val target = selectedTarget ?: return@LaunchedEffect
         map.controller.setZoom(16.0)
-        map.controller.animateTo(GeoPoint(target.latitude, target.longitude))
+        map.controller.animateTo(target)
     }
 
+    LaunchedEffect(centerResult?.id, mapView) {
+        val result = centerResult ?: return@LaunchedEffect
+        val map = mapView ?: return@LaunchedEffect
+        val location = result.location
+        if (location == null) {
+            Toast.makeText(context, resources.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+        } else {
+            map.controller.setZoom(16.0)
+            map.controller.setCenter(GeoPoint(location.latitude, location.longitude))
+        }
+        onCenterResultConsumed(result.id)
+    }
+
+    val currentIsActive by rememberUpdatedState(isActive)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    if (isActive) {
+                    // Resuming after a permission dialog re-checks, so a grant takes effect without restarting.
+                    if (currentIsActive && context.hasForegroundLocationPermission()) {
                         locationProvider.startLocationProvider(headingOverlay)
                         orientationProvider.startOrientationProvider(headingOverlay)
                     }
@@ -166,7 +191,8 @@ fun MapScreen(
     }
 
     LaunchedEffect(isActive, lifecycleOwner) {
-        if (isActive && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+        if (isActive && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            context.hasForegroundLocationPermission()) {
             locationProvider.startLocationProvider(headingOverlay)
             orientationProvider.startOrientationProvider(headingOverlay)
         } else if (!isActive) {
@@ -180,25 +206,74 @@ fun MapScreen(
     var hasAutoCentered by remember { mutableStateOf(false) }
     var policyNetworkCheck by remember { mutableStateOf<PolicyAwareNetworkCheck?>(null) }
     var policyFilesystemCache by remember { mutableStateOf<PolicyAwareFilesystemCache?>(null) }
-    var previousDownloadedOnly by remember { mutableStateOf(downloadedOnly) }
 
-    Box {
+    fun createTileProvider(viewContext: Context, source: ITileSource): OnlineMapTileProvider {
+        val networkCheck = PolicyAwareNetworkCheck(viewContext).apply {
+            allowNetwork = mapAccessPolicy.allowNetwork
+        }
+        val filesystemCache = PolicyAwareFilesystemCache(SqlTileWriter()).apply {
+            allowWrites = mapAccessPolicy.allowCacheWrites
+        }
+        policyNetworkCheck = networkCheck
+        policyFilesystemCache = filesystemCache
+        return OnlineMapTileProvider(viewContext, source, networkCheck, filesystemCache)
+    }
+
+    val markerCache = remember { HashMap<Long, Pair<MarkerSignature, Marker>>() }
+    val currentOnEditPoint by rememberUpdatedState(onEditPoint)
+    // One bubble per map, not per marker: InfoWindow inflates its view and registers with the map in its
+    // constructor, so a window per marker kept a view tree per point and exhausted the heap near 10k points.
+    val infoWindowHolder = remember { arrayOfNulls<MarkerInfoWindow>(1) }
+
+    fun pointInfoWindow(map: MapView): MarkerInfoWindow =
+        infoWindowHolder[0]?.takeIf { it.mapView === map }
+            ?: object : MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
+                override fun onOpen(item: Any?) {
+                    super.onOpen(item)
+                    val point = (item as? Marker)?.relatedObject as? PointEntity
+                    mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
+                    mView.setOnClickListener { point?.let(currentOnEditPoint) }
+                }
+            }.also { infoWindowHolder[0] = it }
+
+    fun buildPointMarker(map: MapView, p: PointEntity, order: Int?): Marker {
+        val color = if (order != null) spectrumColor(order) else DEFAULT_MARKER_COLOR
+        val lookDirection = p.toLookDirection()
+        val timeDescription = sdf.format(Date(p.timestamp))
+        val lookDescription = lookDirection?.let { direction ->
+            context.getString(
+                R.string.label_sensor_view_direction,
+                direction.azimuthDegrees,
+                direction.pitchDegrees
+            )
+        }
+        return Marker(map).apply {
+            id = p.id.toString()
+            position = GeoPoint(p.latitude, p.longitude)
+            title = p.title
+            snippet = p.note
+            subDescription = if (lookDescription != null) {
+                "$timeDescription\n$lookDescription"
+            } else {
+                timeDescription
+            }
+            icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
+            // Markers are rebuilt whenever their point's content changes, so this is the latest point.
+            relatedObject = p
+            infoWindow = pointInfoWindow(map)
+            setOnMarkerClickListener { clicked, mapView ->
+                InfoWindow.closeAllInfoWindowsOn(mapView)
+                clicked.showInfoWindow()
+                true
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().testTag("map_screen")) {
         AndroidView(
             factory = { viewContext ->
                 val source = mapTileSourceById(mapTileSourceId).toOsmdroidSource(viewContext)
-                val networkCheck = PolicyAwareNetworkCheck(viewContext).apply {
-                    allowNetwork = !downloadedOnly
-                }
-                val filesystemCache = PolicyAwareFilesystemCache(SqlTileWriter()).apply {
-                    allowWrites = !downloadedOnly
-                }
-                val provider = MapTileProviderBasic(
-                    SimpleRegisterReceiver(viewContext),
-                    networkCheck,
-                    source,
-                    viewContext,
-                    filesystemCache
-                )
+                val provider = createTileProvider(viewContext, source)
                 MapView(viewContext, provider).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -207,8 +282,8 @@ fun MapScreen(
                     setTileSource(source)
                     // setUseDataConnection must be applied after setTileSource, otherwise the
                     // provider created by setTileSource may reset network behavior.
-                    setUseDataConnection(!downloadedOnly)
-                    tileProvider.setUseDataConnection(!downloadedOnly)
+                    setUseDataConnection(mapAccessPolicy.allowNetwork)
+                    tileProvider.setUseDataConnection(mapAccessPolicy.allowNetwork)
                     setMultiTouchControls(true)
                     zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                     controller.setZoom(16.0)
@@ -228,13 +303,13 @@ fun MapScreen(
                         }
                     })
                     onResume()
-                    policyNetworkCheck = networkCheck
-                    policyFilesystemCache = filesystemCache
                     mapView = this
                 }
             },
             onRelease = { map ->
                 map.onPause()
+                markerCache.clear()
+                infoWindowHolder[0] = null
                 map.onDetach()
                 policyNetworkCheck = null
                 policyFilesystemCache = null
@@ -244,18 +319,18 @@ fun MapScreen(
             update = { map ->
                 val targetSource = mapTileSourceById(mapTileSourceId).toOsmdroidSource(context)
                 if (map.tileProvider.tileSource.name() != targetSource.name()) {
+                    // Keep late downloads from the old source out of the new source's memory cache.
+                    // Replacing only the provider preserves the MapView's viewport and overlays.
+                    policyNetworkCheck?.allowNetwork = false
+                    policyFilesystemCache?.allowWrites = false
+                    map.setTileProvider(createTileProvider(map.context, targetSource))
                     map.setTileSource(targetSource)
                 }
-                policyNetworkCheck?.allowNetwork = !downloadedOnly
-                policyFilesystemCache?.allowWrites = !downloadedOnly
+                policyNetworkCheck?.allowNetwork = mapAccessPolicy.allowNetwork
+                policyFilesystemCache?.allowWrites = mapAccessPolicy.allowCacheWrites
                 // Important: setUseDataConnection must be called after setTileSource to ensure the internal provider respects it.
-                map.setUseDataConnection(!downloadedOnly)
-                map.tileProvider.setUseDataConnection(!downloadedOnly)
-                if (!previousDownloadedOnly && downloadedOnly) {
-                    // Drop in-memory tiles captured while online so the no-network behavior is visible immediately.
-                    map.tileProvider.clearTileCache()
-                }
-                previousDownloadedOnly = downloadedOnly
+                map.setUseDataConnection(mapAccessPolicy.allowNetwork)
+                map.tileProvider.setUseDataConnection(mapAccessPolicy.allowNetwork)
 
                 if (!hasAutoCentered) {
                     if (points.isNotEmpty()) {
@@ -274,54 +349,34 @@ fun MapScreen(
                 val signature = MapOverlaySignature(
                     selectedPointId = selectedPointId,
                     markerScale = markerScale,
+                    todayOrderById = todayOrderById,
                     points = points.map { it.toOverlaySignature() }
                 )
                 if (overlaysReady && signature == lastOverlaySignature) {
                     return@AndroidView
                 }
-                map.overlays.clear()
-                points.forEach { p ->
+                // Open bubbles may belong to markers being replaced; close them so none shows (or edits) stale data.
+                InfoWindow.closeAllInfoWindowsOn(map)
+                // Reuse markers (and their icon bitmaps) whose rendered content is unchanged, so a single point
+                // update allocates a constant number of markers instead of rebuilding all of them.
+                val livePointIds = HashSet<Long>(points.size)
+                val markers = points.map { p ->
                     val order = todayOrderById[p.id]
-                    val color = if (order != null) spectrumColor(order) else DEFAULT_MARKER_COLOR
-                    val lookDirection = p.toLookDirection()
-                    val timeDescription = sdf.format(Date(p.timestamp))
-                    val lookDescription = lookDirection?.let { direction ->
-                        context.getString(
-                            R.string.label_sensor_view_direction,
-                            direction.azimuthDegrees,
-                            direction.pitchDegrees
-                        )
-                    }
-                    val marker = Marker(map).apply {
-                        position = GeoPoint(p.latitude, p.longitude)
-                        title = p.title
-                        snippet = p.note
-                        subDescription = if (lookDescription != null) {
-                            "$timeDescription\n$lookDescription"
-                        } else {
-                            timeDescription
-                        }
-                        icon = createCounterIcon(context, order?.toString().orEmpty(), color, markerScale)
-                        infoWindow = object : org.osmdroid.views.overlay.infowindow.MarkerInfoWindow(org.osmdroid.library.R.layout.bonuspack_bubble, map) {
-                            override fun onOpen(item: Any?) {
-                                super.onOpen(item)
-                                mView.setBackgroundColor(INFO_WINDOW_BACKGROUND_COLOR)
-                                mView.setOnClickListener {
-                                    onEditPoint(p)
-                                }
-                            }
-                        }
-                        setOnMarkerClickListener { clicked, mapView ->
-                            InfoWindow.closeAllInfoWindowsOn(mapView)
-                            clicked.showInfoWindow()
-                            true
-                        }
-                    }
-                    map.overlays.add(marker)
-                    if (p.id == selectedPointId) {
-                        marker.showInfoWindow()
+                    val markerSignature = MarkerSignature(p.toOverlaySignature(), order, markerScale)
+                    livePointIds += p.id
+                    val cached = markerCache[p.id]
+                    if (cached != null && cached.first == markerSignature) {
+                        cached.second
+                    } else {
+                        cached?.second?.onDetach(map)
+                        buildPointMarker(map, p, order).also { markerCache[p.id] = markerSignature to it }
                     }
                 }
+                val removedIds = markerCache.keys - livePointIds
+                removedIds.forEach { id -> markerCache.remove(id)?.second?.onDetach(map) }
+                map.overlays.clear()
+                map.overlays.addAll(markers)
+                markers.firstOrNull { it.id == selectedPointId?.toString() }?.showInfoWindow()
                 map.overlays.add(
                     MapEventsOverlay(object : MapEventsReceiver {
                         override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
@@ -346,15 +401,34 @@ fun MapScreen(
             }
         )
 
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                // Reserve the right-hand column for the layer and zoom buttons; long credits wrap.
+                .padding(start = 8.dp, top = 8.dp, end = 76.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Text(
+                text = stringResource(mapTileSourceById(mapTileSourceId).attributionRes),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .testTag("map_attribution")
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            )
+        }
+
         FloatingActionButton(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp),
             onClick = {
-                onResolveCenterLocation { location ->
+                if (onCenterRequest != null) {
+                    onCenterRequest()
+                } else onResolveCenterLocation { location ->
                     val map = mapView ?: return@onResolveCenterLocation
                     if (location == null) {
-                        Toast.makeText(context, context.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, resources.getString(R.string.toast_location_failed), Toast.LENGTH_SHORT).show()
                         return@onResolveCenterLocation
                     }
                     map.controller.setZoom(16.0)
@@ -428,7 +502,14 @@ fun MapScreen(
 private data class MapOverlaySignature(
     val selectedPointId: Long?,
     val markerScale: Float,
+    val todayOrderById: Map<Long, Int>,
     val points: List<PointOverlaySignature>
+)
+
+private data class MarkerSignature(
+    val point: PointOverlaySignature,
+    val todayOrder: Int?,
+    val markerScale: Float
 )
 
 private data class PointOverlaySignature(
@@ -502,70 +583,6 @@ private fun createCounterIcon(
     return android.graphics.drawable.BitmapDrawable(context.resources, bitmap)
 }
 
-private class PolicyAwareNetworkCheck(context: android.content.Context) : INetworkAvailablityCheck {
-    private val delegate = NetworkAvailabliltyCheck(context)
-
-    @Volatile
-    var allowNetwork: Boolean = true
-
-    override fun getNetworkAvailable(): Boolean {
-        return allowNetwork && delegate.getNetworkAvailable()
-    }
-
-    override fun getWiFiNetworkAvailable(): Boolean {
-        return allowNetwork && delegate.getWiFiNetworkAvailable()
-    }
-
-    override fun getCellularDataNetworkAvailable(): Boolean {
-        return allowNetwork && delegate.getCellularDataNetworkAvailable()
-    }
-
-    @Deprecated("Deprecated by osmdroid INetworkAvailablityCheck; kept for interface compatibility.")
-    @Suppress("DEPRECATION")
-    override fun getRouteToPathExists(hostAddress: Int): Boolean {
-        return allowNetwork && delegate.getRouteToPathExists(hostAddress)
-    }
-}
-
-private class PolicyAwareFilesystemCache(
-    private val delegate: IFilesystemCache
-) : IFilesystemCache {
-    @Volatile
-    var allowWrites: Boolean = true
-
-    override fun saveFile(
-        pTileSource: ITileSource,
-        pMapTileIndex: Long,
-        pStream: InputStream,
-        pExpirationTime: Long?
-    ): Boolean {
-        if (!allowWrites) {
-            return false
-        }
-        return delegate.saveFile(pTileSource, pMapTileIndex, pStream, pExpirationTime)
-    }
-
-    override fun exists(pTileSource: ITileSource, pMapTileIndex: Long): Boolean {
-        return delegate.exists(pTileSource, pMapTileIndex)
-    }
-
-    override fun onDetach() {
-        delegate.onDetach()
-    }
-
-    override fun remove(pTileSource: ITileSource, pMapTileIndex: Long): Boolean {
-        return delegate.remove(pTileSource, pMapTileIndex)
-    }
-
-    override fun getExpirationTimestamp(pTileSource: ITileSource, pMapTileIndex: Long): Long? {
-        return delegate.getExpirationTimestamp(pTileSource, pMapTileIndex)
-    }
-
-    override fun loadTile(pTileSource: ITileSource, pMapTileIndex: Long): android.graphics.drawable.Drawable? {
-        return delegate.loadTile(pTileSource, pMapTileIndex)
-    }
-}
-
 private val SPECTRUM_COLORS = listOf(
     Color.parseColor("#F44336"),
     Color.parseColor("#FF9800"),
@@ -584,7 +601,8 @@ private fun spectrumColor(order: Int): Int {
     return SPECTRUM_COLORS[index]
 }
 
-private fun findNearestPoint(map: MapView, points: List<PointEntity>, target: GeoPoint, maxDp: Float): PointEntity? {
+// internal for the performance baseline test.
+internal fun findNearestPoint(map: MapView, points: List<PointEntity>, target: GeoPoint, maxDp: Float): PointEntity? {
     val projection = map.projection ?: return null
     val targetPx = projection.toPixels(target, Point())
     val density = map.context.resources.displayMetrics.density
@@ -603,3 +621,9 @@ private fun findNearestPoint(map: MapView, points: List<PointEntity>, target: Ge
     }
     return nearest
 }
+
+private fun android.content.Context.hasForegroundLocationPermission(): Boolean =
+    androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED ||
+        androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED

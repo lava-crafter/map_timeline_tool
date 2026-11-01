@@ -32,14 +32,18 @@ enum class QuickAddResult {
 class QuickAddResolver(
     private val locationProvider: LocationProvider,
     private val locationCache: QuickAddLocationCache,
-    private val addPoint: suspend (title: String, location: GeoPoint, timestamp: Long) -> Unit,
+    private val addPoint: suspend (title: String, location: GeoPoint, timestamp: Long, onCoreSaved: () -> Unit) -> Unit,
     private val wallClockMs: () -> Long = System::currentTimeMillis,
     private val elapsedRealtimeNanos: () -> Long? = { null },
     private val titleFormatter: (Long) -> String = { timestampMs ->
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestampMs))
     }
 ) {
-    suspend fun savePoint(timeoutMs: Long, clickTimeMs: Long = wallClockMs()): QuickAddResult {
+    suspend fun savePoint(
+        timeoutMs: Long,
+        clickTimeMs: Long = wallClockMs(),
+        onCoreSaved: (QuickAddResult) -> Unit = {}
+    ): QuickAddResult {
         val preciseLocation = try {
             locationProvider.getPreciseLocation(timeoutMs)
         } catch (error: CancellationException) {
@@ -56,13 +60,17 @@ class QuickAddResolver(
             ?.takeIf { locationCache.isQualified(it) }
 
         if (strictLocation != null) {
-            addPoint(titleFormatter(clickTimeMs), strictLocation.toGeoPoint(), clickTimeMs)
+            addPoint(titleFormatter(clickTimeMs), strictLocation.toGeoPoint(), clickTimeMs) {
+                onCoreSaved(QuickAddResult.SAVED_FROM_FRESH_REQUEST)
+            }
             locationCache.update(strictLocation)
             return QuickAddResult.SAVED_FROM_FRESH_REQUEST
         }
 
         locationCache.getQualifiedLocation()?.let { cachedLocation ->
-            addPoint(titleFormatter(clickTimeMs), cachedLocation.toGeoPoint(), clickTimeMs)
+            addPoint(titleFormatter(clickTimeMs), cachedLocation.toGeoPoint(), clickTimeMs) {
+                onCoreSaved(QuickAddResult.SAVED_FROM_RECENT_CACHE)
+            }
             return QuickAddResult.SAVED_FROM_RECENT_CACHE
         }
 

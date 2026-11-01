@@ -22,8 +22,13 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
+import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.Looper
+import android.os.SystemClock
 import com.lavacrafter.maptimelinetool.quickadd.toQuickAddLocation
+import com.lavacrafter.maptimelinetool.quickadd.isMockCompat
+import com.lavacrafter.maptimelinetool.domain.usecase.LocationFixValidity
 import com.lavacrafter.maptimelinetool.ui.HeadingLocationOverlay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -38,6 +43,8 @@ object LocationUtils {
     private const val MAX_STALE_LAST_KNOWN_LOCATION_AGE_MS = 24 * 60 * 60 * 1000L
     private const val MAX_STALE_LAST_KNOWN_ACCURACY_METERS = 300f
     private const val CACHED_PROVIDER = "cached_overlay"
+    private const val KEY_LAT_BITS = "lat_bits"
+    private const val KEY_LON_BITS = "lon_bits"
 
     fun getLastKnownLocation(
         context: Context,
@@ -67,11 +74,16 @@ object LocationUtils {
     }
 
     fun cacheLocation(context: Context, location: Location) {
+        // A persisted location cache has no mock metadata; never launder a mock fix through it.
+        if (location.isMockCompat()) return
         val editor = context.getSharedPreferences(HeadingLocationOverlay.LOCATION_PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putFloat(HeadingLocationOverlay.KEY_LAT, location.latitude.toFloat())
-            .putFloat(HeadingLocationOverlay.KEY_LON, location.longitude.toFloat())
-            .putLong(HeadingLocationOverlay.KEY_TIME, location.time)
+            // Full Double precision; Float rounding moves points by metres at large longitudes.
+            .putLong(KEY_LAT_BITS, location.latitude.toRawBits())
+            .putLong(KEY_LON_BITS, location.longitude.toRawBits())
+            .remove(HeadingLocationOverlay.KEY_LAT)
+            .remove(HeadingLocationOverlay.KEY_LON)
+            .putLong(HeadingLocationOverlay.KEY_TIME, location.deviceClockFixTimeMs())
             .putString(HeadingLocationOverlay.KEY_PROVIDER, location.provider)
 
         if (location.hasAccuracy()) {
@@ -85,16 +97,20 @@ object LocationUtils {
 
     private fun readCachedLocation(context: Context): Location? {
         val prefs = context.getSharedPreferences(HeadingLocationOverlay.LOCATION_PREFS, Context.MODE_PRIVATE)
-        if (!prefs.contains(HeadingLocationOverlay.KEY_LAT) || !prefs.contains(HeadingLocationOverlay.KEY_LON)) {
-            return null
+        val (latitude, longitude) = when {
+            prefs.contains(KEY_LAT_BITS) && prefs.contains(KEY_LON_BITS) ->
+                Double.fromBits(prefs.getLong(KEY_LAT_BITS, 0L)) to Double.fromBits(prefs.getLong(KEY_LON_BITS, 0L))
+            prefs.contains(HeadingLocationOverlay.KEY_LAT) && prefs.contains(HeadingLocationOverlay.KEY_LON) ->
+                prefs.getFloat(HeadingLocationOverlay.KEY_LAT, 0f).toDouble() to
+                    prefs.getFloat(HeadingLocationOverlay.KEY_LON, 0f).toDouble()
+            else -> return null
         }
-        val provider = prefs.getString(HeadingLocationOverlay.KEY_PROVIDER, CACHED_PROVIDER)
-            ?.ifBlank { CACHED_PROVIDER }
-            ?: CACHED_PROVIDER
-        return Location(provider).apply {
-            latitude = prefs.getFloat(HeadingLocationOverlay.KEY_LAT, 0f).toDouble()
-            longitude = prefs.getFloat(HeadingLocationOverlay.KEY_LON, 0f).toDouble()
-            time = prefs.getLong(HeadingLocationOverlay.KEY_TIME, System.currentTimeMillis())
+        // Always label the cache as such so it is never scored like a live GPS/fused fix.
+        return Location(CACHED_PROVIDER).apply {
+            this.latitude = latitude
+            this.longitude = longitude
+            // A missing time must make the entry invalid, not look brand new.
+            time = prefs.getLong(HeadingLocationOverlay.KEY_TIME, 0L)
             if (prefs.contains(HeadingLocationOverlay.KEY_ACCURACY)) {
                 val cachedAccuracy = prefs.getFloat(HeadingLocationOverlay.KEY_ACCURACY, -1f)
                 if (cachedAccuracy > 0f) {
@@ -189,12 +205,20 @@ object LocationUtils {
         }
 
         lateinit var listener: android.location.LocationListener
-        listener = android.location.LocationListener { location ->
-            lm.removeUpdates(listener)
-            cont.resume(location)
-        }
+        listener = locationListenerCompat(
+            onLocation = { location ->
+                lm.removeUpdates(listener)
+                if (cont.isActive) cont.resume(location)
+            },
+            onProviderDisabled = {
+                lm.removeUpdates(listener)
+                if (cont.isActive) cont.resumeWithException(IllegalStateException("Location provider disabled"))
+            }
+        )
         cont.invokeOnCancellation { lm.removeUpdates(listener) }
-            requestSingleUpdateCompat(context, lm, provider, listener)
+        requestSingleUpdateCompat(context, lm, provider, listener)?.let { error ->
+            if (cont.isActive) cont.resumeWithException(error)
+        }
     }
 
     private fun pickSingleUpdateProvider(providers: List<String>): String? {
@@ -223,12 +247,8 @@ object LocationUtils {
         maxAccuracyMeters: Float,
         requireAccuracy: Boolean = false
     ): Boolean {
-        if (location.latitude.isNaN() || location.longitude.isNaN()) {
-            return false
-        }
-
-        val fixTime = location.time.takeIf { it > 0L } ?: return false
-        val ageMs = (nowMs - fixTime).coerceAtLeast(0L)
+        val ageMs = LocationFixValidity.ageMs(location.latitude, location.longitude, location.deviceClockFixTimeMs(nowMs), nowMs)
+            ?: return false
         if (ageMs > maxAgeMs) {
             return false
         }
@@ -237,7 +257,7 @@ object LocationUtils {
             return false
         }
 
-        if (location.hasAccuracy() && location.accuracy > maxAccuracyMeters) {
+        if (location.hasAccuracy() && (!location.accuracy.isFinite() || location.accuracy < 0f || location.accuracy > maxAccuracyMeters)) {
             return false
         }
 
@@ -250,7 +270,7 @@ object LocationUtils {
         } else {
             0.0
         }
-        val ageMs = (nowMs - location.time).coerceAtLeast(0L).toDouble()
+        val ageMs = (nowMs - location.deviceClockFixTimeMs(nowMs)).coerceAtLeast(0L).toDouble()
         val recencyScore = 1_000.0 - (ageMs / 1000.0)
         val providerScore = when (location.provider) {
             LocationManager.FUSED_PROVIDER -> 35.0
@@ -262,18 +282,25 @@ object LocationUtils {
         return accuracyScore + recencyScore + providerScore
     }
 
+    /** Returns the failure instead of leaving the continuation to the outer timeout. */
     private fun requestSingleUpdateCompat(
         context: Context,
         locationManager: android.location.LocationManager,
         provider: String,
         listener: android.location.LocationListener,
-    ) {
-        if (!hasLocationPermission(context)) return
-        try {
+    ): Exception? {
+        if (!hasLocationPermission(context)) return SecurityException("Location permission is unavailable")
+        return try {
+            // Callers run on IO threads without a Looper; a null looper throws there before API 30.
             @Suppress("DEPRECATION")
-            locationManager.requestSingleUpdate(provider, listener, null)
-        } catch (_: SecurityException) {
+            locationManager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+            null
+        } catch (error: SecurityException) {
             // Permission may be revoked after the preceding check.
+            error
+        } catch (error: RuntimeException) {
+            // e.g. IllegalArgumentException for a provider that disappeared.
+            error
         }
     }
 
@@ -282,3 +309,22 @@ object LocationUtils {
             context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 }
+
+/**
+ * Before API 30 only onLocationChanged has a default-less SAM conversion; the other callbacks are abstract,
+ * so a lambda listener crashes with AbstractMethodError when a provider changes state.
+ */
+internal fun locationListenerCompat(
+    onLocation: (Location) -> Unit,
+    onProviderDisabled: () -> Unit = {}
+): android.location.LocationListener = object : android.location.LocationListener {
+    override fun onLocationChanged(location: Location) = onLocation(location)
+    @Deprecated("Deprecated in Java")
+    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
+    override fun onProviderEnabled(provider: String) = Unit
+    override fun onProviderDisabled(provider: String) = onProviderDisabled()
+}
+
+/** See [LocationFixValidity.deviceClockFixTimeMs]. */
+internal fun Location.deviceClockFixTimeMs(nowMs: Long = System.currentTimeMillis()): Long =
+    LocationFixValidity.deviceClockFixTimeMs(time, elapsedRealtimeNanos, nowMs, SystemClock.elapsedRealtimeNanos())

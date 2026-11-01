@@ -31,10 +31,19 @@ interface PointDao {
     suspend fun insert(point: PointEntity): Long
 
     @Update
-    suspend fun update(point: PointEntity)
+    suspend fun update(point: PointEntity): Int
 
     @Delete
-    suspend fun delete(point: PointEntity)
+    suspend fun delete(point: PointEntity): Int
+
+    @Query("DELETE FROM point_tags WHERE pointId = :pointId")
+    suspend fun deleteTagsForPoint(pointId: Long)
+
+    @Query("DELETE FROM point_tags WHERE tagId = :tagId")
+    suspend fun deletePointsForTag(tagId: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM points WHERE photoPath = :photoPath)")
+    suspend fun isPhotoReferenced(photoPath: String): Boolean
 
     @Query("SELECT * FROM points ORDER BY timestamp DESC")
     fun observeAll(): Flow<List<PointEntity>>
@@ -42,8 +51,14 @@ interface PointDao {
     @Query("SELECT * FROM points ORDER BY timestamp ASC")
     suspend fun getAll(): List<PointEntity>
 
+    @Query("SELECT * FROM points WHERE id = :pointId")
+    suspend fun getById(pointId: Long): PointEntity?
+
     @Query("SELECT * FROM points WHERE timestamp = :timestamp AND latitude = :latitude AND longitude = :longitude LIMIT 1")
     suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): PointEntity?
+
+    @Query("SELECT * FROM points WHERE timestamp = :timestamp LIMIT 1")
+    suspend fun findByTimestamp(timestamp: Long): PointEntity?
 
     @Query("SELECT * FROM points WHERE id > :afterId ORDER BY id ASC LIMIT :limit")
     suspend fun getPageAfterId(afterId: Long, limit: Int): List<PointEntity>
@@ -61,10 +76,10 @@ interface PointDao {
     suspend fun insertTag(tag: TagEntity): Long
 
     @Update
-    suspend fun updateTag(tag: TagEntity)
+    suspend fun updateTag(tag: TagEntity): Int
 
     @Query("DELETE FROM tags WHERE id = :tagId")
-    suspend fun deleteTag(tagId: Long)
+    suspend fun deleteTag(tagId: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPointTag(crossRef: PointTagCrossRef)
@@ -74,6 +89,15 @@ interface PointDao {
 
     @Query("SELECT tagId FROM point_tags WHERE pointId = :pointId")
     suspend fun getTagIdsForPoint(pointId: Long): List<Long>
+
+    @Query("SELECT id FROM tags WHERE id IN (:tagIds)")
+    suspend fun getExistingTagIds(tagIds: List<Long>): List<Long>
+
+    @Query("DELETE FROM point_tags WHERE pointId NOT IN (SELECT id FROM points) OR tagId NOT IN (SELECT id FROM tags)")
+    suspend fun deleteOrphanPointTags(): Int
+
+    @Query("SELECT * FROM point_tags ORDER BY pointId, tagId")
+    suspend fun getAllPointTagRelations(): List<PointTagCrossRef>
 
     @Transaction
     @Query("SELECT * FROM tags WHERE id = :tagId")

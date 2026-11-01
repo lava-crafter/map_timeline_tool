@@ -28,9 +28,12 @@ fun applyMapCachePolicy(context: Context, mapTileSourceId: String) {
     val isSatellite = mapTileSourceId == "eox_sentinel2_cloudless_2024"
     val config = Configuration.getInstance()
     // Do not set maxBytes to 0L here, because 0L will cause the SqlTileWriter to continuously delete ALL previously cached tiles!
-    // The network traffic restriction is handled by map.setUseDataConnection(!downloadedOnly) instead.
+    // MapScreen gates persistent writes separately; cache preferences do not restrict network access.
     val maxBytes = if (isSatellite) SATELLITE_CACHE_BYTES else DEFAULT_CACHE_BYTES
     config.tileFileSystemCacheMaxBytes = maxBytes
+    // osmdroid trims (size - trimBytes) once the cache exceeds maxBytes; its default trim target (500 MB) is above
+    // our caps, which made the trim a no-op. Keep the target below the cap.
+    config.tileFileSystemCacheTrimBytes = maxBytes / 10 * 8
 }
 
 private fun isOnWifi(context: Context): Boolean {

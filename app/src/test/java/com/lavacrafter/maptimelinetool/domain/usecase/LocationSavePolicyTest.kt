@@ -55,7 +55,7 @@ class LocationSavePolicyTest {
     }
 
     @Test
-    fun recentLastKnown_isSavedWithoutManualConfirmation() {
+    fun recentLastKnown_requiresManualConfirmation() {
         val decision = policy.evaluate(
             preciseLocation = null,
             fallbackLocation = GeoPoint(1.0, 2.0, accuracyMeters = 90f, fixTimeMs = nowMs - 120_000L),
@@ -65,21 +65,47 @@ class LocationSavePolicyTest {
 
         assertEquals(LocationSaveQuality.LAST_KNOWN_RECENT, decision.quality)
         assertTrue(decision.canSave)
-        assertFalse(decision.requiresManualConfirmation)
+        assertTrue(decision.requiresManualConfirmation)
     }
 
     @Test
-    fun staleLastKnown_doesNotRequireConfirmationForAutoSave() {
+    fun staleLastKnown_isRejectedForAutoSaveAndManualAdd() {
+        val now = 10_000_000L
         val decision = policy.evaluate(
             preciseLocation = null,
-            fallbackLocation = GeoPoint(1.0, 2.0, accuracyMeters = 200f, fixTimeMs = nowMs - 8_000_000L),
+            fallbackLocation = GeoPoint(1.0, 2.0, accuracyMeters = 200f, fixTimeMs = now - 8_000_000L),
             flow = LocationSaveFlow.AUTO_SAVE,
-            nowMs = nowMs
+            nowMs = now
         )
 
         assertEquals(LocationSaveQuality.LAST_KNOWN_STALE, decision.quality)
-        assertTrue(decision.canSave)
+        assertFalse(decision.canSave)
         assertFalse(decision.requiresManualConfirmation)
+        assertEquals(null, decision.location)
+        assertFalse(policy.evaluate(null, GeoPoint(1.0, 2.0, fixTimeMs = now - 8_000_000L), LocationSaveFlow.MANUAL_ADD, now).canSave)
+    }
+
+    @Test
+    fun autoSave_acceptsOnlyPreciseFresh() {
+        val precise = GeoPoint(1.0, 2.0, accuracyMeters = 4f, fixTimeMs = nowMs - 100L)
+        assertTrue(policy.evaluate(precise, null, LocationSaveFlow.AUTO_SAVE, nowMs).canSave)
+        assertFalse(policy.evaluate(null, precise, LocationSaveFlow.AUTO_SAVE, nowMs).canSave)
+        assertFalse(policy.evaluate(null, GeoPoint(1.0, 2.0, fixTimeMs = nowMs - 120_000L), LocationSaveFlow.AUTO_SAVE, nowMs).canSave)
+    }
+
+    @Test
+    fun futureAndInvalidCoordinatesAreUnavailableEvenFromPreciseProvider() {
+        listOf(
+            GeoPoint(1.0, 2.0, accuracyMeters = 3f, fixTimeMs = nowMs + 2_001L),
+            GeoPoint(Double.NaN, 2.0, accuracyMeters = 3f, fixTimeMs = nowMs),
+            GeoPoint(1.0, Double.POSITIVE_INFINITY, accuracyMeters = 3f, fixTimeMs = nowMs),
+            GeoPoint(91.0, 2.0, accuracyMeters = 3f, fixTimeMs = nowMs),
+            GeoPoint(1.0, -181.0, accuracyMeters = 3f, fixTimeMs = nowMs)
+        ).forEach { invalid ->
+            assertFalse(policy.evaluate(invalid, null, LocationSaveFlow.MANUAL_ADD, nowMs).canSave)
+            assertFalse(policy.evaluate(null, invalid, LocationSaveFlow.MANUAL_ADD, nowMs).canSave)
+        }
+        assertTrue(policy.evaluate(GeoPoint(1.0, 2.0, accuracyMeters = 3f, fixTimeMs = nowMs + 1_000L), null, LocationSaveFlow.AUTO_SAVE, nowMs).canSave)
     }
 
     @Test

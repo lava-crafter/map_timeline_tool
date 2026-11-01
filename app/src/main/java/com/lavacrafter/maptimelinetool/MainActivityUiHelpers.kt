@@ -16,10 +16,12 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,7 +48,12 @@ import com.lavacrafter.maptimelinetool.data.PointEntity
 import com.lavacrafter.maptimelinetool.domain.model.GeoPoint
 import com.lavacrafter.maptimelinetool.ui.ListScreen
 import com.lavacrafter.maptimelinetool.ui.MapScreen
+import com.lavacrafter.maptimelinetool.ui.CenterLocationResult
+import com.lavacrafter.maptimelinetool.ui.MapTileAccessPolicy
 import com.lavacrafter.maptimelinetool.ui.ZoomButtonBehavior
+import java.io.File
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.modules.SqlTileWriter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,11 +66,14 @@ internal fun MapWithListSheet(
     isActive: Boolean,
     zoomBehavior: ZoomButtonBehavior,
     markerScale: Float,
-    downloadedOnly: Boolean,
+    mapAccessPolicy: MapTileAccessPolicy,
     mapTileSourceId: String,
     onMapTileSourceChange: (String) -> Unit,
     onResolveCenterLocation: ((GeoPoint?) -> Unit) -> Unit,
-    scaffoldState: BottomSheetScaffoldState
+    scaffoldState: BottomSheetScaffoldState,
+    onCenterRequest: (() -> Unit)? = null,
+    centerResult: CenterLocationResult? = null,
+    onCenterResultConsumed: (String) -> Unit = {}
 ) {
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
@@ -88,10 +98,13 @@ internal fun MapWithListSheet(
                 isActive = isActive,
                 zoomBehavior = zoomBehavior,
                 markerScale = markerScale,
-                downloadedOnly = downloadedOnly,
+                mapAccessPolicy = mapAccessPolicy,
                 mapTileSourceId = mapTileSourceId,
                 onMapTileSourceChange = onMapTileSourceChange,
-                onResolveCenterLocation = onResolveCenterLocation
+                onResolveCenterLocation = onResolveCenterLocation,
+                onCenterRequest = onCenterRequest,
+                centerResult = centerResult,
+                onCenterResultConsumed = onCenterResultConsumed
             )
         }
     }
@@ -110,7 +123,7 @@ internal fun ZipExportOptionsDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val canExport = includePoints || includePhotos
+    val canExport = includePoints
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -141,7 +154,8 @@ internal fun ZipExportOptionsDialog(
                 Row {
                     Checkbox(
                         checked = includePhotos,
-                        onCheckedChange = onIncludePhotosChange
+                        onCheckedChange = onIncludePhotosChange,
+                        enabled = includePoints
                     )
                     Text(stringResource(R.string.export_zip_option_photos))
                 }
@@ -227,3 +241,42 @@ private fun getNetworkStatus(context: Context): NetworkStatus {
         else -> NetworkStatus.NONE
     }
 }
+
+/**
+ * Empties the osmdroid tile cache. The SQLite cache file is shared through a static handle that a live tile
+ * provider may hold open, so its rows are purged instead of deleting the file underneath that handle.
+ */
+internal data class TileCacheClearResult(
+    /** The SQLite tile rows (where downloaded areas live) were removed. */
+    val purged: Boolean,
+    val filesDeleted: Boolean
+) {
+    val complete: Boolean get() = purged && filesDeleted
+}
+
+internal fun clearOsmdroidTileCache(): TileCacheClearResult {
+    val config = Configuration.getInstance()
+    val purged = runCatching { SqlTileWriter().purgeCache() }.getOrDefault(false)
+    val cacheDirs = listOfNotNull(
+        config.osmdroidTileCache,
+        config.osmdroidBasePath?.let { File(it, "tiles") }
+    ).distinctBy { it.absolutePath }
+    val deleted = runCatching {
+        cacheDirs.all { dir ->
+            dir.listFiles().orEmpty()
+                .filterNot { it.name.startsWith(SqlTileWriter.DATABASE_FILENAME) }
+                .all { it.deleteRecursively() }
+        }
+    }.getOrDefault(false)
+    return TileCacheClearResult(purged = purged, filesDeleted = deleted)
+}
+
+/** Camera/document pickers can be missing (kiosk, managed profiles); report instead of crashing. */
+internal fun <I> ActivityResultLauncher<I>.launchOrElse(input: I, onNoHandler: () -> Unit): Boolean =
+    try {
+        launch(input)
+        true
+    } catch (_: ActivityNotFoundException) {
+        onNoHandler()
+        false
+    }

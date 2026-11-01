@@ -27,6 +27,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
@@ -39,14 +40,17 @@ import com.lavacrafter.maptimelinetool.quickadd.hasRequiredLocationPermissionsFo
 import com.lavacrafter.maptimelinetool.quickadd.isQuickAddExecutionAllowed
 import com.lavacrafter.maptimelinetool.quickadd.QuickAddResult
 import com.lavacrafter.maptimelinetool.quickadd.requiresBackgroundLocationForQuickAdd
+import kotlinx.coroutines.CancellationException
 
 internal const val ACTION_QUICK_ADD = "com.lavacrafter.maptimelinetool.notification.action.QUICK_ADD"
 
 private const val QUICK_ADD_LOCATION_TIMEOUT_MS = 5_000L
+internal const val QUICK_ADD_OVERALL_TIMEOUT_MS = 8_500L
 private const val QUICK_ADD_NOTIFICATION_ID = 1001
 private const val QUICK_ADD_RESULT_NOTIFICATION_ID = 2002
 private const val QUICK_ADD_NOTIFICATION_CHANNEL_ID = "quick_add_channel"
 private const val QUICK_ADD_RESULT_CHANNEL_ID = "quick_add_result_channel_v2"
+private const val LEGACY_QUICK_ADD_RESULT_CHANNEL_ID = "quick_add_result_channel"
 
 internal fun Context.showQuickAddNotification() {
     if (!canPostNotifications()) {
@@ -85,26 +89,38 @@ internal fun Context.isQuickAddNotificationAvailable(enabled: Boolean): Boolean 
         )
 }
 
-internal suspend fun Context.performQuickAdd() {
-    val graph = appGraph()
-    val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
-    if (!isQuickAddExecutionAllowed(
-            enabled = quickAddEnabled,
-            sdkInt = Build.VERSION.SDK_INT,
-            hasPreciseLocationPermission = hasPreciseLocationPermission(),
-            hasBackgroundLocationPermission = hasBackgroundLocationPermissionForQuickAdd()
-        )) {
-        syncQuickAddNotification(quickAddEnabled)
-        showQuickAddResult(quickAddBlockedReasonResId(quickAddEnabled))
-        return
+internal suspend fun Context.performQuickAdd(deadlineElapsedMs: Long = SystemClock.elapsedRealtime() + QUICK_ADD_OVERALL_TIMEOUT_MS,
+    clickTimeMs: Long = System.currentTimeMillis()) {
+    var committedResult: QuickAddResult? = null
+    var blocked = false
+    val result = try {
+        runQuickAddWithinDeadline((deadlineElapsedMs - SystemClock.elapsedRealtime()).coerceAtLeast(0L), { committedResult }) {
+            val graph = appGraph()
+            val quickAddEnabled = graph.settingsManagementUseCase.getQuickAddNotificationEnabled()
+            if (!isQuickAddExecutionAllowed(
+                    enabled = quickAddEnabled,
+                    sdkInt = Build.VERSION.SDK_INT,
+                    hasPreciseLocationPermission = hasPreciseLocationPermission(),
+                    hasBackgroundLocationPermission = hasBackgroundLocationPermissionForQuickAdd()
+                )) {
+                syncQuickAddNotification(quickAddEnabled)
+                showQuickAddResult(quickAddBlockedReasonResId(quickAddEnabled))
+                blocked = true
+                return@runQuickAddWithinDeadline null
+            }
+            graph.quickAddResolver.savePoint(
+                timeoutMs = QUICK_ADD_LOCATION_TIMEOUT_MS,
+                clickTimeMs = clickTimeMs,
+                onCoreSaved = { committedResult = it }
+            )
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        committedResult
     }
 
-    val clickTimeMs = System.currentTimeMillis()
-    val result = try {
-        graph.quickAddResolver.savePoint(timeoutMs = QUICK_ADD_LOCATION_TIMEOUT_MS, clickTimeMs = clickTimeMs)
-    } catch (_: Exception) {
-        null
-    }
+    if (blocked) return
 
     when (result) {
         QuickAddResult.SAVED_FROM_RECENT_CACHE,
@@ -118,7 +134,7 @@ internal suspend fun Context.performQuickAdd() {
             showQuickAddResult(R.string.toast_quick_add_failed_no_fresh_accurate_location)
         }
         null -> {
-            showQuickAddResult(R.string.toast_location_unavailable_save_failed)
+            showQuickAddResult(R.string.toast_quick_add_save_failed)
         }
     }
 }
@@ -135,9 +151,13 @@ private fun Context.showQuickAddResultNotification(message: String) {
     }
 
     val channelId = QUICK_ADD_RESULT_CHANNEL_ID
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // Replaced by the v2 channel; otherwise system settings keep listing an orphan "Quick Add" entry.
+        getSystemService(NotificationManager::class.java)?.deleteNotificationChannel(LEGACY_QUICK_ADD_RESULT_CHANNEL_ID)
+    }
     ensureNotificationChannel(
         channelId = channelId,
-        nameResId = R.string.notification_channel_name,
+        nameResId = R.string.notification_result_channel_name,
         descriptionResId = R.string.notification_channel_desc
     )
 

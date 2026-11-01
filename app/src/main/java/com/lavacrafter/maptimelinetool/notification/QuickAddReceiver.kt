@@ -19,6 +19,8 @@ package com.lavacrafter.maptimelinetool.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,14 +32,22 @@ class QuickAddReceiver : BroadcastReceiver() {
             return
         }
 
+        // Repeated taps while a save is running would record duplicate points; ignore them.
+        if (!inFlight.compareAndSet(false, true)) return
+        val deadlineElapsedMs = SystemClock.elapsedRealtime() + QUICK_ADD_OVERALL_TIMEOUT_MS
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                appContext.performQuickAdd()
+                appContext.performQuickAdd(deadlineElapsedMs)
             } finally {
+                inFlight.set(false)
                 pendingResult.finish()
             }
         }
+    }
+
+    private companion object {
+        val inFlight = AtomicBoolean(false)
     }
 }

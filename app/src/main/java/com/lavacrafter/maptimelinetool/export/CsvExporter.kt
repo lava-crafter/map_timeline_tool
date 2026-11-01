@@ -73,6 +73,8 @@ object CsvExporter {
         photoRelPathResolver: (Point) -> String? = { null }
     ) {
         OutputStreamWriter(outputStream, Charsets.UTF_8).use { writer ->
+            // A BOM makes Excel open the file as UTF-8 (otherwise CJK text is garbled); our importer skips it.
+            writer.write('\uFEFF'.code)
             writeCsv(points, writer, photoRelPathResolver)
         }
     }
@@ -89,21 +91,21 @@ object CsvExporter {
         writer: Writer,
         photoRelPathResolver: (Point) -> String? = { null }
     ) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
-        writeRow(writer, headers)
+        writeRow(writer, headers + CsvTextEncoding.column)
         points.forEach { p ->
             val time = sdf.format(Date(p.timestamp))
             val values = listOf(
-                p.title,
-                p.note,
+                CsvTextEncoding.encode(p.title),
+                CsvTextEncoding.encode(p.note),
                 p.latitude.toString(),
                 p.longitude.toString(),
                 time,
                 p.locationAccuracyMeters?.toString().orEmpty(),
                 p.locationFixTimeMs?.toString().orEmpty(),
-                p.locationProvider.orEmpty(),
+                CsvTextEncoding.encode(p.locationProvider.orEmpty()),
                 p.pressureHpa?.toString().orEmpty(),
                 p.ambientLightLux?.toString().orEmpty(),
                 p.accelerometerX?.toString().orEmpty(),
@@ -116,10 +118,11 @@ object CsvExporter {
                 p.magnetometerY?.toString().orEmpty(),
                 p.magnetometerZ?.toString().orEmpty(),
                 p.noiseDb?.toString().orEmpty(),
-                photoRelPathResolver(p).orEmpty(),
+                CsvTextEncoding.encode(photoRelPathResolver(p).orEmpty()),
                 "",
                 "",
-                ""
+                "",
+                CsvTextEncoding.version
             )
             writeRow(writer, values)
         }
