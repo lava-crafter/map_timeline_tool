@@ -147,9 +147,11 @@ suspend fun preparePhotoForPersist(
             if (!sourceFile.exists() || !sourceFile.canRead()) {
                 return@withContext PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
             }
+            // A camera app may leave an empty or unsupported file; keep it as-is rather than failing the whole save.
+            val keepOriginal = PreparedPhoto(photoPath, generatedPath = null, sourcePath = null)
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(sourceFile.absolutePath, bounds)
-            require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Invalid photo dimensions" }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext keepOriginal
             val sampleSize = photoDecodeSampleSize(bounds.outWidth, bounds.outHeight)
             val bitmap = BitmapFactory.decodeFile(
                 sourceFile.absolutePath,
@@ -158,8 +160,7 @@ suspend fun preparePhotoForPersist(
                     inScaled = false
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-            )
-                ?: throw IllegalArgumentException("Unable to decode photo")
+            ) ?: return@withContext keepOriginal
             var corrected: Bitmap? = null
             try {
                 require(bitmap.width <= MAX_WORKING_PHOTO_SIDE &&

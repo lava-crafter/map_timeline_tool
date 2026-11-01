@@ -238,11 +238,30 @@ class PointWriteUseCaseTest {
                 emptySet(), "missing.jpg", onCoreSaved = { committed = true }) }.exceptionOrNull(),
             runCatching { writer.updatePoint(old, "Changed", "", "missing.jpg",
                 onCoreSaved = { committed = true }) }.exceptionOrNull(),
-            runCatching { writer.importPoints(listOf(point().copy(photoPath = "missing.jpg"))) }.exceptionOrNull()
+            runCatching { writer.importPoints(listOf(point().copy(timestamp = 3L, photoPath = "missing.jpg"))) }.exceptionOrNull()
         )
         assertTrue(failures.all { it is IllegalArgumentException })
         assertFalse(committed)
         assertEquals(listOf(old), repo.inserted)
+    }
+
+    @Test
+    fun `import skips points that already exist without overwriting them`() = runBlocking {
+        val existing = point().copy(id = 10L, photoPath = "existing.jpg", pressureHpa = 1_002f)
+        val repo = FakePointRepository().apply { inserted += existing }
+        val writer = PointWriteUseCase(repo, snapshotPort(), {}, photoCommitGuard = PhotoCommitGuard { true })
+
+        val result = writer.importPoints(
+            listOf(
+                point().copy(title = "Re-imported"),
+                point().copy(timestamp = 5L, title = "New"),
+                point().copy(timestamp = 5L, title = "New twin")
+            )
+        )
+
+        assertEquals(PointWriteUseCase.ImportResult(imported = 2, duplicates = 1), result)
+        assertEquals(existing, repo.inserted.first())
+        assertEquals(listOf("New", "New twin"), repo.inserted.drop(1).map { it.title })
     }
 
     @Test
@@ -458,7 +477,8 @@ private class FakePointRepository : PointRepositoryGateway {
     }
     override suspend fun getAll(): List<Point> = inserted.toList()
     override suspend fun isPhotoReferenced(photoPath: String): Boolean = inserted.any { it.photoPath == photoPath }
-    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point? = null
+    override suspend fun findByImportKey(timestamp: Long, latitude: Double, longitude: Double): Point? =
+        inserted.firstOrNull { it.timestamp == timestamp && it.latitude == latitude && it.longitude == longitude }
     override suspend fun getPageAfterId(afterId: Long, limit: Int): List<Point> = emptyList()
     override fun observeTags(): Flow<List<Tag>> = flowOf(emptyList())
     override suspend fun getAllTags(): List<Tag> = emptyList()

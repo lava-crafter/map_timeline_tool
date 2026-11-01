@@ -150,7 +150,7 @@ class CsvParseTest {
 
     @Test
     fun ordinaryCsvFormulaSafeTextRoundTripsExactlyWithoutChangingNegativeCoordinates() {
-        val titles = listOf("=1+1", "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =1+1", "MTTCSV1:abcd", "Safe")
+        val titles = listOf("=1+1", "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =1+1", "MTTCSV1:abcd", "Safe", "'quoted")
         val points = titles.mapIndexed { index, title ->
             Point(timestamp = 1_700_000_000_000L + index, latitude = -12.5, longitude = -3.25,
                 title = title, note = if (index == 6) "MTTCSV1:abc" else "=HYPERLINK(\"bad\")",
@@ -164,6 +164,10 @@ class CsvParseTest {
         assertTrue(!exported.contains("\"+SUM(1,2)\""))
         assertTrue(!exported.contains("\"-1+2\""))
         assertTrue(!exported.contains("\"@SUM(1,2)\""))
+        // Escaped text stays readable for spreadsheets and other tools.
+        assertTrue(exported.contains("\"'-1+2\""))
+        assertTrue(exported.contains("\"''quoted\""))
+        assertTrue(exported.contains("\"MTTCSV1:abcd\""))
         assertEquals(0, imported.skipped)
         // The parser applies the app's existing title normalization on import.
         assertEquals(titles.map(String::trim), imported.points.map { it.title })
@@ -182,5 +186,15 @@ class CsvParseTest {
 
         val external = "name,description,latitude,longitude,time_utc\nMTTCSV1:qq,,1,2,1000\n"
         assertEquals("MTTCSV1:qq", CsvImporter.parseOrdinaryCsv(external.reader()).points.single().title)
+    }
+
+    @Test
+    fun legacyHexEncodedExportStillImports() {
+        // "-5" hex-encoded by the earlier export format.
+        val legacy = "name,description,latitude,longitude,time_utc,mtt_text_encoding\n" +
+            "MTTCSV1:2d35,plain,1,2,1000,hex-v1\n"
+        val point = CsvImporter.parseOrdinaryCsv(legacy.reader()).points.single()
+        assertEquals("-5", point.title)
+        assertEquals("plain", point.note)
     }
 }

@@ -92,7 +92,6 @@ import com.lavacrafter.maptimelinetool.ui.ExportScreens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.first
 import com.lavacrafter.maptimelinetool.ui.AboutScreen
 import com.lavacrafter.maptimelinetool.ui.AddPointDialog
 import com.lavacrafter.maptimelinetool.ui.AppViewModel
@@ -185,6 +184,7 @@ class MainActivity : AppCompatActivity() {
                 val editWriteInProgress = pointWriteState != PointWriteState.Idle
                 var tagWriteInProgress by remember { mutableStateOf(false) }
                 var cacheClearInProgress by remember { mutableStateOf(false) }
+                var showClearCacheConfirm by rememberSaveable { mutableStateOf(false) }
                 var pendingLocationRequest by rememberSaveable(stateSaver = LocationPermissionRequestSaver) { mutableStateOf<LocationPermissionRequest?>(null) }
                 var foregroundPermissionRequestId by rememberSaveable { mutableStateOf<String?>(null) }
                 var notificationPermissionRequestId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -243,6 +243,23 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val scope = rememberCoroutineScope()
+                val clearMapCache: () -> Unit = {
+                    if (!cacheClearInProgress) {
+                        cacheClearInProgress = true
+                        scope.launch {
+                            val result = try {
+                                withContext(Dispatchers.IO) { clearOsmdroidTileCache() }
+                            } finally {
+                                cacheClearInProgress = false
+                            }
+                            // Downloaded areas live in the purged SQLite rows; once those are gone the area records
+                            // would advertise offline coverage that no longer exists, even if a file delete failed.
+                            if (result.purged) settingsViewModel.clearDownloadedAreas()
+                            val messageRes = if (result.complete) R.string.toast_cache_cleared else R.string.toast_cache_clear_failed
+                            Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
                 fun showNoAppToast() {
                     Toast.makeText(context, context.getString(R.string.toast_no_app_available), Toast.LENGTH_SHORT).show()
                 }
@@ -271,9 +288,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 // Save only the request, never an unbounded List<Point> in the Activity state Bundle.
                 var pendingExportKind by rememberSaveable { mutableStateOf<String?>(null) }
-                var pendingExportPointIds by rememberSaveable { mutableStateOf(longArrayOf()) }
-                // "All points" exports save a flag and resolve rows at write time: no full ID list in the Bundle,
-                // and no dependency on the possibly still-empty UI snapshot.
+                // Exports save the selection (a flag, tag, time range or the user's manual picks) and resolve rows at
+                // write time: no full ID list in the Bundle, and no dependency on the possibly still-empty UI snapshot.
+                var pendingExportFilter by rememberSaveable(stateSaver = ExportSelectionSaver) { mutableStateOf<ExportSelection?>(null) }
                 var pendingExportAllPoints by rememberSaveable { mutableStateOf(false) }
                 var pendingImportKind by rememberSaveable { mutableStateOf<String?>(null) }
                 var pendingExportSelection by rememberSaveable(stateSaver = ExportSelectionSaver) { mutableStateOf<ExportSelection?>(null) }
@@ -285,13 +302,13 @@ class MainActivity : AppCompatActivity() {
                 val networkStatus by observeNetworkStatus(context)
                 fun clearExportRequest() {
                     pendingExportKind = null
-                    pendingExportPointIds = longArrayOf()
+                    pendingExportFilter = null
                     pendingExportAllPoints = false
                 }
                 fun canStartFileTask(): Boolean = pendingExportKind == null && fileTaskState == FileTaskState.Idle
-                fun beginExport(kind: ExportFileKind, pointIds: LongArray = longArrayOf(), allPoints: Boolean = false) {
+                fun beginExport(kind: ExportFileKind, filter: ExportSelection? = null, allPoints: Boolean = false) {
                     check(pendingExportKind == null) { "Export already in progress" }
-                    pendingExportPointIds = pointIds
+                    pendingExportFilter = filter
                     pendingExportAllPoints = allPoints
                     pendingExportKind = kind.name
                 }
@@ -327,7 +344,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 fun exportToDocument(uri: Uri?, kind: ExportFileKind) {
                     val requestMatches = pendingExportKind == kind.name
-                    val ids = pendingExportPointIds.toList()
+                    val filter = pendingExportFilter
                     val allPoints = pendingExportAllPoints
                     val zipOptions = ZipExporter.ExportOptions(zipIncludePoints, zipIncludeTags, zipIncludeSensors, zipIncludePhotos)
                     clearExportRequest()
@@ -338,6 +355,7 @@ class MainActivity : AppCompatActivity() {
                     val started = viewModel.fileTasks.start(FileTaskKind.EXPORT) {
                         val count = writeCreatedDocument(appContext, uri) { output ->
                             val repository = appContext.appGraph().pointRepositoryGateway
+                            val ids = filter?.let { resolveExportSelectionIds(repository, it.kind) }.orEmpty()
                             val pending = buildExportPayload(repository, kind, ids, allPoints, zipOptions)
                             val pointTagNameMap = if (kind != ExportFileKind.CSV && kind != ExportFileKind.ZIP) {
                                 buildPointTagNameMap(repository, pending.points)
@@ -405,14 +423,16 @@ class MainActivity : AppCompatActivity() {
                     pendingImportKind = null
                     if (uri == null) return@rememberLauncherForActivityResult
                     val appContext = context.applicationContext
-                    val started = viewModel.fileTasks.start(FileTaskKind.CSV_IMPORT) {
+                    // The task outlives this Activity; capture the ViewModel, never the Activity.
+                    val appViewModel = viewModel
+                    val started = appViewModel.fileTasks.start(FileTaskKind.CSV_IMPORT) {
                         val parsed = withContext(Dispatchers.IO) {
                             appContext.contentResolver.openInputStream(uri)?.use { input ->
                                 CsvImporter.parseOrdinaryCsv(CsvImporter.strictUtf8Reader(input))
                             } ?: throw IOException("Failed to open CSV import")
                         }
-                        val result = viewModel.importPoints(parsed.points)
-                        FileTaskResult.CsvImported(result.imported, parsed.skipped, parsed.warnings)
+                        val result = appViewModel.importPoints(parsed.points)
+                        FileTaskResult.CsvImported(result.imported, parsed.skipped, parsed.warnings, result.duplicates)
                     }
                     if (!started) {
                         Toast.makeText(context, context.getString(R.string.toast_import_failed), Toast.LENGTH_SHORT).show()
@@ -437,6 +457,9 @@ class MainActivity : AppCompatActivity() {
                         text = {
                             Column {
                                 Text(stringResource(R.string.csv_import_summary, summary.imported, summary.skipped))
+                                if (summary.duplicates > 0) {
+                                    Text(stringResource(R.string.csv_import_duplicates, summary.duplicates))
+                                }
                                 summary.warnings.forEach { warning ->
                                     val reason = when (warning.reason) {
                                         CsvImporter.SkipReason.INVALID_COORDINATES -> R.string.csv_invalid_coordinates
@@ -647,7 +670,13 @@ class MainActivity : AppCompatActivity() {
                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", context.packageName, null)
                         }
-                    ) { showNoAppToast() }
+                    ) {
+                        // No result callback will arrive to release the pending request; without this every later
+                        // location action would see it as still in flight and return early.
+                        settingsPermissionRequestId = null
+                        pendingLocationRequest = null
+                        showNoAppToast()
+                    }
                 }
 
                 fun requestLocationPermission() {
@@ -941,29 +970,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 LaunchedEffect(pendingExportSelection) {
                     val sel = pendingExportSelection ?: return@LaunchedEffect
-                    // A recreated stateIn collector starts empty; resolve the saved IDs against Room,
-                    // not that transient UI snapshot.
-                    val currentPoints = viewModel.getAllPoints()
-                    val pointsToExport = when (sel.kind) {
-                        is ExportKind.All -> currentPoints
-                        is ExportKind.ByTag -> {
-                            val tagId = sel.kind.tagId
-                            viewModel.observePointsForTag(tagId).first()
-                        }
-                        is ExportKind.ByTime -> {
-                            currentPoints.filter { it.timestamp in sel.kind.fromMs..sel.kind.toMs }
-                        }
-                        is ExportKind.Manual -> {
-                            val ids = sel.kind.ids
-                            currentPoints.filter { ids.contains(it.id) }
-                        }
-                    }
                     if (!canStartFileTask()) {
                         pendingExportSelection = null
                         return@LaunchedEffect
                     }
                     val baseName = buildExportBaseName()
-                    beginExport(ExportFileKind.CSV, pointsToExport.map { it.id }.toLongArray())
+                    if (sel.kind is ExportKind.All) beginExport(ExportFileKind.CSV, allPoints = true)
+                    else beginExport(ExportFileKind.CSV, filter = sel)
                     exportCsvLauncher.launchOrElse("$baseName.csv") { clearExportRequest(); showNoAppToast() }
                     pendingExportSelection = null
                     showExportFlow = false
@@ -1284,20 +1297,9 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     },
                                     onClearCache = {
-                                        // Area metadata is not proof that tiles exist; clearing the cache clears both.
-                                        if (!cacheClearInProgress) {
-                                            cacheClearInProgress = true
-                                            scope.launch {
-                                                val cleared = try {
-                                                    withContext(Dispatchers.IO) { clearOsmdroidTileCache() }
-                                                } finally {
-                                                    cacheClearInProgress = false
-                                                }
-                                                if (cleared) settingsViewModel.clearDownloadedAreas()
-                                                val messageRes = if (cleared) R.string.toast_cache_cleared else R.string.toast_cache_clear_failed
-                                                Toast.makeText(context, resources.getString(messageRes), Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
+                                        // Area downloads are frozen, so offline areas cleared here cannot be fetched
+                                        // again; make the user confirm before discarding them.
+                                        if (settingsState.downloadedAreas.isNotEmpty()) showClearCacheConfirm = true else clearMapCache()
                                     },
                                     onOpenAbout = { showAbout = true },
                                     defaultTags = tagsState,
@@ -1621,6 +1623,27 @@ class MainActivity : AppCompatActivity() {
                             }
                         },
                         onDismiss = { if (!tagWriteInProgress) editingTagId = null }
+                    )
+                }
+
+                if (showClearCacheConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showClearCacheConfirm = false },
+                        title = { Text(stringResource(R.string.action_clear_cache)) },
+                        text = { Text(stringResource(R.string.clear_cache_offline_areas_message, settingsState.downloadedAreas.size)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showClearCacheConfirm = false
+                                clearMapCache()
+                            }) {
+                                Text(stringResource(R.string.clear_cache_confirm_button))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearCacheConfirm = false }) {
+                                Text(stringResource(R.string.action_cancel))
+                            }
+                        }
                     )
                 }
 

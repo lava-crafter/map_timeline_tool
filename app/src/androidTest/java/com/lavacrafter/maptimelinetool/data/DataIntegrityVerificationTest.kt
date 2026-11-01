@@ -72,7 +72,7 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
-    fun importingLegacyCsvAddsNewPointWithoutTouchingExistingPhotoAndMetadata() = runBlocking {
+    fun importingLegacyCsvSkipsExistingPointWithoutTouchingItsPhotoAndMetadata() = runBlocking {
         val id = database.pointDao().insert(
             pointEntity(timestamp = 1_704_067_200_000L).copy(
                 photoPath = "original.jpg",
@@ -85,13 +85,15 @@ class DataIntegrityVerificationTest {
                 "Point,,10.0,20.0,2024-01-01T00:00:00Z\n"
         )
 
-        pointWriter().importPoints(imported)
+        val result = pointWriter().importPoints(imported)
 
-        val afterImport = database.pointDao().getAll().single { it.id == id }
+        assertEquals(0, result.imported)
+        assertEquals(1, result.duplicates)
+        val afterImport = database.pointDao().getAll().single()
+        assertEquals(id, afterImport.id)
         assertEquals("original.jpg", afterImport.photoPath)
         assertEquals(8f, afterImport.locationAccuracyMeters)
         assertEquals(1_002f, afterImport.pressureHpa)
-        assertEquals(2, database.pointDao().getAll().size)
     }
 
     @Test
@@ -116,25 +118,23 @@ class DataIntegrityVerificationTest {
     }
 
     @Test
-    fun importingTheSameLegacyCsvTwiceCreatesTwoIndependentSets() = runBlocking {
+    fun importingTheSameLegacyCsvTwiceKeepsOneSet() = runBlocking {
         val imported = CsvImporter.parseCsv(
             "name,description,latitude,longitude,time_utc\n" +
                 "Old format,Some notes,10.0,20.0,2024-01-01T00:00:00Z\n"
         )
         val writer = pointWriter()
 
-        writer.importPoints(imported)
-        writer.importPoints(imported)
+        assertEquals(1, writer.importPoints(imported).imported)
+        val second = writer.importPoints(imported)
 
-        val saved = database.pointDao().getAll()
-        assertEquals(2, saved.size)
-        assertTrue(saved[0].id != saved[1].id)
-        saved.forEach { row ->
-            assertEquals("Old format", row.title)
-            assertEquals("Some notes", row.note)
-            assertEquals(null, row.pressureHpa)
-            assertEquals(null, row.photoPath)
-        }
+        assertEquals(0, second.imported)
+        assertEquals(1, second.duplicates)
+        val saved = database.pointDao().getAll().single()
+        assertEquals("Old format", saved.title)
+        assertEquals("Some notes", saved.note)
+        assertEquals(null, saved.pressureHpa)
+        assertEquals(null, saved.photoPath)
     }
 
     @Test
@@ -145,8 +145,12 @@ class DataIntegrityVerificationTest {
                 "Two,,10.0,20.0,2024-01-01T00:00:00Z\n").reader()
         )
 
-        assertEquals(2, pointWriter().importPoints(parsed.points).imported)
+        val writer = pointWriter()
+        assertEquals(2, writer.importPoints(parsed.points).imported)
         assertEquals(setOf("One", "Two"), database.pointDao().getAll().map { it.title }.toSet())
+        // Re-importing the same file is still idempotent.
+        assertEquals(PointWriteUseCase.ImportResult(imported = 0, duplicates = 2), writer.importPoints(parsed.points))
+        assertEquals(2, database.pointDao().getAll().size)
     }
 
     @Test

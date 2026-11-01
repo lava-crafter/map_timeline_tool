@@ -74,11 +74,8 @@ object ZipImporter {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 if (++entryCount > limits.maxEntries) throw ZipImportLimitExceededException("Too many archive entries")
-                val normalizedName = normalizeEntryName(entry.name)
-                require(normalizedName != null) { "Unsafe archive path: ${entry.name}" }
-                if (normalizedName.length > limits.maxEntryNameLength) {
-                    throw ZipImportLimitExceededException("Archive entry name too long")
-                }
+                // Directory entries ("photos/", "__MACOSX/") carry no data and are never written; skip them
+                // before the strict path check so re-zipped backups still restore.
                 if (entry.isDirectory) {
                     unrecognizedEntryCount += 1
                     if (unrecognizedEntryCount > limits.maxUnrecognizedEntries) {
@@ -86,6 +83,11 @@ object ZipImporter {
                     }
                     zip.closeEntry()
                     continue
+                }
+                val normalizedName = normalizeEntryName(entry.name)
+                require(normalizedName != null) { "Unsafe archive path: ${entry.name}" }
+                if (normalizedName.length > limits.maxEntryNameLength) {
+                    throw ZipImportLimitExceededException("Archive entry name too long")
                 }
                 val logicalName = normalizedName.lowercase(Locale.ROOT)
                 val recognized = logicalName in setOf(

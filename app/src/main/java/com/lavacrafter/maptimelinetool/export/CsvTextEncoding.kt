@@ -16,29 +16,35 @@ limitations under the License.
 
 package com.lavacrafter.maptimelinetool.export
 
-/** Only ordinary CSV exports use this protocol; ZIP backup CSV remains unchanged. */
+/**
+ * Only ordinary CSV exports use this protocol; ZIP backup CSV remains unchanged. Each row names its encoding in
+ * [column]. Formula-like text gets the leading apostrophe spreadsheets treat as "literal text", so the file stays
+ * readable in Excel, Sheets and GIS tools while this app can still restore the exact original.
+ */
 internal object CsvTextEncoding {
     const val column = "mtt_text_encoding"
-    const val version = "hex-v1"
-    private const val prefix = "MTTCSV1:"
-    private const val digits = "0123456789abcdef"
+    const val version = "quote-v1"
+    /** Older exports hex-encoded such cells; still decoded on import. */
+    private const val legacyHexVersion = "hex-v1"
+    private const val legacyHexPrefix = "MTTCSV1:"
+    private const val quote = '\''
 
     fun encode(value: String): String {
         val first = value.trimStart { it.isWhitespace() || it == '\uFEFF' }.firstOrNull()
-        if (first !in listOf('=', '+', '-', '@') && !value.startsWith(prefix)) return value
-        return buildString {
-            append(prefix)
-            for (byte in value.toByteArray(Charsets.UTF_8)) {
-                append(digits[(byte.toInt() and 0xff) ushr 4])
-                append(digits[byte.toInt() and 0x0f])
-            }
-        }
+        // Values that already start with the quote are escaped too, so decoding can always drop exactly one.
+        return if (first in listOf('=', '+', '-', '@') || value.startsWith(quote)) "$quote$value" else value
     }
 
     /** A malformed encoded cell is an invalid row, not an invitation to silently rewrite text. */
-    fun decode(value: String): String? {
-        if (!value.startsWith(prefix)) return value
-        val hex = value.substring(prefix.length)
+    fun decode(value: String, encoding: String?): String? = when (encoding) {
+        version -> value.removePrefix(quote.toString())
+        legacyHexVersion -> decodeLegacyHex(value)
+        else -> value
+    }
+
+    private fun decodeLegacyHex(value: String): String? {
+        if (!value.startsWith(legacyHexPrefix)) return value
+        val hex = value.substring(legacyHexPrefix.length)
         if (hex.length % 2 != 0) return null
         val bytes = ByteArray(hex.length / 2)
         for (index in bytes.indices) {

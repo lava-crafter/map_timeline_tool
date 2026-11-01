@@ -75,9 +75,14 @@ object MetadataCsvParser {
     private fun readRows(reader: Reader, limits: Limits): List<List<String>> {
         require(limits.maxRecords >= 0 && limits.maxFields > 0) { "Invalid metadata CSV limits" }
         val input = PushbackReader(reader, 1)
+        val recordLimits = CsvImporter.Limits(
+            maxRecordChars = limits.maxRecordChars,
+            maxFieldChars = limits.maxFieldChars,
+            maxFields = limits.maxFields
+        )
         val rows = mutableListOf<List<String>>()
         while (true) {
-            val row = readRow(input, limits) ?: break
+            val row = CsvImporter.readCsvRecord(input, recordLimits, strict = true) ?: break
             require(row.size <= limits.maxFields) { "Metadata CSV row has too many fields" }
             require(row.any { it.isNotEmpty() }) { "Blank metadata CSV row" }
             // maxRecords counts metadata rows, not the header row.
@@ -87,64 +92,6 @@ object MetadataCsvParser {
             rows += row
         }
         return rows
-    }
-
-    private fun readRow(reader: PushbackReader, limits: Limits): List<String>? {
-        val fields = mutableListOf<String>()
-        val field = StringBuilder()
-        var quoted = false
-        var closedQuote = false
-        var started = false
-        var total = 0
-        fun add(ch: Char) {
-            field.append(ch)
-            if (field.length > limits.maxFieldChars || ++total > limits.maxRecordChars) {
-                throw IllegalArgumentException("Metadata CSV exceeds the configured size budget")
-            }
-        }
-        while (true) {
-            val value = reader.read()
-            if (value < 0) {
-                if (!started && fields.isEmpty() && field.isEmpty()) return null
-                require(!quoted) { "Unterminated quoted field in metadata CSV" }
-                fields += field.toString()
-                return fields
-            }
-            val ch = value.toChar()
-            if (!started && fields.isEmpty() && field.isEmpty() && ch == '\uFEFF') continue
-            started = true
-            when {
-                quoted && ch == '"' -> {
-                    val next = reader.read()
-                    if (next == '"'.code) add('"')
-                    else {
-                        quoted = false
-                        closedQuote = true
-                        if (next >= 0) reader.unread(next)
-                    }
-                }
-                quoted -> add(ch)
-                closedQuote && ch != ',' && ch != '\n' && ch != '\r' ->
-                    throw IllegalArgumentException("Malformed quoted field in metadata CSV")
-                ch == '"' && field.isEmpty() -> quoted = true
-                ch == '"' -> throw IllegalArgumentException("Malformed quoted field in metadata CSV")
-                ch == ',' -> {
-                    fields += field.toString()
-                    require(fields.size < limits.maxFields) { "Metadata CSV row has too many fields" }
-                    field.clear()
-                    closedQuote = false
-                }
-                ch == '\n' || ch == '\r' -> {
-                    if (ch == '\r') {
-                        val next = reader.read()
-                        if (next >= 0 && next != '\n'.code) reader.unread(next)
-                    }
-                    fields += field.toString()
-                    return fields
-                }
-                else -> add(ch)
-            }
-        }
     }
 
     private fun malformed(message: String): Nothing = throw IllegalArgumentException(message)

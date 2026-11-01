@@ -9,6 +9,7 @@
     <string name="toast_import_success">%1$d件の地点を読み込みました</string>
     <string name="toast_import_failed">読み込みに失敗しました</string>
     <string name="csv_import_summary">%1$d件の地点を読み込み、無効な%2$d行をスキップしました。</string>
+    <string name="csv_import_duplicates">既に存在する地点 %1$d 件（同じ時刻と位置）をスキップしました。</string>
     <string name="csv_skipped_row">データ行%1$d：%2$s</string>
     <string name="csv_invalid_coordinates">座標が無効</string>
     <string name="csv_invalid_timestamp">タイムスタンプが無効または未指定</string>
@@ -56,6 +57,8 @@
     <string name="toast_permission_denied">位置情報の権限が拒否されました</string>
     <string name="toast_export_failed">書き出しに失敗しました</string>
     <string name="toast_cache_cleared">地図キャッシュを消去しました</string>
+    <string name="clear_cache_offline_areas_message">ダウンロード済みのオフライン地図エリア %1$d 件も削除されます。エリアのダウンロードは現在利用できないため、再ダウンロードはできません。</string>
+    <string name="clear_cache_confirm_button">消去する</string>
     <string name="toast_point_added">地点を追加しました</string>
     <string name="toast_point_save_failed">地点を保存できませんでした。編集内容は残っています。もう一度お試しください。</string>
     <string name="toast_point_update_failed">地点を更新できませんでした。もう一度お試しください。</string>

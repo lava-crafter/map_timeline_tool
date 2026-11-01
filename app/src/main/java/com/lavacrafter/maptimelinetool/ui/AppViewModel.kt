@@ -48,6 +48,7 @@ import com.lavacrafter.maptimelinetool.text.sanitizeTagName
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -125,7 +126,7 @@ class AppViewModel(
     /** Called once the UI has shown a terminal restore result, so recreation does not replay it. */
     fun acknowledgeRestoreResult() {
         val current = _restoreState.value
-        if (current is RestoreState.Success || current is RestoreState.SuccessWithWarning || current is RestoreState.Failure) {
+        if (current.isTerminal()) {
             _restoreState.compareAndSet(current, RestoreState.Idle)
         }
     }
@@ -136,12 +137,17 @@ class AppViewModel(
             try {
                 coordinator.restore(uri, _restoreState) { stats, movePhotos -> importZipData(stats, movePhotos) }
             } catch (cancelled: CancellationException) {
-                _restoreState.value = RestoreState.Idle
+                // A cancel that lands during the non-cancellable commit still lets it finish and publish its
+                // result; keep that result so the UI reloads settings instead of reporting a cancelled restore.
+                _restoreState.update { current -> if (current.isTerminal()) current else RestoreState.Idle }
             } catch (error: Exception) {
                 _restoreState.value = RestoreState.Failure(error.message ?: "Restore failed")
             }
         }
     }
+
+    private fun RestoreState.isTerminal(): Boolean =
+        this is RestoreState.Success || this is RestoreState.SuccessWithWarning || this is RestoreState.Failure
 
     fun cancelRestore() {
         restoreJob?.cancel()

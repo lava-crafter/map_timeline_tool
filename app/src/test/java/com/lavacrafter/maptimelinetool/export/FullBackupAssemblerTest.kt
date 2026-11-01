@@ -110,7 +110,7 @@ class FullBackupAssemblerTest {
     }
 
     @Test
-    fun `missing photo is skipped and reported while orphan relation still fails`() = runBlocking {
+    fun `missing photo and orphan relation are skipped instead of failing the backup`() = runBlocking {
         val missingPhoto = BackupRepository(
             listOf(point(1).copy(photoPath = "missing.jpg"), point(2).copy(photoPath = "missing.jpg"), point(3)),
             emptyList(), emptyList()
@@ -124,8 +124,10 @@ class FullBackupAssemblerTest {
         assertEquals(3, imported.points.size)
         assertTrue(imported.points.all { it.photoPath == null })
 
-        val orphan = BackupRepository(listOf(point(1)), emptyList(), listOf(PointTagRelation(1, 99)))
-        assertTrue(runCatching { FullBackupAssembler(orphan).assemble() }.exceptionOrNull() is IllegalStateException)
+        val orphan = BackupRepository(listOf(point(1)), emptyList(), listOf(PointTagRelation(1, 99), PointTagRelation(5, 99)))
+        val withoutOrphans = FullBackupAssembler(orphan).assemble()
+        assertEquals(listOf(1L), withoutOrphans.points.map { it.id })
+        assertTrue(withoutOrphans.pointTagIdsByPointId.isEmpty())
     }
 
     private fun point(id: Long) = Point(

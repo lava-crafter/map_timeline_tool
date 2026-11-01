@@ -12,6 +12,7 @@
     <string name="toast_import_success">成功导入 %1$d 个打点</string>
     <string name="toast_import_failed">导入失败</string>
     <string name="csv_import_summary">已导入 %1$d 个打点；跳过 %2$d 行无效数据。</string>
+    <string name="csv_import_duplicates">已跳过 %1$d 个已存在的打点（时间和位置相同）。</string>
     <string name="csv_skipped_row">数据行 %1$d：%2$s</string>
     <string name="csv_invalid_coordinates">坐标无效</string>
     <string name="csv_invalid_timestamp">时间戳无效或缺失</string>
@@ -58,6 +59,8 @@
     <string name="export_chooser_title">导出 CSV</string>
     <string name="toast_export_failed">导出失败</string>
     <string name="toast_cache_cleared">地图缓存已清除</string>
+    <string name="clear_cache_offline_areas_message">这会同时删除 %1$d 个已下载的离线地图区域。区域下载功能目前不可用，删除后无法重新下载。</string>
+    <string name="clear_cache_confirm_button">仍然清除</string>
     <string name="toast_point_added">打点完成</string>
     <string name="toast_point_save_failed">无法保存打点。您的编辑内容仍在此处，请重试。</string>
     <string name="toast_point_update_failed">无法更新打点，请重试。</string>

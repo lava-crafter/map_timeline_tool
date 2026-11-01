@@ -26,12 +26,11 @@ class FullBackupAssembler(private val repository: PointRepositoryGateway) {
     suspend fun assemble(): FullBackupPayload = repository.inTransaction {
         val points = repository.getAll()
         val tags = repository.getAllTags()
-        val relations = repository.getAllPointTagRelations()
         val pointIds = points.mapTo(HashSet(points.size)) { it.id }
         val tagIds = tags.mapTo(HashSet(tags.size)) { it.id }
-        check(relations.all { it.pointId in pointIds && it.tagId in tagIds }) {
-            "Cannot export a backup with orphan point-tag relations"
-        }
+        // Orphan relations (left by older builds, cleaned asynchronously at startup) link nothing that exists;
+        // leave them out instead of making every backup fail until that cleanup has run.
+        val relations = repository.getAllPointTagRelations().filter { it.pointId in pointIds && it.tagId in tagIds }
         FullBackupPayload(
             points = points,
             tags = tags.map { ZipExporter.TagRecord(it.id, it.name) },

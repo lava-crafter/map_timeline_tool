@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 9-11: these rules govern both cloud backup and device-to-device transfer. Photos go only into device
+     transfer: past the 25 MB cloud quota the whole app backup (database included) is dropped. Device-local prefs
+     are never backed up. -->
+<full-backup-content>
+    <include domain="database" path="."/>
+    <include domain="sharedpref" path="."/>
+    <exclude domain="sharedpref" path="location_cache.xml"/>
+    <exclude domain="sharedpref" path="map_timeline_device.xml"/>
+    <include domain="file" path="point_photos/" requireFlags="deviceToDeviceTransfer"/>
+</full-backup-content>

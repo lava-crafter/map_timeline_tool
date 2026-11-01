@@ -9,6 +9,7 @@
     <string name="toast_import_success">%1$d points importés</string>
     <string name="toast_import_failed">Échec de l’import</string>
     <string name="csv_import_summary">%1$d points importés ; %2$d lignes invalides ignorées.</string>
+    <string name="csv_import_duplicates">%1$d points déjà existants (même heure et même lieu) ont été ignorés.</string>
     <string name="csv_skipped_row">Ligne de données %1$d : %2$s</string>
     <string name="csv_invalid_coordinates">coordonnées invalides</string>
     <string name="csv_invalid_timestamp">horodatage invalide ou manquant</string>
@@ -57,6 +58,8 @@
     <string name="export_chooser_title">Exporter CSV</string>
     <string name="toast_export_failed">Échec de l’export</string>
     <string name="toast_cache_cleared">Cache de la carte vidé</string>
+    <string name="clear_cache_offline_areas_message">Cela supprime aussi %1$d zone(s) de carte hors ligne téléchargée(s). Le téléchargement de zones est actuellement indisponible : elles ne pourront pas être retéléchargées.</string>
+    <string name="clear_cache_confirm_button">Vider quand même</string>
     <string name="toast_point_added">Point ajouté</string>
     <string name="toast_point_save_failed">Impossible d’enregistrer le point. Vos modifications sont toujours là ; veuillez réessayer.</string>
     <string name="toast_point_update_failed">Impossible de mettre à jour le point. Veuillez réessayer.</string>

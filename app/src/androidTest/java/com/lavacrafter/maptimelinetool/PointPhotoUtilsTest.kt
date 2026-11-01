@@ -70,16 +70,15 @@ class PointPhotoUtilsTest {
     }
 
     @Test
-    fun invalidImageFailsWithoutDeletingTheOriginal() = runBlocking {
+    fun undecodableImageKeepsTheOriginalInsteadOfFailingTheSave() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val source = File(getPointPhotoDir(context), "invalid_${UUID.randomUUID()}.jpg")
         try {
             source.writeBytes(byteArrayOf(1, 2, 3))
-            val failure = runCatching {
-                preparePhotoForPersist(context, source.name,
-                    PhotoPersistOptions(false, PhotoCompressFormat.JPEG, 80))
-            }.exceptionOrNull()
-            assertTrue(failure is IllegalArgumentException)
+            val prepared = preparePhotoForPersist(context, source.name,
+                PhotoPersistOptions(false, PhotoCompressFormat.JPEG, 80))
+            assertEquals(source.name, prepared.storedPath)
+            assertEquals(null, prepared.generatedPath)
             assertTrue(source.exists())
         } finally {
             source.delete()

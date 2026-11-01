@@ -9,6 +9,8 @@ import com.lavacrafter.maptimelinetool.domain.usecase.LocationSavePolicy
 import com.lavacrafter.maptimelinetool.domain.usecase.LocationSaveQuality
 import com.lavacrafter.maptimelinetool.domain.usecase.PointWriteUseCase
 import com.lavacrafter.maptimelinetool.text.formatPointTimestamp
+import com.lavacrafter.maptimelinetool.text.sanitizePointNote
+import com.lavacrafter.maptimelinetool.text.sanitizePointTitle
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +103,11 @@ class PointWriteOperations(
         if (terminalId == id) mutableState.value = PointWriteState.Idle
     }
 
+    /** The title exactly as [PointWriteUseCase.addPointWithTags] will store it. */
+    private fun draftTitle(request: PointWriteRequest.Add): String =
+        sanitizePointTitle(request.title.trim().ifBlank { formatPointTimestamp(request.eventTimeMs) })
+            .ifBlank { formatPointTimestamp(request.eventTimeMs) }
+
     private suspend fun execute(id: String, request: PointWriteRequest, confirmed: LocationSaveDecision? = null) {
         var prepared: PreparedPhoto? = null
         var committed = false
@@ -121,8 +128,10 @@ class PointWriteOperations(
             when (request) {
                 is PointWriteRequest.Add -> {
                     // A dialog restored after process death can resubmit a draft whose row already
-                    // committed; its event time identifies that row, so report it instead of duplicating.
-                    repository.findByTimestamp(request.eventTimeMs)?.let { existing ->
+                    // committed; its event time plus its own text identify that row, so report it instead of
+                    // duplicating. A point that merely shares the millisecond (restored or imported) is not it.
+                    repository.findByTimestamp(request.eventTimeMs)?.takeIf { it.title == draftTitle(request) &&
+                        it.note == sanitizePointNote(request.note.trim()) }?.let { existing ->
                         withContext(NonCancellable) { photos.deleteUnlessReferenced(request.photoPath) }
                         mutableState.value = PointWriteState.Success(id, request, quality = null, pointId = existing.id)
                         return
@@ -142,7 +151,7 @@ class PointWriteOperations(
                         return
                     }
                     prepared = photos.prepare(request.photoPath, request.options)
-                    writer.addPointWithTags(request.title.trim().ifBlank { formatPointTimestamp(request.eventTimeMs) },
+                    writer.addPointWithTags(draftTitle(request),
                         request.note.trim(), decision.location, request.eventTimeMs, request.tagIds,
                         prepared.storedPath, onCoreSaved = { coreSaved(it) })
                 }

@@ -13,7 +13,12 @@ enum class FileTaskKind { EXPORT, CSV_IMPORT, SHARE_BACKUP }
 
 sealed interface FileTaskResult {
     data class Exported(val count: Int) : FileTaskResult
-    data class CsvImported(val imported: Int, val skipped: Int, val warnings: List<CsvImporter.SkippedRow>) : FileTaskResult
+    data class CsvImported(
+        val imported: Int,
+        val skipped: Int,
+        val warnings: List<CsvImporter.SkippedRow>,
+        val duplicates: Int = 0
+    ) : FileTaskResult
     data class BackupReady(val uri: Uri, val count: Int, val missingPhotoCount: Int) : FileTaskResult
     data class Failed(val kind: FileTaskKind) : FileTaskResult
 }

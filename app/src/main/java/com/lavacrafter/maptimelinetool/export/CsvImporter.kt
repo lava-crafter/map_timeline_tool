@@ -121,6 +121,7 @@ object CsvImporter {
         }
         if (strictRows) require("time_utc" in resolvedHeader) { "Missing canonical point timestamp" }
         val indexMap = resolvedHeader.withIndex().associate { it.value to it.index }
+        val timestampFormats = utcTimestampFormats()
         var rowNumber = 0
 
         while (true) {
@@ -146,21 +147,17 @@ object CsvImporter {
                 onSkippedRow(rowNumber, SkipReason.INVALID_COORDINATES)
                 continue
             }
-            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"))
+            val timestamp = parseTimestamp(row.valueOf(indexMap, "time_utc"), timestampFormats)
             if (timestamp == null) {
                 if (strictRows) throw IllegalArgumentException("Invalid point timestamp in CSV")
                 onSkippedRow(rowNumber, SkipReason.INVALID_TIMESTAMP)
                 continue
             }
-            val encodedText = !strictRows && row.valueOf(indexMap, CsvTextEncoding.column) == CsvTextEncoding.version
-            val rawTitle = row.valueOf(indexMap, "name").orEmpty()
-            val rawNote = row.valueOf(indexMap, "description").orEmpty()
-            val decodedTitle = if (encodedText) CsvTextEncoding.decode(rawTitle) else rawTitle
-            val decodedNote = if (encodedText) CsvTextEncoding.decode(rawNote) else rawNote
-            val rawProvider = row.valueOf(indexMap, "location_provider").orEmpty()
-            val decodedProvider = if (encodedText) CsvTextEncoding.decode(rawProvider) else rawProvider
-            val rawPhotoPath = row.valueOf(indexMap, "photo_rel_path").orEmpty()
-            val decodedPhotoPath = if (encodedText) CsvTextEncoding.decode(rawPhotoPath) else rawPhotoPath
+            val textEncoding = if (strictRows) null else row.valueOf(indexMap, CsvTextEncoding.column)
+            val decodedTitle = CsvTextEncoding.decode(row.valueOf(indexMap, "name").orEmpty(), textEncoding)
+            val decodedNote = CsvTextEncoding.decode(row.valueOf(indexMap, "description").orEmpty(), textEncoding)
+            val decodedProvider = CsvTextEncoding.decode(row.valueOf(indexMap, "location_provider").orEmpty(), textEncoding)
+            val decodedPhotoPath = CsvTextEncoding.decode(row.valueOf(indexMap, "photo_rel_path").orEmpty(), textEncoding)
             if (decodedTitle == null || decodedNote == null || decodedProvider == null || decodedPhotoPath == null) {
                 onSkippedRow(rowNumber, SkipReason.INVALID_TEXT_ENCODING)
                 continue
@@ -213,16 +210,21 @@ object CsvImporter {
         }
     }
 
-    private fun parseTimestamp(time: String?): Long? {
+    /** Built once per parse: SimpleDateFormat is costly to create and not thread-safe to share globally. */
+    private fun utcTimestampFormats(): List<SimpleDateFormat> =
+        listOf("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'").map { pattern ->
+            SimpleDateFormat(pattern, Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }
+        }
+
+    private fun parseTimestamp(time: String?, formats: List<SimpleDateFormat>): Long? {
         if (time == null) return null // A missing time must not be replaced by a fabricated import time.
         val value = time.trim()
         if (value.isEmpty()) return null
         value.toLongOrNull()?.let { return it }
-        for (pattern in listOf("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'")) {
-            val sdf = SimpleDateFormat(pattern, Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-                isLenient = false
-            }
+        for (sdf in formats) {
             val position = ParsePosition(0)
             val parsedDate = sdf.parse(value, position)
             if (parsedDate != null && position.index == value.length) return parsedDate.time
@@ -248,8 +250,8 @@ object CsvImporter {
         return this?.trim()?.takeIf { it.isNotEmpty() }?.toLongOrNull()
     }
 
-
-    private fun readCsvRecord(reader: PushbackReader, limits: Limits, strict: Boolean): List<String>? {
+    /** The one CSV tokenizer: ordinary imports run it lenient, backup entries (points and metadata) strict. */
+    internal fun readCsvRecord(reader: PushbackReader, limits: Limits, strict: Boolean): List<String>? {
         val record = mutableListOf<String>()
         val field = StringBuilder()
         var inQuotes = false

@@ -154,7 +154,7 @@ fun normalizeTagNameForEditing(raw: String): String =
  * Drops lone surrogates and the U+FFFE/U+FFFF noncharacters: they are invalid in XML (KML) and become "?" in
  * UTF-8, so a stored title must never contain them. Valid surrogate pairs (emoji) are kept.
  */
-private fun wellFormed(text: String): String {
+internal fun wellFormed(text: String): String {
     if (text.none { it.isSurrogate() || it == '\uFFFE' || it == '\uFFFF' }) return text
     val out = StringBuilder(text.length)
     var i = 0

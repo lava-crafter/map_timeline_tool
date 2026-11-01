@@ -51,6 +51,20 @@ class ArchiveBoundaryVerificationTest {
     }
 
     @Test
+    fun rezippedArchiveWithDirectoryEntriesStillImports() {
+        val restored = import(
+            archive(
+                "__MACOSX/" to byteArrayOf(),
+                "photos/" to byteArrayOf(),
+                "points.csv" to pointCsv.toByteArray(),
+                "__MACOSX/._points.csv" to byteArrayOf(0)
+            )
+        )
+
+        assertEquals(1, restored.points.size)
+    }
+
+    @Test
     fun twoPointsSharingOnePhotoExportOneEntryAndRestoreBothReferences() {
         val directory = createTempDirectory("shared-photo-backup").toFile()
         try {

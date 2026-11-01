@@ -9,6 +9,7 @@
     <string name="toast_import_success">Se importaron %1$d puntos</string>
     <string name="toast_import_failed">Error al importar</string>
     <string name="csv_import_summary">Se importaron %1$d puntos; se omitieron %2$d filas no válidas.</string>
+    <string name="csv_import_duplicates">Se omitieron %1$d puntos que ya existían (misma hora y ubicación).</string>
     <string name="csv_skipped_row">Fila de datos %1$d: %2$s</string>
     <string name="csv_invalid_coordinates">coordenadas no válidas</string>
     <string name="csv_invalid_timestamp">marca de tiempo no válida o ausente</string>
@@ -57,6 +58,8 @@
     <string name="export_chooser_title">Exportar CSV</string>
     <string name="toast_export_failed">Error al exportar</string>
     <string name="toast_cache_cleared">Caché del mapa borrada</string>
+    <string name="clear_cache_offline_areas_message">Esto también elimina %1$d zona(s) de mapa sin conexión descargadas. La descarga de zonas no está disponible por ahora, así que no se podrán volver a descargar.</string>
+    <string name="clear_cache_confirm_button">Borrar de todos modos</string>
     <string name="toast_point_added">Punto añadido</string>
     <string name="toast_point_save_failed">No se pudo guardar el punto. Tus cambios siguen aquí; inténtalo de nuevo.</string>
     <string name="toast_point_update_failed">No se pudo actualizar el punto. Inténtalo de nuevo.</string>

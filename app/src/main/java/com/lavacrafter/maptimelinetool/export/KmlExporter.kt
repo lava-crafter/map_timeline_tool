@@ -17,6 +17,7 @@ limitations under the License.
 package com.lavacrafter.maptimelinetool.export
 
 import com.lavacrafter.maptimelinetool.domain.model.Point
+import com.lavacrafter.maptimelinetool.text.wellFormed
 import java.io.BufferedWriter
 import java.io.OutputStream
 import java.io.OutputStreamWriter
@@ -143,20 +144,6 @@ object KmlExporter {
     }
 }
 
-private fun xmlSafe(value: String): String {
-    fun allowed(ch: Char) = ch == '\t' || ch == '\n' || ch == '\r' || (ch >= ' ' && ch != '\uFFFE' && ch != '\uFFFF')
-    if (value.all { allowed(it) && !it.isSurrogate() }) return value
-    val out = StringBuilder(value.length)
-    var i = 0
-    while (i < value.length) {
-        val ch = value[i]
-        if (ch.isHighSurrogate() && i + 1 < value.length && value[i + 1].isLowSurrogate()) {
-            out.append(ch).append(value[i + 1])
-            i += 2
-            continue
-        }
-        if (!ch.isSurrogate() && allowed(ch)) out.append(ch)
-        i++
-    }
-    return out.toString()
-}
+/** XML 1.0 additionally forbids C0 controls other than tab, newline and carriage return. */
+private fun xmlSafe(value: String): String =
+    wellFormed(value).filter { it == '\t' || it == '\n' || it == '\r' || it >= ' ' }

@@ -246,7 +246,15 @@ private fun getNetworkStatus(context: Context): NetworkStatus {
  * Empties the osmdroid tile cache. The SQLite cache file is shared through a static handle that a live tile
  * provider may hold open, so its rows are purged instead of deleting the file underneath that handle.
  */
-internal fun clearOsmdroidTileCache(): Boolean {
+internal data class TileCacheClearResult(
+    /** The SQLite tile rows (where downloaded areas live) were removed. */
+    val purged: Boolean,
+    val filesDeleted: Boolean
+) {
+    val complete: Boolean get() = purged && filesDeleted
+}
+
+internal fun clearOsmdroidTileCache(): TileCacheClearResult {
     val config = Configuration.getInstance()
     val purged = runCatching { SqlTileWriter().purgeCache() }.getOrDefault(false)
     val cacheDirs = listOfNotNull(
@@ -260,7 +268,7 @@ internal fun clearOsmdroidTileCache(): Boolean {
                 .all { it.deleteRecursively() }
         }
     }.getOrDefault(false)
-    return purged && deleted
+    return TileCacheClearResult(purged = purged, filesDeleted = deleted)
 }
 
 /** Camera/document pickers can be missing (kiosk, managed profiles); report instead of crashing. */

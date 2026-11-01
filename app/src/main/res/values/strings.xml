@@ -12,6 +12,7 @@
     <string name="toast_import_success">Imported %1$d points</string>
     <string name="toast_import_failed">Import failed</string>
     <string name="csv_import_summary">Imported %1$d points; skipped %2$d invalid rows.</string>
+    <string name="csv_import_duplicates">Skipped %1$d points that already exist (same time and location).</string>
     <string name="csv_skipped_row">Data row %1$d: %2$s</string>
     <string name="csv_invalid_coordinates">invalid coordinates</string>
     <string name="csv_invalid_timestamp">invalid or missing timestamp</string>
@@ -67,6 +68,8 @@
     <string name="export_chooser_title">Export CSV</string>
     <string name="toast_export_failed">Export failed</string>
     <string name="toast_cache_cleared">Map cache cleared</string>
+    <string name="clear_cache_offline_areas_message">This also deletes %1$d downloaded offline map area(s). Area downloads are currently unavailable, so they cannot be downloaded again.</string>
+    <string name="clear_cache_confirm_button">Clear anyway</string>
     <string name="toast_cache_clear_failed">Failed to clear map cache. Please try again after reopening the app.</string>
     <string name="toast_point_added">Point added</string>
     <string name="toast_point_added_approximate">Point added with approximate location</string>

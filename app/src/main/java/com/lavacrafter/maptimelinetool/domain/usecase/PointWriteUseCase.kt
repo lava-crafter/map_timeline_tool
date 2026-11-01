@@ -130,24 +130,29 @@ class PointWriteUseCase(
         }
     }
 
-    data class ImportResult(val imported: Int)
+    /** [duplicates] counts rows skipped because the same point (time and coordinates) already existed. */
+    data class ImportResult(val imported: Int, val duplicates: Int = 0)
 
     suspend fun importPoints(pointsList: List<Point>): ImportResult {
-        photoCommitGuard.withLock {
+        val imported = photoCommitGuard.withLock {
             repository.inTransaction {
-                pointsList.forEach { p ->
+                // Only rows that existed before this import count as duplicates, so importing a file again is
+                // idempotent while rows within one file stay as the file has them. A match is skipped rather than
+                // overwritten: a legacy CSV carries no photo or sensor data and would erase the existing row's.
+                val fresh = pointsList.filter { p -> repository.findByImportKey(p.timestamp, p.latitude, p.longitude) == null }
+                fresh.forEach { p ->
                     photoCommitGuard.requirePhoto(p.photoPath)
                     val normalizedPoint = p.copy(
                         title = sanitizeSingleLineText(p.title, MAX_POINT_TITLE_LENGTH)
                             .ifBlank { formatPointTimestamp(p.timestamp) },
                         note = sanitizeMultilineText(p.note, MAX_POINT_NOTE_LENGTH)
                     )
-                    // Ordinary CSV is an exchange format: even identical coordinates/times are independent rows.
                     repository.insert(normalizedPoint.copy(id = 0))
                 }
+                fresh.size
             }
         }
-        return ImportResult(pointsList.size)
+        return ImportResult(imported = imported, duplicates = pointsList.size - imported)
     }
 
     private suspend fun cleanupUnreferencedPhoto(path: String?) {

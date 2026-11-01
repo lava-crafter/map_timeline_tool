@@ -9,6 +9,7 @@
     <string name="toast_import_success">已匯入 %1$d 個打點</string>
     <string name="toast_import_failed">匯入失敗</string>
     <string name="csv_import_summary">已匯入 %1$d 個打點；略過 %2$d 列無效資料。</string>
+    <string name="csv_import_duplicates">已略過 %1$d 個已存在的打點（時間和位置相同）。</string>
     <string name="csv_skipped_row">資料列 %1$d：%2$s</string>
     <string name="csv_invalid_coordinates">座標無效</string>
     <string name="csv_invalid_timestamp">時間戳記無效或缺漏</string>
@@ -57,6 +58,8 @@
     <string name="export_chooser_title">匯出 CSV</string>
     <string name="toast_export_failed">匯出失敗</string>
     <string name="toast_cache_cleared">地圖快取已清除</string>
+    <string name="clear_cache_offline_areas_message">這會同時刪除 %1$d 個已下載的離線地圖區域。區域下載功能目前無法使用，刪除後無法重新下載。</string>
+    <string name="clear_cache_confirm_button">仍要清除</string>
     <string name="toast_point_added">打點已新增</string>
     <string name="toast_point_save_failed">無法儲存打點。您的編輯內容仍在此處，請重試。</string>
     <string name="toast_point_update_failed">無法更新打點，請重試。</string>

@@ -20,11 +20,13 @@ import com.lavacrafter.maptimelinetool.domain.model.Point
 import com.lavacrafter.maptimelinetool.domain.repository.PointRepositoryGateway
 import com.lavacrafter.maptimelinetool.domain.repository.PointTagRelation
 import com.lavacrafter.maptimelinetool.export.ZipExporter
+import com.lavacrafter.maptimelinetool.ui.ExportKind
 import java.io.File
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 
 internal suspend fun buildPointTagNameMap(
     repository: PointRepositoryGateway,
@@ -128,6 +130,18 @@ internal fun buildExportBaseName(date: Date = Date()): String {
  * Resolves the export rows when the file is written. Points deleted after selection are skipped rather than
  * failing the whole export; "all points" reads the database, not a UI snapshot.
  */
+/** Resolves a saved export selection against the database when the file is written, in timeline order. */
+internal suspend fun resolveExportSelectionIds(repository: PointRepositoryGateway, kind: ExportKind): List<Long> =
+    when (kind) {
+        ExportKind.All -> repository.getAll().map { it.id }
+        is ExportKind.ByTag -> repository.observePointsForTag(kind.tagId).first().map { it.id }
+        is ExportKind.ByTime -> repository.getAll().filter { it.timestamp in kind.fromMs..kind.toMs }.map { it.id }
+        is ExportKind.Manual -> {
+            val selected = kind.ids.toHashSet()
+            repository.getAll().filter { it.id in selected }.map { it.id }
+        }
+    }
+
 internal suspend fun buildExportPayload(
     repository: PointRepositoryGateway,
     kind: ExportFileKind,

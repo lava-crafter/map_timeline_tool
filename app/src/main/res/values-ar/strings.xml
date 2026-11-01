@@ -9,6 +9,7 @@
     <string name="toast_import_success">تم استيراد %1$d نقطة</string>
     <string name="toast_import_failed">فشل الاستيراد</string>
     <string name="csv_import_summary">تم استيراد %1$d نقطة؛ تم تخطي %2$d صفوف غير صالحة.</string>
+    <string name="csv_import_duplicates">تم تخطي %1$d من النقاط الموجودة مسبقًا (بنفس الوقت والموقع).</string>
     <string name="csv_skipped_row">صف البيانات %1$d: %2$s</string>
     <string name="csv_invalid_coordinates">إحداثيات غير صالحة</string>
     <string name="csv_invalid_timestamp">طابع زمني غير صالح أو مفقود</string>
@@ -57,6 +58,8 @@
     <string name="export_chooser_title">تصدير CSV</string>
     <string name="toast_export_failed">فشل التصدير</string>
     <string name="toast_cache_cleared">تم مسح ذاكرة التخزين المؤقت للخريطة</string>
+    <string name="clear_cache_offline_areas_message">سيؤدي هذا أيضًا إلى حذف %1$d من مناطق الخريطة المنزّلة للاستخدام دون اتصال. تنزيل المناطق غير متاح حاليًا، لذا لا يمكن تنزيلها مرة أخرى.</string>
+    <string name="clear_cache_confirm_button">المسح على أي حال</string>
     <string name="toast_point_added">تمت إضافة النقطة</string>
     <string name="toast_point_save_failed">تعذر حفظ النقطة. لا تزال تعديلاتك موجودة؛ يرجى المحاولة مرة أخرى.</string>
     <string name="toast_point_update_failed">تعذر تحديث النقطة. يرجى المحاولة مرة أخرى.</string>

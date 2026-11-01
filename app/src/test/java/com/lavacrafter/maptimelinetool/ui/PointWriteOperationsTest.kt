@@ -143,7 +143,8 @@ class PointWriteOperationsTest {
 
     @Test fun `resubmitted add after process death reports the committed row instead of duplicating`() = runBlocking {
         val repo = OperationRepo(); val photos = OperationPhotos()
-        repo.rows += Point(id = 7, timestamp = event, latitude = 10.0, longitude = 20.0, title = "saved", note = "", photoPath = "generated")
+        repo.rows += Point(id = 7, timestamp = event, latitude = 10.0, longitude = 20.0,
+            title = formatPointTimestamp(event), note = "note", photoPath = "generated")
         // A fresh operations instance models the recreated ViewModel; the restored dialog auto-saves again.
         val operations = PointWriteOperations(this, repo, writer(repo), { error("must not resolve") }, photos)
         assertTrue(operations.submit(request().copy(autoSave = true)))
@@ -151,6 +152,19 @@ class PointWriteOperationsTest {
         assertEquals(7L, success.pointId); assertEquals(null, success.quality)
         assertEquals(1, repo.rows.size); assertTrue(repo.links.isEmpty())
         assertEquals(0, photos.prepares); assertEquals(1, photos.deletes)
+        Unit
+    }
+
+    @Test fun `add is saved when another point merely shares its millisecond`() = runBlocking {
+        val repo = OperationRepo(); val photos = OperationPhotos()
+        // E.g. restored from another device's backup: same event time, different content.
+        repo.rows += Point(id = 7, timestamp = event, latitude = 1.0, longitude = 2.0, title = "other", note = "")
+        val operations = PointWriteOperations(this, repo, writer(repo), { decision() }, photos)
+        assertTrue(operations.submit(request()))
+        val success = operations.terminal() as PointWriteState.Success
+        assertTrue(success.pointId != 7L)
+        assertEquals(2, repo.rows.size)
+        assertEquals(0, photos.deletes)
         Unit
     }
 
